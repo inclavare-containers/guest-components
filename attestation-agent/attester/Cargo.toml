@@ -32,6 +32,11 @@ hyper = { version = "0.14", features = ["full"], optional = true }
 hyper-tls = { version = "0.5", optional = true }
 tokio = { version = "1", features = ["full"], optional = true }
 tempfile = { workspace = true, optional = true }
+tss-esapi = "7.4.0"
+rsa = { version = "0.9.6", features = ["pkcs5", "sha2"], optional = true }
+openssl = { workspace = true, optional = true }
+hex = "0.4.3"
+
 
 [dev-dependencies]
 tokio.workspace = true
@@ -51,6 +56,7 @@ all-attesters = [
     "snp-attester",
     "csv-attester",
     "cca-attester",
+    "tpm-attester",
 ]
 
 # tsm-report enables a module that helps attesters to use Linux TSM_REPORTS for generating
@@ -64,5 +70,6 @@ az-tdx-vtpm-attester = ["az-tdx-vtpm"]
 snp-attester = ["sev"]
 csv-attester = ["csv-rs", "codicon", "hyper", "hyper-tls", "tokio"]
 cca-attester = ["nix"]
+tpm-attester = ["rsa", "openssl"]
 
 bin = ["tokio/rt", "tokio/macros", "all-attesters"]

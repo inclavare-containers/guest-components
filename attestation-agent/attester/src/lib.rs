@@ -30,6 +30,9 @@ pub mod snp;
 #[cfg(feature = "csv-attester")]
 pub mod csv;
 
+#[cfg(feature = "tpm-attester")]
+pub mod tpm;
+
 #[cfg(feature = "tsm-report")]
 pub mod tsm_report;
 
@@ -55,6 +58,8 @@ impl TryFrom<Tee> for BoxedAttester {
             Tee::Snp => Box::<snp::SnpAttester>::default(),
             #[cfg(feature = "csv-attester")]
             Tee::Csv => Box::<csv::CsvAttester>::default(),
+            #[cfg(feature = "tpm-attester")]
+            Tee::Tpm => Box::<tpm::TpmAttester>::default(),
             _ => bail!("TEE is not supported!"),
         };
 
@@ -124,6 +129,12 @@ pub fn detect_tee_type() -> Tee {
     #[cfg(feature = "cca-attester")]
     if cca::detect_platform() {
         return Tee::Cca;
+    }
+
+    // Put this step at last, becuase some TEE platform may also support TPM.
+    #[cfg(feature = "tpm-attester")]
+    if tpm::detect_platform() {
+        return Tee::Tpm;
     }
 
     log::warn!("No TEE platform detected. Sample Attester will be used.");

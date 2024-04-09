@@ -297,12 +297,15 @@ dependencies = [
  "base64 0.21.7",
  "codicon",
  "csv-rs",
+ "hex",
  "hyper",
  "hyper-tls",
  "kbs-types",
  "log",
  "nix 0.26.4",
  "occlum_dcap",
+ "openssl",
+ "rsa 0.9.6",
  "rstest",
  "scroll",
  "serde",
@@ -314,6 +317,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tokio",
+ "tss-esapi",
 ]
 
 [[package]]
@@ -2881,9 +2885,8 @@ dependencies = [
 
 [[package]]
 name = "kbs-types"
-version = "0.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d1f4b0642769e12f56cfc646d8be13668ed48d3caed0e99efb161c407f3ec532"
+version = "0.6.0"
+source = "git+https://github.com/inclavare-containers/kbs-types.git?branch=main#aa9030dfeacb43514ac570bbd5a5bc0f19ef850f"
 dependencies = [
  "serde",
  "serde_json",
