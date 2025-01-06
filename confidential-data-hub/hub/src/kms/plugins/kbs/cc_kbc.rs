@@ -8,7 +8,7 @@ use std::env;
 use async_trait::async_trait;
 use kbs_protocol::{
     client::KbsClient as KbsProtocolClient,
-    token_provider::{AATokenProvider, TokenProvider},
+    evidence_provider::{AAEvidenceProvider, EvidenceProvider},
     KbsClientCapabilities, ResourceUri,
 };
 use log::{info, warn};
@@ -18,16 +18,16 @@ use super::{Error, Result};
 use super::Kbc;
 
 pub struct CcKbc {
-    client: KbsProtocolClient<Box<dyn TokenProvider>>,
+    client: KbsProtocolClient<Box<dyn EvidenceProvider>>,
 }
 
 impl CcKbc {
     pub async fn new(kbs_host_url: &str) -> Result<Self> {
-        let token_provider = AATokenProvider::new().await.map_err(|e| {
-            Error::KbsClientError(format!("create AA token provider failed: {e:?}"))
+        let evidence_provider = AAEvidenceProvider::new().await.map_err(|e| {
+            Error::KbsClientError(format!("create AA evidence provider failed: {e:?}"))
         })?;
-        let client = kbs_protocol::KbsClientBuilder::with_token_provider(
-            Box::new(token_provider),
+        let client = kbs_protocol::KbsClientBuilder::with_evidence_provider(
+            Box::new(evidence_provider),
             kbs_host_url,
         );
 
