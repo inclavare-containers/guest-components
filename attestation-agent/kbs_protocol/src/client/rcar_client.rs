@@ -188,7 +188,7 @@ impl KbsClient<Box<dyn EvidenceProvider>> {
 
         let extra_params = challenge.extra_params;
 
-        let extra_params = serde_json::from_str(&extra_params)?;
+        let extra_params = serde_json::from_str(&extra_params).unwrap_or(json!(""));
         let algorithm = get_hash_algorithm(extra_params)?;
 
         let tee_pubkey = self.tee_key.export_pubkey()?;
@@ -198,15 +198,15 @@ impl KbsClient<Box<dyn EvidenceProvider>> {
         });
         let runtime_data =
             serde_json::to_string(&runtime_data).context("serialize runtime data failed")?;
-        let evidence = self
+        let tee_evidence = self
             .generate_evidence(tee, runtime_data, challenge.nonce, algorithm)
             .await?;
-        debug!("get evidence with challenge: {evidence}");
+        debug!("get evidence with challenge: {tee_evidence}");
 
         let attest_endpoint = format!("{}/{KBS_PREFIX}/attest", self.kbs_host_url);
         let attest = Attestation {
             tee_pubkey,
-            tee_evidence: serde_json::from_str(&evidence)?, // TODO: change attesters to return Value?
+            tee_evidence, // TODO: change attesters to return Value?
         };
 
         debug!("send attest request.");
