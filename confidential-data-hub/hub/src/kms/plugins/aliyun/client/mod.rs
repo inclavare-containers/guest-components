@@ -5,11 +5,13 @@
 
 use async_trait::async_trait;
 use const_format::concatcp;
+use oidc_with_ram::OidcRamClient;
 use serde_json::json;
 use sts_token_client::StsTokenClient;
 
 mod client_key_client;
 mod ecs_ram_role_client;
+mod oidc_with_ram;
 mod sts_token_client;
 
 use crate::kms::plugins::_IN_GUEST_DEFAULT_KEY_PATH;
@@ -29,6 +31,9 @@ pub enum AliyunKmsClient {
     },
     StsToken {
         client: StsTokenClient,
+    },
+    OidcRam {
+        client: OidcRamClient,
     },
 }
 
@@ -87,7 +92,7 @@ impl AliyunKmsClient {
                     .await
                     .map_err(|e| {
                         Error::AliyunKmsError(format!(
-                            "build ClientKeyClient with `from_provider_settings()` failed: {e:?}"
+                            "build ClientKeyClient with `from_provider_settings()` failed: {e}"
                         ))
                     })?,
             },
@@ -96,7 +101,7 @@ impl AliyunKmsClient {
                     .await
                     .map_err(|e| {
                         Error::AliyunKmsError(format!(
-                            "build EcsRamRoleClient with `from_provider_settings()` failed: {e:?}"
+                            "build EcsRamRoleClient with `from_provider_settings()` failed: {e}"
                         ))
                     })?,
             },
@@ -105,9 +110,16 @@ impl AliyunKmsClient {
                     .await
                     .map_err(|e| {
                         Error::AliyunKmsError(format!(
-                            "build EcsRamRoleClient with `from_provider_settings()` failed: {e:?}"
+                            "build EcsRamRoleClient with `from_provider_settings()` failed: {e}"
                         ))
                     })?,
+            },
+            "oidc_ram" => AliyunKmsClient::OidcRam {
+                client: OidcRamClient::from_provider_settings(provider_settings).map_err(|e| {
+                    Error::AliyunKmsError(format!(
+                        "build OidcRamClient with `from_provider_settings()` failed: {e}"
+                    ))
+                })?,
             },
             _ => return Err(Error::AliyunKmsError("client type invalid.".to_string())),
         };
@@ -123,7 +135,7 @@ impl AliyunKmsClient {
             AliyunKmsClient::ClientKey { inner } => {
                 let mut provider_settings = inner.export_provider_settings().map_err(|e| {
                     Error::AliyunKmsError(format!(
-                        "ClientKeyClient `export_provider_settings()` failed: {e:?}"
+                        "ClientKeyClient `export_provider_settings()` failed: {e}"
                     ))
                 })?;
 
@@ -147,6 +159,17 @@ impl AliyunKmsClient {
 
                 Ok(provider_settings)
             }
+            AliyunKmsClient::OidcRam { client } => {
+                let mut provider_settings = client.export_provider_settings().map_err(|e| {
+                    Error::AliyunKmsError(format!(
+                        "OidcRamClient `export_provider_settings()` failed: {e}"
+                    ))
+                })?;
+
+                provider_settings.insert(String::from("client_type"), json!("oidc_ram"));
+
+                Ok(provider_settings)
+            }
         }
     }
 }
@@ -157,10 +180,13 @@ impl Encrypter for AliyunKmsClient {
         match &mut self {
             AliyunKmsClient::ClientKey { ref mut inner } => inner.encrypt(data, key_id).await,
             AliyunKmsClient::EcsRamRole { .. } => Err(Error::AliyunKmsError(
-                "Encrypter does not suppot accessing through Aliyun EcsRamRole".to_string(),
+                "Encrypter does not support accessing through Aliyun EcsRamRole".to_string(),
             )),
             AliyunKmsClient::StsToken { .. } => Err(Error::AliyunKmsError(
-                "Encrypter does not suppot accessing through Aliyun StsToken".to_string(),
+                "Encrypter does not support accessing through Aliyun StsToken".to_string(),
+            )),
+            AliyunKmsClient::OidcRam { .. } => Err(Error::AliyunKmsError(
+                "Encrypter does not support accessing through Aliyun OidcRam".to_string(),
             )),
         }
     }
@@ -179,10 +205,13 @@ impl Decrypter for AliyunKmsClient {
                 inner.decrypt(ciphertext, key_id, annotations).await
             }
             AliyunKmsClient::EcsRamRole { .. } => Err(Error::AliyunKmsError(
-                "Encrypter does not suppot accessing through Aliyun EcsRamRole".to_string(),
+                "Decrypter does not support accessing through Aliyun EcsRamRole".to_string(),
             )),
             AliyunKmsClient::StsToken { .. } => Err(Error::AliyunKmsError(
-                "Encrypter does not suppot accessing through Aliyun StsToken".to_string(),
+                "Decrypter does not support accessing through Aliyun StsToken".to_string(),
+            )),
+            AliyunKmsClient::OidcRam { .. } => Err(Error::AliyunKmsError(
+                "Decrypter does not support accessing through Aliyun OidcRam".to_string(),
             )),
         }
     }
@@ -197,6 +226,10 @@ impl Getter for AliyunKmsClient {
                 ref ecs_ram_role_client,
             } => ecs_ram_role_client.get_secret(name, annotations).await,
             AliyunKmsClient::StsToken { ref client } => client.get_secret(name, annotations).await,
+            AliyunKmsClient::OidcRam { ref client } => client
+                .get_secret(name, annotations)
+                .await
+                .map_err(|e| Error::AliyunKmsError(format!("failed to get secret: {e:#?}"))),
         }
     }
 }
@@ -206,10 +239,6 @@ mod tests {
     use rstest::rstest;
     use serde_json::{json, Map, Value};
 
-    use crate::kms::{
-        plugins::aliyun::client::AliyunKmsClient, Annotations, Decrypter, Encrypter, Getter,
-    };
-
     #[rstest]
     #[ignore]
     #[case(b"this is a test plaintext")]
@@ -217,6 +246,8 @@ mod tests {
     #[case(b"this is a another test plaintext")]
     #[tokio::test]
     async fn key_lifetime(#[case] plaintext: &[u8]) {
+        use crate::kms::{plugins::aliyun::AliyunKmsClient, Decrypter, Encrypter};
+
         let kid = "alias/test_key_id";
         let provider_settings = json!({
             "client_type": "client_key",
@@ -255,6 +286,8 @@ mod tests {
     #[case("ecs_ram_role")]
     #[tokio::test]
     async fn get_secret(#[case] client_type: &str) {
+        use crate::kms::{plugins::aliyun::AliyunKmsClient, Annotations, Getter};
+
         let secret_name = "test_secret";
         let provider_settings = json!({
             "client_type": client_type,
