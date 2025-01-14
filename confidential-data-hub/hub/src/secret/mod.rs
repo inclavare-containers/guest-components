@@ -90,9 +90,12 @@ mod tests {
     use crypto::WrapType;
     use rstest::rstest;
 
-    use crate::secret::layout::{
-        envelope::EnvelopeSecret,
-        vault::{Annotations, ProviderSettings, VaultSecret},
+    use crate::secret::{
+        layout::{
+            envelope::EnvelopeSecret,
+            vault::{Annotations, ProviderSettings, VaultSecret},
+        },
+        unseal_secret,
     };
 
     use super::{Secret, SecretContent};
@@ -163,5 +166,12 @@ mod tests {
         let serialized = serde_json::to_string_pretty(&secret).unwrap();
 
         assert!(!serialized.contains("="));
+    }
+
+    #[tokio::test]
+    async fn unseal_oidc_aliyun_kms_ssecret() {
+        let secret = include_bytes!("./tests/oidc-aliyun-kms-secret");
+        let plaintext = unseal_secret(secret).await.unwrap();
+        println!("plaintext: {:?}", plaintext);
     }
 }
