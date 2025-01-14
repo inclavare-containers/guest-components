@@ -11,7 +11,7 @@ use sts_token_client::StsTokenClient;
 
 mod client_key_client;
 mod ecs_ram_role_client;
-mod oidc_with_ram;
+pub mod oidc_with_ram;
 mod sts_token_client;
 
 use crate::kms::plugins::_IN_GUEST_DEFAULT_KEY_PATH;
