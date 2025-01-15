@@ -9,6 +9,6 @@
 //! The product detail can be found here: <https://www.alibabacloud.com/product/kms>.
 
 mod annotations;
-mod client;
+pub mod client;
 
 pub use client::AliyunKmsClient;
