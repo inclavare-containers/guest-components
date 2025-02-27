@@ -9,6 +9,6 @@ depends() {
 }
 
 install() {
-    inst_multiple /usr/local/bin/confidential-data-hub
+    inst_multiple /usr/bin/confidential-data-hub
     inst_simple $moddir/confidential-data-hub.toml /etc/trustiflux/confidential-data-hub.toml
 }
