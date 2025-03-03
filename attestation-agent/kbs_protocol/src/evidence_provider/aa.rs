@@ -44,7 +44,7 @@ impl EvidenceProvider for AAEvidenceProvider {
         };
         let res = self
             .client
-            .get_evidence(context::with_timeout(50 * 1000 * 1000 * 1000), &req)
+            .get_evidence(context::with_timeout(1000 * 1000 * 1000 * 1000), &req)
             .await
             .map_err(|e| Error::AAEvidenceProvider(format!("call ttrpc failed: {e}")))?;
         let evidence = String::from_utf8(res.Evidence)
@@ -59,7 +59,7 @@ impl EvidenceProvider for AAEvidenceProvider {
         };
         let res = self
             .client
-            .get_tee_type(context::with_timeout(50 * 1000 * 1000 * 1000), &req)
+            .get_tee_type(context::with_timeout(1000 * 1000 * 1000 * 1000), &req)
             .await
             .map_err(|e| Error::AAEvidenceProvider(format!("call ttrpc failed: {e}")))?;
 

@@ -17,6 +17,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 use tdx_attest_rs::tdx_report_t;
+use tempfile::NamedTempFile;
+use tokio::process::Command;
 
 mod report;
 mod rtmr;
@@ -66,6 +68,10 @@ struct TdxEvidence {
     quote: String,
     // Eventlog of Attestation Agent
     aa_eventlog: Option<String>,
+    // GPU Attestation Claims
+    gpu_attestation_token: Option<String>,
+    // GPU Switch Attestation Claims
+    gpu_switch_attestation_token: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -144,10 +150,23 @@ impl Attester for TdxAttester {
             }
         };
 
+        let gpu_attestation_token = get_gpu_token("gpu".to_string()).await.ok().or_else(|| {
+            log::warn!("Get GPU attestation token failed");
+            None
+        });
+
+        let gpu_switch_attestation_token =
+            get_gpu_token("switch".to_string()).await.ok().or_else(|| {
+                log::warn!("Get GPU switch attestation token failed");
+                None
+            });
+
         let evidence = TdxEvidence {
             cc_eventlog,
             quote,
             aa_eventlog,
+            gpu_attestation_token,
+            gpu_switch_attestation_token,
         };
 
         serde_json::to_string(&evidence).context("Serialize TDX evidence failed")
@@ -201,6 +220,36 @@ impl Attester for TdxAttester {
 
         Ok(td_report.get_rtmr(rtmr_index))
     }
+}
+
+async fn get_gpu_token(attestation_type: String) -> Result<String> {
+    let script_name = match attestation_type.as_str() {
+        "gpu" => "/usr/gpu_attestation.py".to_string(),
+        "switch" => "/usr/nvswitch_attestation.py".to_string(),
+        _ => return Err(anyhow!("Invalid attestation type: {}", attestation_type)),
+    };
+
+    let mut temp_file = NamedTempFile::new()?;
+    let claims_file_path = temp_file
+        .path()
+        .to_str()
+        .ok_or_else(|| anyhow!("GPU attestation: create claims file failed"))?;
+    let output = Command::new("python3.8")
+        .arg(script_name)
+        .arg(claims_file_path)
+        .output()
+        .await?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(anyhow!(
+            "Failed to execute GPU Attestation Python script: {}",
+            stderr
+        ));
+    }
+
+    let token = tokio::fs::read_to_string(temp_file.path()).await?;
+    Ok(token.trim().to_string())
 }
 
 #[cfg(test)]

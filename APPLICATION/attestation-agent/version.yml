@@ -1,7 +1,7 @@
 # 版本关系依赖表，默认继承 version-base.yml 配置，可重写覆盖
 BaseDependency: ../version-base.yml
 Dependency:
-  name: trustiflux
+  name: attestation-agent
   image_type: application
   versions:
     1.0.1:
