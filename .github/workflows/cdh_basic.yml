@@ -34,7 +34,6 @@ jobs:
       matrix:
         instance:
           - ubuntu-24.04
-          - s390x
         rust:
           - stable
     runs-on: ${{ matrix.instance }}

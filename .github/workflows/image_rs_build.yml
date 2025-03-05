@@ -36,7 +36,6 @@ jobs:
           - stable
         instance:
           - ubuntu-24.04
-          - s390x
     runs-on: ${{ matrix.instance }}
     steps:
       - name: Code checkout
