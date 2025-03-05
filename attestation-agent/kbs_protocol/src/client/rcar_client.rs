@@ -506,13 +506,14 @@ mod test {
         ];
 
         let expected_version = String::from(KBS_PROTOCOL_VERSION);
-        let expected_extra_params = get_request_extra_params().await;
+        let expected_extra_params = get_request_extra_params().await.to_string();
 
         for tee in tees {
             let request = build_request(tee).await;
 
             assert_eq!(request.version, expected_version);
             assert_eq!(request.tee, tee);
+
             assert_eq!(request.extra_params, expected_extra_params);
         }
     }
