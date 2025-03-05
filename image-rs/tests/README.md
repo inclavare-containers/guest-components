@@ -31,9 +31,7 @@ encrypt the images. To genetate KBS encrypted image, please refer to the followi
 
 Implemented in `signature_verification.rs`.
 
-Image Signature Verification includes the following four
-tests illustrated in 
-<https://github.com/confidential-containers/image-rs/issues/43>,
+Image Signature Verification includes the following four tests
 s.t.
 
 | |signed image|unsigned image|
