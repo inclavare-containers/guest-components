@@ -93,7 +93,7 @@ impl OidcRamClient {
             region_id: self.region_id.clone(),
         };
 
-        let provider_settings = serde_json::to_value(&provider_settings)
+        let provider_settings = serde_json::to_value(provider_settings)
             .context("serialize ProviderSettings failed: {e}")?
             .as_object()
             .expect("must be an object")
