@@ -51,7 +51,7 @@ impl TokenProvider for AATokenProvider {
         };
         let bytes = self
             .client
-            .get_token(context::with_timeout(50 * 1000 * 1000 * 1000), &req)
+            .get_token(context::with_timeout(1000 * 1000 * 1000 * 1000), &req)
             .await
             .map_err(|e| Error::AATokenProvider(format!("cal ttrpc failed: {e:?}")))?;
         let message: Message = serde_json::from_slice(&bytes.Token).map_err(|e| {

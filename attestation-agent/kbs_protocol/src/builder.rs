@@ -73,6 +73,7 @@ impl<T> KbsClientBuilder<T> {
     pub fn build(self) -> Result<KbsClient<T>> {
         let mut http_client_builder = reqwest::Client::builder()
             .cookie_store(true)
+            .pool_max_idle_per_host(0)
             .user_agent(format!(
                 "attestation-agent-kbs-client/{}",
                 env!("CARGO_PKG_VERSION")

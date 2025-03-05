@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0, see LICENSE for details.
 # SPDX-License-Identifier: Apache-2.0
 
-FROM registry.cn-hangzhou.aliyuncs.com/lxx/trustiflux:anolisos-latest as builder
+FROM openanolis/anolisos:latest as builder
 
 WORKDIR /tmp
 RUN curl https://download.01.org/intel-sgx/sgx-dcap/1.21/linux/distro/Anolis86/sgx_rpm_local_repo.tgz --output sgx_rpm_local_repo.tgz && \
@@ -28,7 +28,7 @@ RUN cargo +1.79.0 build -p attestation-agent --bin ttrpc-aa --no-default-feature
 
 RUN strip target/x86_64-unknown-linux-gnu/debug/ttrpc-aa
 
-FROM registry.cn-hangzhou.aliyuncs.com/lxx/trustiflux:anolisos-latest
+FROM openanolis/anolisos:latest
 
 WORKDIR /tmp
 RUN curl https://download.01.org/intel-sgx/sgx-dcap/1.21/linux/distro/Anolis86/sgx_rpm_local_repo.tgz --output sgx_rpm_local_repo.tgz && \
@@ -36,10 +36,22 @@ RUN curl https://download.01.org/intel-sgx/sgx-dcap/1.21/linux/distro/Anolis86/s
     yum -y install yum-utils && yum-config-manager --add-repo file:///tmp/sgx_rpm_local_repo && \
     yum -y install epel-release && \
     yum install -y --setopt=install_weak_deps=False --nogpgcheck libtdx-attest-devel && \
+    yum install -y python38 python38-devel libxml2-devel libxslt-devel wget && \
     yum clean all && \
     rm -rf /tmp/*
 
+# Install Aliyun python NVTRUST
+RUN wget https://developer.download.nvidia.cn/compute/cuda/repos/rhel8/x86_64/libnvidia-nscq-570-570.86.15-1.x86_64.rpm && \
+    rpm -ivh libnvidia-nscq-570-570.86.15-1.x86_64.rpm
+RUN curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py && python3.8 get-pip.py
+RUN python3.8 -m pip install lxml
+RUN python3.8 -m pip install nv_attestation_sdk==2.1.2.post6393737 nv_local_gpu_verifier==2.1.1.post6393737 nv_ppcie_verifier==1.1.2.post6393737 -f https://attest-public-cn-beijing.oss-cn-beijing.aliyuncs.com/repo/pip/attest.html
+RUN python3.8 -m pip install --upgrade setuptools
+RUN python3.8 -m pip install --upgrade ecdsa
+
 # Copy binaries
+COPY --from=builder /usr/src/guest-components/gpu_attestation.py /usr/
+COPY --from=builder /usr/src/guest-components/nvswitch_attestation.py /usr/
 COPY --from=builder /usr/src/guest-components/target/x86_64-unknown-linux-gnu/debug/ttrpc-aa /usr/local/bin/attestation-agent
 COPY aa-start.sh /usr/bin/start.sh
 COPY tdx-attest.conf /etc/tdx-attest.conf
