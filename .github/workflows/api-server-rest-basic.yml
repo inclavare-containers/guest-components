@@ -35,7 +35,7 @@ jobs:
         instance:
           - ubuntu-24.04
         rust:
-          - stable
+          - 1.76.0
     runs-on: ${{ matrix.instance }}
     steps:
       - name: Code checkout

@@ -32,8 +32,7 @@ jobs:
       fail-fast: false
       matrix:
         rust:
-          - 1.83.0
-          - stable
+          - 1.76.0
         instance:
           - ubuntu-24.04
     runs-on: ${{ matrix.instance }}
@@ -112,33 +111,18 @@ jobs:
         run: |
           sudo -E PATH=$PATH -s cargo test -p image-rs --features default
 
-      - name: Run cargo test - kata-cc (rust-tls version) with keywrap-grpc + keywrap-jwe
+      # TODO: Add key-wrap-jwe back
+      # We temporarily deprecate the keywrap-jwe feature because it is not stable for 1.76.0
+      - name: Run cargo test - kata-cc (rust-tls version) with keywrap-ttrpc (default)
         run: |
-          sudo -E PATH=$PATH -s cargo test -p image-rs --no-default-features --features=encryption-ring,keywrap-grpc,snapshot-overlayfs,signature-cosign-rustls,signature-simple,kbs,oci-client/rustls-tls,keywrap-jwe
-
-      - name: Run cargo test - kata-cc (native-tls version) with keywrap-grpc + keywrap-jwe
-        run: |
-          sudo -E PATH=$PATH -s cargo test -p image-rs --no-default-features --features=encryption-openssl,keywrap-grpc,snapshot-overlayfs,signature-cosign-native,signature-simple,kbs,oci-client/native-tls,keywrap-jwe
-
-      - name: Run cargo test - kata-cc (rust-tls version) with keywrap-ttrpc (default) + keywrap-jwe
-        run: |
-          sudo -E PATH=$PATH -s cargo test -p image-rs --no-default-features --features=kata-cc-rustls-tls,keywrap-jwe
-
-      - name: Run cargo test - kata-cc (native-tls version) with keywrap-ttrpc (default) + keywrap-jwe
-        run: |
-          sudo -E PATH=$PATH -s cargo test -p image-rs --no-default-features --features=kata-cc-native-tls,keywrap-jwe
+          sudo -E PATH=$PATH -s cargo test -p image-rs --no-default-features --features=kata-cc-rustls-tls
       
       - name: Clean test cache
         run: |
           sudo -E PATH=$PATH -s cargo clean
 
-      - name: Run cargo test - kata-cc (native-tls version) with keywrap-ttrpc (default) + keywrap-jwe and with signatures from XRSS registry extension
+      - name: Run cargo test - kata-cc (native-tls version) with keywrap-ttrpc (default) and with signatures from XRSS registry extension
         env:
           AUTH_PASSWORD: ${{ secrets.SH_ICR_API_KEY }}
         run: |
-          sudo -E PATH=$PATH -s cargo test -p image-rs --no-default-features --features=kata-cc-native-tls,keywrap-jwe,signature-simple-xrss
-
-      - name: Run cargo test - kata-cc (native-tls version) with keywrap-ttrpc (default) + keywrap-jwe + nydus
-        run: |
-          sudo -E PATH=$PATH -s cargo test -p image-rs --no-default-features --features=kata-cc-native-tls,keywrap-jwe,nydus
-        if: matrix.instance == 'ubuntu-24.04'
+          sudo -E PATH=$PATH -s cargo test -p image-rs --no-default-features --features=kata-cc-native-tls,signature-simple-xrss

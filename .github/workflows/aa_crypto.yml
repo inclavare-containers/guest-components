@@ -43,9 +43,9 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: stable
+          toolchain: 1.76.0
           override: true
-          components: rustfmt
+          components: rustfmt, clippy
 
       - name: Run rust fmt check
         uses: actions-rs/cargo@v1
