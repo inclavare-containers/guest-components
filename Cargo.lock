@@ -345,6 +345,7 @@ dependencies = [
  "const_format",
  "crypto",
  "env_logger 0.11.6",
+ "eventlog-rs",
  "hex",
  "kbs-types",
  "kbs_protocol",
@@ -386,8 +387,11 @@ dependencies = [
  "kbs-types",
  "log",
  "nix 0.29.0",
+ "num-traits",
  "occlum_dcap",
+ "openssl",
  "pnet",
+ "rsa",
  "rstest",
  "s390_pv",
  "scroll",
@@ -401,6 +405,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.9",
  "tokio",
+ "tss-esapi",
  "udev",
 ]
 
@@ -4003,9 +4008,9 @@ dependencies = [
 
 [[package]]
 name = "num-traits"
-version = "0.2.18"
+version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da0df0e5185db44f69b44f26786fe401b6c293d1907744beaa7fa62b2e5a517a"
+checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
 dependencies = [
  "autocfg",
  "libm",

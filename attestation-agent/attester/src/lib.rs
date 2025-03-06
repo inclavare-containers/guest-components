@@ -39,6 +39,9 @@ pub mod se;
 #[cfg(feature = "system-attester")]
 pub mod system;
 
+#[cfg(feature = "tpm-attester")]
+pub mod tpm;
+
 pub type BoxedAttester = Box<dyn Attester + Send + Sync>;
 
 impl TryFrom<Tee> for BoxedAttester {
@@ -65,6 +68,8 @@ impl TryFrom<Tee> for BoxedAttester {
             Tee::Se => Box::<se::SeAttester>::default(),
             #[cfg(feature = "system-attester")]
             Tee::System => Box::new(system::SystemAttester::new()?),
+            #[cfg(feature = "tpm-attester")]
+            Tee::Tpm => Box::<tpm::TpmAttester>::default(),
             _ => bail!("TEE is not supported!"),
         };
 

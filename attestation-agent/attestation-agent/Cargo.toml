@@ -27,6 +27,7 @@ clap = { workspace = true, features = ["derive"], optional = true }
 config.workspace = true
 const_format.workspace = true
 env_logger = { workspace = true, optional = true }
+eventlog-rs = { version = "0.1.5", optional = true }
 hex.workspace = true
 kbs_protocol = { path = "../kbs_protocol", default-features = false, optional = true }
 kbs-types.workspace = true
@@ -74,6 +75,7 @@ all-attesters = [
     "se-attester",
     "cca-attester",
     "system-attester",
+    "tpm-attester",
 ]
 tdx-attester = ["kbs_protocol?/tdx-attester", "attester/tdx-attester"]
 sgx-attester = ["kbs_protocol?/sgx-attester", "attester/sgx-attester"]
@@ -89,6 +91,7 @@ snp-attester = ["kbs_protocol?/snp-attester", "attester/snp-attester"]
 se-attester = ["kbs_protocol?/se-attester", "attester/se-attester"]
 cca-attester = ["kbs_protocol?/cca-attester", "attester/cca-attester"]
 system-attester = ["kbs_protocol?/system-attester", "attester/system-attester"]
+tpm-attester = ["kbs_protocol?/tpm-attester", "attester/tpm-attester", "eventlog-rs"]
 
 # Either `rust-crypto` or `openssl` should be enabled to work as underlying crypto module
 rust-crypto = ["kbs_protocol?/rust-crypto"]
