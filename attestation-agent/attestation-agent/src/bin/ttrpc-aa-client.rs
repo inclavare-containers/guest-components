@@ -6,6 +6,7 @@
 use base64::Engine;
 use clap::{arg, command, Args, Parser, Subcommand};
 use const_format::concatcp;
+use parse_evidence::parse_evidence;
 use ttrpc::context;
 use ttrpc_dep::ttrpc_protocol::{
     attestation_agent::{
@@ -14,6 +15,7 @@ use ttrpc_dep::ttrpc_protocol::{
     attestation_agent_ttrpc::AttestationAgentServiceClient,
 };
 
+mod parse_evidence;
 mod ttrpc_dep;
 
 const TIMEOUT: i64 = 5 * 1000 * 1000 * 1000;
@@ -51,6 +53,9 @@ enum Operation {
     /// Get evidence
     GetEvidence(GetEvidenceArgs),
 
+    /// Get parsed evidence
+    GetParsedEvidence(GetEvidenceArgs),
+
     /// Get attestation token
     GetToken(GetTokenArgs),
 
@@ -62,7 +67,7 @@ enum Operation {
 #[command(author, version, about, long_about = None)]
 struct GetEvidenceArgs {
     /// base64 encodede runtime data
-    #[arg(short, long)]
+    #[arg(default_value_t = String::new(), short, long)]
     runtime_data: String,
 }
 
@@ -125,6 +130,31 @@ pub async fn main() {
                 .expect("request to AA");
             let evidence = String::from_utf8(res.Evidence).unwrap();
             println!("{evidence}");
+        }
+        Operation::GetParsedEvidence(args) => {
+            let runtime_data = base64::engine::general_purpose::STANDARD
+                .decode(args.runtime_data)
+                .unwrap();
+            let evidence_req = GetEvidenceRequest {
+                RuntimeData: runtime_data,
+                ..Default::default()
+            };
+            let evidence_res = client
+                .get_evidence(context::with_timeout(TIMEOUT), &evidence_req)
+                .await
+                .expect("request to AA");
+            let evidence = String::from_utf8(evidence_res.Evidence).unwrap();
+            let tee_type_req = GetTeeTypeRequest {
+                ..Default::default()
+            };
+            let tee_type_res = client
+                .get_tee_type(context::with_timeout(TIMEOUT), &tee_type_req)
+                .await
+                .expect("request to AA");
+            println!(
+                "{}",
+                parse_evidence(tee_type_res.tee, evidence).expect("parse evidence")
+            );
         }
         Operation::GetToken(get_token_args) => {
             let req = GetTokenRequest {
