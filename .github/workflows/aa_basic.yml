@@ -66,7 +66,7 @@ jobs:
       - name: Install TPM dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libtss2-dev
+          sudo apt-get install -y libtss2-dev pkg-config
         if: matrix.instance == 'ubuntu-24.04'
 
       - name: Install dm-verity dependencies
@@ -83,7 +83,7 @@ jobs:
 
       - name: Musl build with all platform
         run: |
-          make LIBC=musl ttrpc=true ATTESTER=none
+          make LIBC=musl ttrpc=true ATTESTER=system-attester
         if: matrix.instance == 'ubuntu-24.04'
 
       - name: Run cargo test
