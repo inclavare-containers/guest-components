@@ -392,6 +392,7 @@ dependencies = [
  "occlum_dcap",
  "openssl",
  "pnet",
+ "rsa",
  "rstest",
  "s390_pv",
  "scroll",
@@ -2131,9 +2132,9 @@ dependencies = [
 
 [[package]]
 name = "eventlog-rs"
-version = "0.1.6"
+version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "606e113813a3db3f1f42b273d4fb89ca8ef1e2bd5b97befd08b260ae5708be8d"
+checksum = "8032cb35e23e548f50306064c37de06e04eb51378bce8ad99f0a7f119b30204e"
 dependencies = [
  "anyhow",
  "byteorder",

@@ -276,7 +276,6 @@ impl KbsClient<Box<dyn EvidenceProvider>> {
             .provider
             .get_evidence(hashed_data)
             .await
-            .context("Get TEE evidence failed")
             .map_err(|e| Error::GetEvidence(e.to_string()))?;
 
         Ok(tee_evidence)

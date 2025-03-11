@@ -27,7 +27,7 @@ clap = { workspace = true, features = ["derive"], optional = true }
 config.workspace = true
 const_format.workspace = true
 env_logger = { workspace = true, optional = true }
-eventlog-rs = { version = "0.1.5", optional = true }
+eventlog-rs = { version = "0.1.7", optional = true }
 hex.workspace = true
 kbs_protocol = { path = "../kbs_protocol", default-features = false, optional = true }
 kbs-types.workspace = true

@@ -6,6 +6,8 @@ use crate::tpm::utils::*;
 use crate::Attester;
 use anyhow::*;
 use base64::Engine;
+use rsa as rust_rsa;
+use rsa::pkcs8::EncodePublicKey;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
@@ -19,15 +21,15 @@ const TPM_REPORT_DATA_SIZE: usize = 64;
 #[derive(Serialize, Deserialize)]
 pub struct TpmEvidence {
     // PEM format of EK certificate
-    pub ek_cert: String,
-    // PCR digests
-    pub pcrs: HashMap<String, Vec<String>>,
+    pub ek_cert: Option<String>,
+    // PEM format of AK public key
+    pub ak_pubkey: String,
+    // TPM Quote (Contained PCRs)
+    pub quote: HashMap<String, TpmQuote>,
     // Base64 encoded Eventlog ACPI table
     pub eventlog: Option<String>,
     // AA Eventlog
     pub aa_eventlog: Option<String>,
-    // Report Data
-    pub report_data: String,
 }
 
 pub fn detect_platform() -> bool {
@@ -45,6 +47,18 @@ impl Attester for TpmAttester {
         }
         report_data.resize(TPM_REPORT_DATA_SIZE, 0);
 
+        let attestation_key = generate_rsa_ak()?;
+
+        let mut quote = HashMap::new();
+        quote.insert(
+            "SHA1".to_string(),
+            get_quote(attestation_key.clone(), &report_data, "SHA1")?,
+        );
+        quote.insert(
+            "SHA256".to_string(),
+            get_quote(attestation_key.clone(), &report_data, "SHA256")?,
+        );
+
         let engine = base64::engine::general_purpose::STANDARD;
         let eventlog = match std::fs::read(TPM_EVENTLOG_FILE_PATH) {
             Result::Ok(el) => Some(engine.encode(el)),
@@ -61,21 +75,13 @@ impl Attester for TpmAttester {
             }
         };
 
-        let mut pcrs = HashMap::new();
-
-        if let Result::Ok(sha1_pcrs) = dump_pcr_sha1_digests() {
-            pcrs.insert("SHA1".to_string(), sha1_pcrs);
-        }
-        if let Result::Ok(sha256_pcrs) = dump_pcr_sha256_digests() {
-            pcrs.insert("SHA256".to_string(), sha256_pcrs);
-        }
-
         let evidence = TpmEvidence {
-            ek_cert: dump_ek_cert_pem()?,
-            pcrs,
+            ek_cert: dump_ek_cert_pem().ok(),
+            ak_pubkey: get_ak_pub(attestation_key)?
+                .to_public_key_pem(rust_rsa::pkcs8::LineEnding::LF)?,
+            quote,
             eventlog,
             aa_eventlog,
-            report_data: engine.encode(report_data),
         };
 
         serde_json::to_string(&evidence)
@@ -88,7 +94,9 @@ impl Attester for TpmAttester {
 
     async fn get_runtime_measurement(&self, index: u64) -> Result<Vec<u8>> {
         let pcr_index = index as usize;
-        let pcrs = dump_pcr_sha256_digests()?;
+
+        // Now only support SHA256 runtime measurement
+        let pcrs = dump_pcrs("SHA256")?;
         let target_pcr = pcrs
             .get(pcr_index)
             .ok_or_else(|| anyhow::anyhow!("Register index out of bounds"))?;

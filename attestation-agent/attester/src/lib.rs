@@ -158,6 +158,11 @@ pub fn detect_tee_type() -> Tee {
         return Tee::System;
     }
 
+    #[cfg(feature = "tpm-attester")]
+    if tpm::detect_platform() {
+        return Tee::Tpm;
+    }
+
     log::warn!("No TEE platform detected. Sample Attester will be used.");
     Tee::Sample
 }

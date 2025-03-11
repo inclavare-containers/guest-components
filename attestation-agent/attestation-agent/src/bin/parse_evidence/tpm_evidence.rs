@@ -26,32 +26,30 @@ pub fn parse_tpm_ev(evidence: String) -> Result<String> {
         output.push_str(&format!("{bios_eventlog}"));
     }
 
-    output.push_str("\n==================\nTPM EK Certificate\n==================\n");
-    output.push_str(&ev.ek_cert);
+    if let Some(ek_cert) = ev.ek_cert {
+        output.push_str("\n==================\nTPM EK Certificate\n==================\n");
+        output.push_str(&ek_cert);
+    }
 
     output.push_str("\n===================\nPCR Register Values\n===================\n");
     output.push_str("SHA1:\n");
 
-    for (pcr_index, pcr_value) in ev
-        .pcrs
-        .get("SHA1")
-        .expect("Cannot find SHA1 pcrs in evidence")
-        .iter()
-        .enumerate()
-    {
-        output.push_str(&format!("\t{pcr_index}: {pcr_value}\n"));
+    if let Some(sha1_pcrs) = ev.quote.get("SHA1") {
+        for (pcr_index, pcr_value) in sha1_pcrs.pcrs.iter().enumerate() {
+            output.push_str(&format!("\t{pcr_index}: {pcr_value}\n"));
+        }
+    } else {
+        output.push_str("SHA1 PCRs not found in evidence.\n");
     }
 
     output.push_str("SHA256:\n");
 
-    for (pcr_index, pcr_value) in ev
-        .pcrs
-        .get("SHA256")
-        .expect("Cannot find SHA256 pcrs in evidence")
-        .iter()
-        .enumerate()
-    {
-        output.push_str(&format!("\t{pcr_index}: {pcr_value}\n"));
+    if let Some(sha256_pcrs) = ev.quote.get("SHA256") {
+        for (pcr_index, pcr_value) in sha256_pcrs.pcrs.iter().enumerate() {
+            output.push_str(&format!("\t{pcr_index}: {pcr_value}\n"));
+        }
+    } else {
+        output.push_str("SHA256 PCRs not found in evidence.\n");
     }
 
     output.push_str("\n================================\nAA Runtime Measurement Eventlogs\n================================\n");
