@@ -2,13 +2,13 @@
 # Licensed under the Apache License, Version 2.0, see LICENSE for details.
 # SPDX-License-Identifier: Apache-2.0
 
-FROM registry.cn-hangzhou.aliyuncs.com/lxx/trustiflux:anolisos-latest as builder
+FROM registry.openanolis.cn/openanolis/anolisos:23.2 as builder
 
 WORKDIR /tmp
 RUN curl https://download.01.org/intel-sgx/sgx-dcap/1.21/linux/distro/Anolis86/sgx_rpm_local_repo.tgz --output sgx_rpm_local_repo.tgz && \
     tar zxvf sgx_rpm_local_repo.tgz && \
+    find /etc/yum.repos.d/ -type f -exec sed -i 's/http:\/\/mirrors.openanolis.cn\/anolis/https:\/\/mirrors.aliyun.com\/anolis/g' {} + && \
     yum -y install yum-utils && yum-config-manager --add-repo file:///tmp/sgx_rpm_local_repo && \
-    yum -y install epel-release && \
     yum install -y --setopt=install_weak_deps=False --nogpgcheck libtdx-attest-devel perl wget curl clang openssl-devel protobuf-devel git libudev-devel && \
     yum clean all && \
     rm -rf /tmp/*
@@ -28,13 +28,12 @@ RUN cargo +1.79.0 build -p attestation-agent --bin ttrpc-aa --no-default-feature
 
 RUN strip target/x86_64-unknown-linux-gnu/debug/ttrpc-aa
 
-FROM registry.cn-hangzhou.aliyuncs.com/lxx/trustiflux:anolisos-latest
+FROM registry.openanolis.cn/openanolis/anolisos:23.2
 
 WORKDIR /tmp
 RUN curl https://download.01.org/intel-sgx/sgx-dcap/1.21/linux/distro/Anolis86/sgx_rpm_local_repo.tgz --output sgx_rpm_local_repo.tgz && \
     tar zxvf sgx_rpm_local_repo.tgz && \
     yum -y install yum-utils && yum-config-manager --add-repo file:///tmp/sgx_rpm_local_repo && \
-    yum -y install epel-release && \
     yum install -y --setopt=install_weak_deps=False --nogpgcheck libtdx-attest-devel && \
     yum clean all && \
     rm -rf /tmp/*
