@@ -56,3 +56,19 @@ impl KbsTokenGetter {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_kbs_token_getter() {
+        let config = KbsConfig {
+            url: "http://127.0.0.1:8080".to_string(),
+            cert: None,
+        };
+        let getter = KbsTokenGetter::new(&config);
+        let token = getter.get_token().await;
+        assert!(token.is_err());
+    }
+}

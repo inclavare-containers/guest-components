@@ -22,3 +22,12 @@ impl CoCoASConfig {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_coco_as_config() {
+        let config = super::CoCoASConfig::new();
+        assert!(config.is_ok());
+    }
+}

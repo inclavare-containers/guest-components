@@ -35,3 +35,25 @@ pub(crate) fn urlencode_openapi(s: &str) -> String {
         .replace('*', "%2A")
         .replace("%7E", "~")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_urlencode_openapi() {
+        assert_eq!(urlencode_openapi(""), "");
+        assert_eq!(urlencode_openapi("+"), "%2B");
+        assert_eq!(urlencode_openapi("*"), "%2A");
+        assert_eq!(urlencode_openapi("%7E"), "%257E");
+        assert_eq!(urlencode_openapi("~"), "~");
+    }
+
+    #[test]
+    fn test_sign() {
+        assert_eq!(
+            sign("plaintext", "123").unwrap(),
+            "BmKA4TUoQuVAeZ7ocuAGNI0YTN4="
+        );
+    }
+}

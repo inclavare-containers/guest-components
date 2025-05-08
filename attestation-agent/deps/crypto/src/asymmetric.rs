@@ -13,7 +13,7 @@ pub mod rsa {
     /// Definations of different Padding mode for encryption. Refer to
     /// <https://datatracker.ietf.org/doc/html/rfc7518#section-4.1> for
     /// more information.
-    #[derive(EnumString, AsRefStr)]
+    #[derive(EnumString, AsRefStr, PartialEq, Debug)]
     pub enum PaddingMode {
         #[strum(serialize = "RSA-OAEP")]
         OAEP,
@@ -25,4 +25,29 @@ pub mod rsa {
     pub const RSA_PUBKEY_LENGTH: usize = 2048;
 
     pub const RSA_KTY: &str = "RSA";
+
+    #[cfg(test)]
+    mod tests {
+        use std::str::FromStr;
+
+        use super::*;
+
+        #[test]
+        fn test_padding_mode_parse() {
+            assert_eq!(
+                PaddingMode::OAEP,
+                PaddingMode::from_str("RSA-OAEP").unwrap()
+            );
+            assert_eq!(
+                PaddingMode::PKCS1v15,
+                PaddingMode::from_str("RSA1_5").unwrap()
+            );
+        }
+
+        #[test]
+        fn test_padding_modee_serialize() {
+            assert_eq!("RSA-OAEP", PaddingMode::OAEP.as_ref());
+            assert_eq!("RSA1_5", PaddingMode::PKCS1v15.as_ref());
+        }
+    }
 }

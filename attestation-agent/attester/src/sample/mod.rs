@@ -34,3 +34,16 @@ impl Attester for SampleAttester {
         serde_json::to_string(&evidence).context("Serialize sample evidence failed")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_sample_attester() {
+        let attester = SampleAttester::default();
+        let report_data = vec![1, 2, 3, 4, 5];
+        let evidence = attester.get_evidence(report_data).await.unwrap();
+        println!("{}", evidence);
+    }
+}

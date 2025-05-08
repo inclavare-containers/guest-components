@@ -161,3 +161,14 @@ pub fn detect_tee_type() -> Tee {
     log::warn!("No TEE platform detected. Sample Attester will be used.");
     Tee::Sample
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_detect_tee_type() {
+        let tee = detect_tee_type();
+        assert_eq!(tee, Tee::Sample);
+    }
+}

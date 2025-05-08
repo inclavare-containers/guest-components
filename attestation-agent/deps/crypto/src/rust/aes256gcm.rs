@@ -44,4 +44,16 @@ mod tests {
         let plaintext_de = decrypt(&ciphertext, key, iv).expect("decryption failed");
         assert_eq!(plaintext, plaintext_de);
     }
+
+    #[test]
+    fn test_wrong_key() {
+        let plaintext = b"plaintext";
+        let key = b"0123456789abcdefghijklmnopqrstuv";
+        let iv = b"unique2nonce";
+        let ciphertext = encrypt(plaintext, key, iv).expect("encryption failed");
+
+        let wrong_key = b"efghijklmnopqrstuv0123456789abcd";
+        let plaintext_de = decrypt(&ciphertext, wrong_key, iv);
+        assert!(plaintext_de.is_err());
+    }
 }

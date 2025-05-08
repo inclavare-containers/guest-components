@@ -69,5 +69,20 @@ default except for only builtin `offline-fs-kbc`, you can build with `NO_RESOURC
 make build TEE_PLATFORM=$(TEE_PLATFORM) NO_RESOURCE_PROVIDER=true
 ```
 
+## Unit Test Coverage
+
+Run the following command to generate the unit test coverage report.
+```
+cargo llvm-cov --ignore-filename-regex='(image-rs|ocicrypt-rs|confidential-data-hub/hub/src/bin/protos|attestation-agent/kbs_protocol/src/ttrpc_protos|attestation-agent/attestation-agent/src/bin/ttrpc_dep/ttrpc_protocol)/' \
+    --ignore-run-fail -p attestation-agent \
+    -p attester \
+    -p crypto \
+    -p resource_uri \
+    -p kbs_protocol \
+    -p confidential-data-hub \
+    --features bin,ttrpc,rust-crypto,coco_as,kbs,aliyun,tdx-attester,system-attester \
+    --html --no-default-features
+```
+
 ## License
 [![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fconfidential-containers%2Fimage-rs.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fconfidential-containers%2Fimage-rs?ref=badge_large)

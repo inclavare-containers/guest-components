@@ -13,3 +13,18 @@ pub fn pad<const T: usize>(input: &[u8]) -> [u8; T] {
     }
     output
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_pad() {
+        let input = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+        let res = pad::<20>(&input);
+        let expected = [
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 0, 0, 0, 0,
+        ];
+        assert_eq!(res, expected);
+    }
+}

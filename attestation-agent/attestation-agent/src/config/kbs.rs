@@ -26,3 +26,13 @@ impl KbsConfig {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_kbs_config() {
+        let kbs_config = super::KbsConfig::new().unwrap();
+        assert_eq!(kbs_config.url, "");
+        assert_eq!(kbs_config.cert, None);
+    }
+}

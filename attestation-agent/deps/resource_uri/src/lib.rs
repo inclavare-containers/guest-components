@@ -201,4 +201,11 @@ mod tests {
             ResourceUri::try_from(url_from_string).expect("failed to try from url");
         assert_eq!(resource_from_url, resource);
     }
+
+    #[test]
+    fn test_resource_path() {
+        let resource = ResourceUri::new("https://kbs.example.com/", "/repo/type/tag").unwrap();
+
+        assert_eq!(resource.resource_path(), "repo/type/tag".to_string());
+    }
 }

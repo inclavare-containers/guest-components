@@ -60,3 +60,18 @@ impl CoCoASTokenGetter {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_coco_as_token_getter() {
+        let config = CoCoASConfig {
+            url: "http://localhost:8080".to_string(),
+        };
+        let getter = CoCoASTokenGetter::new(&config);
+        let result = getter.get_token().await;
+        assert!(result.is_err());
+    }
+}

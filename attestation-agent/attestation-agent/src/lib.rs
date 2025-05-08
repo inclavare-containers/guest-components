@@ -231,3 +231,22 @@ impl AttestationAPIs for AttestationAgent {
         self.tee
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_attestation_agent() {
+        let res = AttestationAgent::new(None);
+        let aa = res.unwrap();
+        assert_eq!(aa.get_tee_type(), Tee::Sample);
+        assert!(aa.get_token("kbs").await.is_err());
+        assert!(aa.get_evidence(&[]).await.is_ok());
+        assert!(aa.bind_init_data(&[]).await.is_ok());
+        assert!(aa
+            .extend_runtime_measurement("domain", "event", "operation", None)
+            .await
+            .is_err());
+    }
+}

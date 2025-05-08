@@ -78,3 +78,13 @@ impl AaKbcParams {
         Ok(value.into())
     }
 }
+
+#[cfg(test)]
+mod test {
+    #[test]
+    fn test_aa_kbc_params() {
+        let params = super::AaKbcParams::new().unwrap();
+        assert_eq!(params.kbc, "offline_fs_kbc");
+        assert_eq!(params.uri, "");
+    }
+}

@@ -69,3 +69,15 @@ impl Token {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_token_check() {
+        let token_provider = TestTokenProvider::default();
+        let token = token_provider.get_token().await.unwrap();
+        assert!(token.0.check_valid().is_ok());
+    }
+}

@@ -63,3 +63,18 @@ pub fn encrypt(
         WrapType::Aes256Ctr => aes256ctr::encrypt(&plaintext, &key, &iv),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use super::*;
+
+    #[test]
+    fn test_serialize_wrap_type() {
+        let wrap_type = WrapType::Aes256Gcm;
+        assert_eq!(wrap_type.as_ref(), "A256GCM");
+
+        assert_eq!(WrapType::from_str("A256GCM").unwrap(), WrapType::Aes256Gcm);
+    }
+}

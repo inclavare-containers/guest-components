@@ -71,3 +71,26 @@ impl RSAKeyPair {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_rsa_key_pair() {
+        let rsa_key_pair = RSAKeyPair::new().unwrap();
+        let n = rsa_key_pair.n();
+        let e = rsa_key_pair.e();
+        assert_eq!(n.len(), 256);
+        assert_eq!(e.len(), 3);
+    }
+
+    #[test]
+    fn test_rsa_key_serialize() {
+        let rsa_key_pair = RSAKeyPair::new().unwrap();
+        let serialized = rsa_key_pair.to_pkcs1_pem().unwrap();
+        let deserialized = RSAKeyPair::from_pkcs1_pem(&serialized).unwrap();
+        assert_eq!(rsa_key_pair.n(), deserialized.n());
+        assert_eq!(rsa_key_pair.e(), deserialized.e());
+    }
+}

@@ -35,3 +35,21 @@ impl EvidenceProvider for NativeEvidenceProvider {
         Ok(detect_tee_type())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_native_evidence_provider() {
+        let provider = NativeEvidenceProvider::new().unwrap();
+        let tee = provider.get_tee_type().await.unwrap();
+        assert_eq!(tee, Tee::Sample);
+
+        let evidence = provider
+            .get_evidence(vec![])
+            .await
+            .expect("failed to get evidence");
+        println!("evidence: {}", evidence);
+    }
+}

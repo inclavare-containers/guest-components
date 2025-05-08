@@ -13,3 +13,16 @@ pub fn parse_evidence(tee_type: String, evidence: String) -> Result<String> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_evidence() {
+        let tee_type = "others".to_string();
+        let evidence = "evidence".to_string();
+        let result = parse_evidence(tee_type, evidence);
+        assert!(result.is_ok());
+    }
+}

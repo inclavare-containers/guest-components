@@ -6,13 +6,14 @@
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256, Sha384, Sha512};
-use std::fmt;
-use std::str::FromStr;
 
 /// Hash algorithms used to calculate runtime/init data binding
-#[derive(AsRefStr, Serialize, Deserialize, Clone, Debug, Display, Copy, PartialEq)]
+#[derive(
+    EnumString, AsRefStr, Serialize, Deserialize, Clone, Debug, Display, Copy, PartialEq, Default,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum HashAlgorithm {
+    #[default]
     #[strum(serialize = "sha256")]
     Sha256,
 
@@ -21,12 +22,6 @@ pub enum HashAlgorithm {
 
     #[strum(serialize = "sha512")]
     Sha512,
-}
-
-impl Default for HashAlgorithm {
-    fn default() -> Self {
-        Self::Sha384
-    }
 }
 
 fn hash_reportdata<D: Digest>(material: &[u8]) -> Vec<u8> {
@@ -61,31 +56,46 @@ impl HashAlgorithm {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub struct ParseHashAlgorithmError;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-// XXX: Required to allow conversion to a std::error::Error by `anyhow!()`.
-impl fmt::Display for ParseHashAlgorithmError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "ParseHashAlgorithmError")
+    #[test]
+    fn test_hash_algorithm_list_all() {
+        let algorithms = HashAlgorithm::list_all();
+        assert_eq!(algorithms.len(), 3);
+        assert_eq!(algorithms[0], HashAlgorithm::Sha256);
+        assert_eq!(algorithms[1], HashAlgorithm::Sha384);
+        assert_eq!(algorithms[2], HashAlgorithm::Sha512);
     }
-}
 
-impl std::error::Error for ParseHashAlgorithmError {}
+    #[test]
+    fn test_hash_algorithm_from_str() {
+        assert_eq!(
+            "sha256".parse::<HashAlgorithm>().unwrap(),
+            HashAlgorithm::Sha256
+        );
+        assert_eq!(
+            "sha384".parse::<HashAlgorithm>().unwrap(),
+            HashAlgorithm::Sha384
+        );
+        assert_eq!(
+            "sha512".parse::<HashAlgorithm>().unwrap(),
+            HashAlgorithm::Sha512
+        );
+    }
 
-impl FromStr for HashAlgorithm {
-    type Err = ParseHashAlgorithmError;
+    #[test]
+    fn test_hash_algorithm_from_str_error() {
+        assert!("sha256-384".parse::<HashAlgorithm>().is_err());
+        assert!("sha384-512".parse::<HashAlgorithm>().is_err());
+        assert!("sha512-384".parse::<HashAlgorithm>().is_err());
+    }
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let cleaned = s.replace('-', "").to_lowercase();
-
-        let result = match cleaned.as_str() {
-            "sha256" => HashAlgorithm::Sha256,
-            "sha384" => HashAlgorithm::Sha384,
-            "sha512" => HashAlgorithm::Sha512,
-            _ => return Err(ParseHashAlgorithmError),
-        };
-
-        Ok(result)
+    #[test]
+    fn test_hash_algorithm_length() {
+        assert_eq!(HashAlgorithm::Sha256.digest_len(), 32);
+        assert_eq!(HashAlgorithm::Sha384.digest_len(), 48);
+        assert_eq!(HashAlgorithm::Sha512.digest_len(), 64);
     }
 }

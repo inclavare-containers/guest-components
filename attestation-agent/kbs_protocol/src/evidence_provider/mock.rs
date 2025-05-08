@@ -23,3 +23,15 @@ impl EvidenceProvider for MockedEvidenceProvider {
         Ok(Tee::Sample)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_mocked_evidence_provider() {
+        let provider = MockedEvidenceProvider::default();
+        let evidence = provider.get_evidence(vec![]).await.unwrap();
+        assert_eq!(evidence, "test evidence");
+    }
+}

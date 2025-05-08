@@ -110,4 +110,15 @@ mod tests {
     fn parse_config(#[case] config: &str) {
         let _config = super::Config::try_from(config).expect("failed to parse config file");
     }
+
+    #[test]
+    fn test_config_default() {
+        let config = super::Config::new().expect("failed to create config");
+        assert_eq!(
+            config.eventlog_config.eventlog_algorithm,
+            super::HashAlgorithm::Sha384
+        );
+        assert_eq!(config.eventlog_config.init_pcr, super::DEFAULT_PCR_INDEX);
+        assert_eq!(config.eventlog_config.enable_eventlog, false);
+    }
 }

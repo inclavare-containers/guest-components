@@ -102,3 +102,92 @@ impl AAEventlog {
         rtmr == result
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_aa_eventlog_sha256() {
+        let aael = r#"INIT sha256/0000000000000000000000000000000000000000000000000000000000000000
+domain event operation
+domain event2 operation"#;
+        let aael = AAEventlog::from_str(aael).unwrap();
+        assert_eq!(
+            aael.events,
+            vec![
+                "domain event operation".to_string(),
+                "domain event2 operation".to_string()
+            ]
+        );
+        assert_eq!(
+            aael.hash_algorithm,
+            HashAlgorithm::from_str("sha256").unwrap()
+        );
+        assert_eq!(
+            aael.init_state,
+            hex::decode("0000000000000000000000000000000000000000000000000000000000000000")
+                .unwrap()
+        );
+        assert!(aael.integrity_check(
+            &hex::decode("e3f24e31c29b371c521ead351f6fed0865695cf512cfcb0df658090217f6f678")
+                .unwrap()
+        ));
+    }
+
+    #[test]
+    fn test_aa_eventlog_sha384() {
+        let aael = r#"INIT sha384/00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+domain event operation
+domain event2 operation"#;
+        let aael = AAEventlog::from_str(aael).unwrap();
+        assert_eq!(
+            aael.events,
+            vec![
+                "domain event operation".to_string(),
+                "domain event2 operation".to_string()
+            ]
+        );
+        assert_eq!(
+            aael.hash_algorithm,
+            HashAlgorithm::from_str("sha384").unwrap()
+        );
+        assert_eq!(
+            aael.init_state,
+            hex::decode("00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000")
+                .unwrap()
+        );
+        assert!(aael.integrity_check(
+            &hex::decode("34f0b32ab53b0c41d4617d63666388fa824da49467544232dde0fd1332b734a9230a3928f1aafffc8dc7fd367669d68e")
+                .unwrap()
+        ));
+    }
+
+    #[test]
+    fn test_aa_eventlog_sha512() {
+        let aael = r#"INIT sha512/00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+domain event operation
+domain event2 operation"#;
+        let aael = AAEventlog::from_str(aael).unwrap();
+        assert_eq!(
+            aael.events,
+            vec![
+                "domain event operation".to_string(),
+                "domain event2 operation".to_string()
+            ]
+        );
+        assert_eq!(
+            aael.hash_algorithm,
+            HashAlgorithm::from_str("sha512").unwrap()
+        );
+        assert_eq!(
+            aael.init_state,
+            hex::decode("00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000")
+                .unwrap()
+        );
+        assert!(aael.integrity_check(
+            &hex::decode("841f9a2b8b20b144ad9d077cf2a18940a6dee908a808487fad0e43da6878ac3d87ffd75d2514405e8beb2f1b467523f81e81498dbb877782898e00af900eed6c")
+                .unwrap()
+        ));
+    }
+}
