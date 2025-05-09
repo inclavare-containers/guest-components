@@ -6956,14 +6956,15 @@ dependencies = [
 
 [[package]]
 name = "ttrpc"
-version = "0.8.2"
+version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e376927d4422245ae3e0a0d7df0e805f99652536999b5c671144de9fe4120d8c"
+checksum = "2c580c498a547b4c083ec758be543e11a0772e03013aef4cdb1fbe77c8b62cae"
 dependencies = [
  "async-trait",
  "byteorder",
  "crossbeam",
  "futures",
+ "home",
  "libc",
  "log",
  "nix 0.26.4",
@@ -6977,10 +6978,11 @@ dependencies = [
 
 [[package]]
 name = "ttrpc-codegen"
-version = "0.4.2"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94d7f7631d7a9ebed715a47cd4cb6072cbc7ae1d4ec01598971bbec0024340c2"
+checksum = "cdc0529f65223eca94fc5830e7d552d0d152ff42b74aff5c641edac39592f41f"
 dependencies = [
+ "home",
  "protobuf 2.28.0",
  "protobuf-codegen 3.5.1",
  "protobuf-support",
@@ -6989,11 +6991,12 @@ dependencies = [
 
 [[package]]
 name = "ttrpc-compiler"
-version = "0.6.3"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04c4c51f20209ae3ec2579b947b54cf52685825238002bc2e5af8e1e075d4813"
+checksum = "9be3fb2fe509cb9c0099b3b5551b759ae714f2dde56dfc713f2a5bda8c16064a"
 dependencies = [
  "derive-new",
+ "home",
  "prost 0.8.0",
  "prost-build 0.8.0",
  "prost-types 0.8.0",
