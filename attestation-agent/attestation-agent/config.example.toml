@@ -35,3 +35,24 @@ M9QaC1mzQ/OStg==
 eventlog_algorithm = "sha384"
 init_pcr = 17
 enable_eventlog = false
+
+[file_measurement_config]
+enable = false
+# always/init_only
+mode = "init_only"
+pcr_index = 17
+domain = "file"
+operation = "measure"
+# List of files or glob patterns to measure
+# Supports glob patterns like:
+# - "*" for matching any sequence of characters
+# - "?" for matching a single character
+# - "[abc]" for matching any one character from the set
+files = [
+  "/etc/attestation-agent.conf",
+  "/etc/hosts",
+  "/etc/resolv.conf",
+  "/etc/*.conf",
+  "/etc/attestation-agent/*",
+  "/boot/vmlinuz-5.10.134-18.al8.x86_64"
+]

@@ -7,7 +7,7 @@ use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
 use attester::{detect_tee_type, BoxedAttester};
 use kbs_types::Tee;
-use std::{io::Write, str::FromStr, sync::Arc};
+use std::{io::Write, path::Path, str::FromStr, sync::Arc};
 use tokio::sync::{Mutex, RwLock};
 
 pub use attester::InitDataResult;
@@ -16,11 +16,12 @@ pub mod config;
 mod eventlog;
 pub mod token;
 
-use eventlog::{Content, EventLog, LogEntry};
+use eventlog::{Content, EventLog, LogEntry, EVENTLOG_PATH};
 use log::{debug, info, warn};
 use token::*;
 
-use crate::config::Config;
+use crate::config::{Config, MeasurementMode};
+use crate::eventlog::file_measurement::FileMeasurer;
 
 /// Attestation Agent (AA for short) is a rust library crate for attestation procedure
 /// in confidential containers. It provides kinds of service APIs related to attestation,
@@ -87,6 +88,7 @@ impl AttestationAgent {
     pub async fn init(&mut self) -> Result<()> {
         let config = self.config.read().await;
         if config.eventlog_config.enable_eventlog {
+            let is_init = !Path::new(EVENTLOG_PATH).exists();
             let eventlog = EventLog::new(
                 self.attester.clone(),
                 config.eventlog_config.eventlog_algorithm,
@@ -95,6 +97,30 @@ impl AttestationAgent {
             .await?;
 
             self.eventlog = Some(Mutex::new(eventlog));
+
+            if config.file_measurement_config.enable {
+                debug!(
+                    "File measurement enabled with mode: {:?}",
+                    config.file_measurement_config.mode
+                );
+
+                if config.file_measurement_config.mode == MeasurementMode::Always || is_init {
+                    let eventlog_ref = self.eventlog.as_ref().unwrap();
+                    let measurer = FileMeasurer::new(
+                        eventlog_ref,
+                        config.file_measurement_config.clone(),
+                        config.eventlog_config.eventlog_algorithm,
+                    );
+
+                    debug!("Starting file measurement...");
+                    measurer.measure_files_from_config().await?;
+                } else {
+                    debug!(
+                        "Skipping file measurement due to mode configuration: {:?}",
+                        config.file_measurement_config.mode
+                    );
+                }
+            }
         }
 
         Ok(())

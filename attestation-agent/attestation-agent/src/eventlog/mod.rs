@@ -4,6 +4,7 @@
 //
 
 pub mod event;
+pub mod file_measurement;
 
 use std::{
     fmt::Display,

@@ -45,6 +45,7 @@ tokio = { workspace = true, features = ["fs", "sync"] }
 toml.workspace = true
 tonic = { workspace = true, optional = true }
 ttrpc = { workspace = true, features = ["async"], optional = true }
+glob.workspace = true
 
 [dev-dependencies]
 rstest.workspace = true

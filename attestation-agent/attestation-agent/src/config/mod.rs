@@ -6,6 +6,7 @@
 use anyhow::Result;
 use crypto::HashAlgorithm;
 use serde::Deserialize;
+use std::str::FromStr;
 
 /// Default PCR index used by AA. `17` is selected for its usage of dynamic root of trust for measurement.
 /// - [Linux TPM PCR Registry](https://uapi-group.org/specifications/specs/linux_tpm_pcr_registry/)
@@ -31,6 +32,9 @@ pub struct Config {
 
     /// configs about eventlog
     pub eventlog_config: EventlogConfig,
+
+    /// configs about file measurement
+    pub file_measurement_config: FileMeasurementConfig,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -55,11 +59,64 @@ impl Default for EventlogConfig {
     }
 }
 
+/// The measurement mode for file measurement
+#[derive(Clone, Debug, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum MeasurementMode {
+    /// Always measure files on every startup
+    Always,
+    /// Only measure files when EventLog is being created for the first time
+    #[default]
+    InitOnly,
+}
+
+impl FromStr for MeasurementMode {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "always" => Ok(MeasurementMode::Always),
+            "init_only" => Ok(MeasurementMode::InitOnly),
+            _ => Err(anyhow::anyhow!("Invalid measurement mode: {}", s)),
+        }
+    }
+}
+
+/// Configuration for batch file measurement
+#[derive(Clone, Debug, Deserialize, Default)]
+pub struct FileMeasurementConfig {
+    /// Flag whether enable file measurement
+    pub enable: bool,
+
+    /// Measurement mode - when to perform file measurements
+    #[serde(default)]
+    pub mode: MeasurementMode,
+
+    /// PCR Register to extend file measurement
+    pub pcr_index: u64,
+
+    /// Domain for file measurement events
+    pub domain: String,
+
+    /// Operation for file measurement events
+    pub operation: String,
+
+    /// List of file paths or glob patterns to measure
+    /// Supports standard glob patterns:
+    /// - `*`: Matches any sequence of characters (except path separators)
+    /// - `?`: Matches any single character (except path separators)
+    /// - `[abc]`: Matches any of the specified characters
+    /// - `[a-z]`: Matches any character in the specified range
+    #[serde(default)]
+    pub files: Vec<String>,
+}
+
 impl Config {
     pub fn new() -> Result<Self> {
         Ok(Self {
             token_configs: TokenConfigs::new()?,
             eventlog_config: EventlogConfig::default(),
+            file_measurement_config: FileMeasurementConfig::default(),
         })
     }
 }
@@ -95,6 +152,11 @@ impl TryFrom<&str> for Config {
             .set_default("eventlog_config.eventlog_algorithm", DEFAULT_EVENTLOG_HASH)?
             .set_default("eventlog_config.init_pcr", DEFAULT_PCR_INDEX)?
             .set_default("eventlog_config.enable_eventlog", "false")?
+            .set_default("file_measurement_config.enable", "false")?
+            .set_default("file_measurement_config.mode", "init_only")?
+            .set_default("file_measurement_config.pcr_index", DEFAULT_PCR_INDEX)?
+            .set_default("file_measurement_config.domain", "file")?
+            .set_default("file_measurement_config.operation", "measure")?
             .build()?;
 
         let cfg = c.try_deserialize()?;
