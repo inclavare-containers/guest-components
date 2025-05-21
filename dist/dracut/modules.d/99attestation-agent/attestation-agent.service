@@ -4,16 +4,15 @@ Documentation=https://confidentialcontainers.org
 DefaultDependencies=no
 ConditionPathExists=/etc/initrd-release
 After=sysinit.target
+After=attestation-agent-platform-detect.service
 Before=basic.target
+Requires=attestation-agent-platform-detect.service
 
 [Service]
-ExecStartPre=-/usr/sbin/modprobe tdx-guest
 ExecStart=/usr/bin/attestation-agent --config-file /etc/trustiflux/attestation-agent.toml -a unix:///run/confidential-containers/attestation-agent/attestation-agent.sock
 Environment=RUST_LOG=debug
 StandardOutput=journal+console
 StandardError=journal+console
-Restart=always
-RestartSec=5
 Delegate=yes
 KillMode=process
 OOMScoreAdjust=-999
@@ -21,5 +20,3 @@ LimitNOFILE=1048576
 LimitNPROC=infinity
 LimitCORE=infinity
 
-[Install]
-WantedBy=basic.target
