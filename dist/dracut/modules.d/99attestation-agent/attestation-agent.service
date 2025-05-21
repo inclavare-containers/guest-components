@@ -8,7 +8,7 @@ Before=basic.target
 
 [Service]
 ExecStartPre=-/usr/sbin/modprobe tdx-guest
-ExecStart=/usr/local/bin/attestation-agent --config-file /etc/trustiflux/attestation-agent.toml -a unix:///run/confidential-containers/attestation-agent/attestation-agent.sock
+ExecStart=/usr/bin/attestation-agent --config-file /etc/trustiflux/attestation-agent.toml -a unix:///run/confidential-containers/attestation-agent/attestation-agent.sock
 Environment=RUST_LOG=debug
 StandardOutput=journal+console
 StandardError=journal+console
