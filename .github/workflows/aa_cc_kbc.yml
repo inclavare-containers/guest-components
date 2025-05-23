@@ -36,10 +36,9 @@ jobs:
         rust:
           - stable
         attester:
-          - snp-attester
           - tdx-attester
-          - az-snp-vtpm-attester
-          - az-tdx-vtpm-attester
+          - system-attester
+          - tpm-attester
     steps:
       - name: Code checkout
         uses: actions/checkout@v4
@@ -62,6 +61,12 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libtss2-dev
+      
+      - name: Install System Attestation dependencies
+        if: matrix.attester == 'system-attester'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev
 
       - name: Install protoc
         run: |
