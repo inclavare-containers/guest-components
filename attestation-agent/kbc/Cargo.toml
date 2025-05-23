@@ -48,6 +48,7 @@ snp-attester = ["kbs_protocol/snp-attester"]
 cca-attester = ["kbs_protocol/cca-attester"]
 se-attester = ["kbs_protocol/se-attester"]
 system-attester = ["kbs_protocol/system-attester"]
+tpm-attester = ["kbs_protocol/tpm-attester"]
 
 sample_kbc = []
 offline_fs_kbc = []
