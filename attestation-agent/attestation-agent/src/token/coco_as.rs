@@ -55,9 +55,8 @@ impl GetToken for CoCoASTokenGetter {
 
 impl CoCoASTokenGetter {
     pub fn new(config: &CoCoASConfig) -> Self {
-        Self {
-            as_uri: config.url.clone(),
-        }
+        let as_uri = std::env::var("TRUSTEE_URL").unwrap_or_else(|_| config.url.clone());
+        Self { as_uri }
     }
 }
 

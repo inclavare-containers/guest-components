@@ -50,8 +50,9 @@ impl GetToken for KbsTokenGetter {
 
 impl KbsTokenGetter {
     pub fn new(config: &KbsConfig) -> Self {
+        let kbs_host_url = std::env::var("TRUSTEE_URL").unwrap_or_else(|_| config.url.clone());
         Self {
-            kbs_host_url: config.url.clone(),
+            kbs_host_url,
             cert: config.cert.clone(),
         }
     }
