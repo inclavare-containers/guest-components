@@ -26,7 +26,12 @@ impl GetToken for CoCoASTokenGetter {
         let request_body = serde_json::json!({
             "tee": tee_type,
             "evidence": URL_SAFE_NO_PAD.encode(evidence.as_bytes()),
-            "policy_ids": [],
+            "policy_ids": std::env::var("ATTEST_POLICY_ID")
+                .unwrap_or_default()
+                .split(',')
+                .filter(|s| !s.is_empty())
+                .map(|s| s.trim().to_string())
+                .collect::<Vec<String>>(),
         });
 
         let client = reqwest::Client::new();
