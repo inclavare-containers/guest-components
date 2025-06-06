@@ -26,7 +26,7 @@ impl GetToken for CoCoASTokenGetter {
         let request_body = serde_json::json!({
             "tee": tee_type,
             "evidence": URL_SAFE_NO_PAD.encode(evidence.as_bytes()),
-            "policy_ids": std::env::var("ATTEST_POLICY_ID")
+            "policy_ids": std::env::var("COCO_AS_POLICY_ID")
                 .unwrap_or_default()
                 .split(',')
                 .filter(|s| !s.is_empty())
@@ -60,7 +60,14 @@ impl GetToken for CoCoASTokenGetter {
 
 impl CoCoASTokenGetter {
     pub fn new(config: &CoCoASConfig) -> Self {
-        let as_uri = std::env::var("TRUSTEE_URL").unwrap_or_else(|_| config.url.clone());
+        let as_uri = match std::env::var("TRUSTEE_URL") {
+            Result::Err(_) => config.url.clone(),
+            // This URL points to the trustee gateway,
+            // We need to add the /attestation-service path to the URL.
+            // If we want to access the restful attestation service directly,
+            // now only support via config file.
+            Result::Ok(env_url) => format!("{}/attestation-service", env_url),
+        };
         Self { as_uri }
     }
 }
