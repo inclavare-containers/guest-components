@@ -31,6 +31,10 @@ pub struct Config {
 
     /// configs about eventlog
     pub eventlog_config: EventlogConfig,
+
+    /// configs about aa instance
+    #[serde(default)]
+    pub aa_instance: AAInstanceConfig,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -43,6 +47,25 @@ pub struct EventlogConfig {
 
     /// Flag whether enable eventlog recording
     pub enable_eventlog: bool,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct AAInstanceConfig {
+    /// Flag whether enable heartbeat
+    #[serde(default)]
+    pub heartbeat_enabled: bool,
+
+    /// AA instance type
+    pub instance_type: Option<String>,
+}
+
+impl Default for AAInstanceConfig {
+    fn default() -> Self {
+        Self {
+            heartbeat_enabled: false,
+            instance_type: None,
+        }
+    }
 }
 
 impl Default for EventlogConfig {
@@ -60,6 +83,7 @@ impl Config {
         Ok(Self {
             token_configs: TokenConfigs::new()?,
             eventlog_config: EventlogConfig::default(),
+            aa_instance: AAInstanceConfig::default(),
         })
     }
 }
@@ -105,8 +129,9 @@ impl TryFrom<&str> for Config {
 #[cfg(test)]
 mod tests {
     #[rstest::rstest]
-    #[case("config.example.toml")]
-    #[case("config.example.json")]
+    #[case("tests/config.example.toml")]
+    #[case("tests/config.example.json")]
+    #[case("tests/aa_instance_info_test.toml")]
     fn parse_config(#[case] config: &str) {
         let _config = super::Config::try_from(config).expect("failed to parse config file");
     }
@@ -120,5 +145,12 @@ mod tests {
         );
         assert_eq!(config.eventlog_config.init_pcr, super::DEFAULT_PCR_INDEX);
         assert_eq!(config.eventlog_config.enable_eventlog, false);
+    }
+
+    #[test]
+    fn test_aa_instance_config_default() {
+        let config = super::Config::new().expect("failed to create config");
+        assert_eq!(config.aa_instance.heartbeat_enabled, false);
+        assert_eq!(config.aa_instance.instance_type, None);
     }
 }
