@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
+use log::debug;
 use reqwest::header::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
-use log::debug;
 
 use super::InstanceInfoFetcher;
 
@@ -32,6 +32,12 @@ pub struct MetadataClient {
     client: reqwest::Client,
 }
 
+impl Default for MetadataClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MetadataClient {
     pub fn new() -> Self {
         MetadataClient {
@@ -45,12 +51,16 @@ impl MetadataClient {
             Err(e) => {
                 debug!("Error getting token: {}, maybe not in ecs", e);
                 return Ok(None);
-            },
+            }
         };
 
         let instance_id = self.get_instance_metadata(&token, "instance-id").await?;
-        let instance_name = self.get_instance_metadata(&token, "instance/instance-name").await?;
-        let owner_account_id = self.get_instance_metadata(&token, "owner-account-id").await?;
+        let instance_name = self
+            .get_instance_metadata(&token, "instance/instance-name")
+            .await?;
+        let owner_account_id = self
+            .get_instance_metadata(&token, "owner-account-id")
+            .await?;
         let image_id = self.get_instance_metadata(&token, "image-id").await?;
 
         Ok(Some(EcsInfo {
@@ -77,10 +87,16 @@ impl MetadataClient {
             .context("Failed to send request for metadata token")?;
 
         if response.status().is_success() {
-            let token = response.text().await.context("Failed to read token response text")?;
+            let token = response
+                .text()
+                .await
+                .context("Failed to read token response text")?;
             Ok(token)
         } else {
-            Err(anyhow::anyhow!("Failed to get metadata token: {}", response.status()))
+            Err(anyhow::anyhow!(
+                "Failed to get metadata token: {}",
+                response.status()
+            ))
         }
     }
 
@@ -95,15 +111,27 @@ impl MetadataClient {
             .header("X-aliyun-ecs-metadata-token", token)
             .send()
             .await
-            .context(format!("Failed to send request for instance metadata: {}", metadata_field))?;
+            .context(format!(
+                "Failed to send request for instance metadata: {}",
+                metadata_field
+            ))?;
 
         let mut metadata = None;
         if response.status().is_success() {
-            metadata = Some(response.text().await.context("Failed to read metadata response text")?);
+            metadata = Some(
+                response
+                    .text()
+                    .await
+                    .context("Failed to read metadata response text")?,
+            );
         } else {
-            debug!("Failed to get instance metadata: {}, reason: {}", metadata_field, response.status())
+            debug!(
+                "Failed to get instance metadata: {}, reason: {}",
+                metadata_field,
+                response.status()
+            )
         }
 
-        return Ok(metadata)
+        Ok(metadata)
     }
 }

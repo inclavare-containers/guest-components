@@ -11,18 +11,30 @@
 ```toml
 [aa_instance]
 
-# 是否启用心跳功能（可选，默认为 false）
-heartbeat_enabled = false
-
 # AA实例类型（目前仅支持 "aliyun_ecs"）
 instance_type = "aliyun_ecs"
+
+[aa_instance.heartbeat]
+
+# 是否启用心跳功能（可选，默认为 false）
+enabled = true
+
+# Trustee服务器URL（可选，如果不设置将从环境变量TRUSTEE_URL获取）
+trustee_url = "https://trustee-server.example.com"
+
+# 心跳间隔，以分钟为单位（可选，默认为 5）
+interval_minutes = 3
 ```
 
 ### 配置参数说明
 
-- `heartbeat_enabled` (可选): 布尔值，指定是否启用心跳功能。默认为 `false`。
 - `instance_type` (可选): 字符串，指定AA实例的类型。当前支持的值：
   - `"aliyun_ecs"`: 阿里云ECS实例
+
+#### heartbeat 子配置
+- `enabled` (可选): 布尔值，指定是否启用心跳功能。默认为 `false`。
+- `trustee_url` (可选): 字符串，Trustee服务器的URL。如果不设置，将从环境变量 `TRUSTEE_URL` 获取。
+- `interval_minutes` (可选): 数字，心跳发送间隔，以分钟为单位。默认为 `5` 分钟。
 
 ## 功能说明
 
@@ -31,7 +43,14 @@ instance_type = "aliyun_ecs"
    - 获取当前运行环境的实例信息
    - 将获取到的信息写入环境变量 `AA_INSTANCE_INFO`
 
-2. **错误处理**: 如果获取实例信息失败（例如不在相应的云环境中），系统会：
+2. **心跳功能**: 如果启用了 `aa_instance.heartbeat.enabled`，系统会：
+   - 按配置的间隔（默认5分钟）向TRUSTEE服务器发送心跳请求
+   - URL获取优先级：环境变量 `TRUSTEE_URL` > 配置文件 `trustee_url`
+   - API路径: `/aa-instance/heartbeat`, 此API由Trustee Gateway提供
+   - 在请求头中携带 `AAInstanceInfo`，值为 `AA_INSTANCE_INFO` 环境变量的内容
+   - 如果心跳失败，记录警告日志但不影响服务运行
+
+3. **错误处理**: 如果获取实例信息失败（例如不在相应的云环境中），系统会：
    - 记录警告日志
    - 继续正常初始化，不影响其他功能
 
@@ -60,8 +79,12 @@ init_pcr = 17
 enable_eventlog = false
 
 [aa_instance]
-heartbeat_enabled = true
 instance_type = "aliyun_ecs"
+
+[aa_instance.heartbeat]
+enabled = true
+trustee_url = "https://trustee-server.example.com"
+interval_minutes = 3
 ```
 
 ## 环境变量

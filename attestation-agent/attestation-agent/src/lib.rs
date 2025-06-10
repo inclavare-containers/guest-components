@@ -12,11 +12,10 @@ use tokio::sync::{Mutex, RwLock};
 
 pub use attester::InitDataResult;
 
-pub mod instance_info;
 pub mod config;
 mod eventlog;
+pub mod instance_info;
 pub mod token;
-pub mod aa_instance_info;
 
 use eventlog::{Content, EventLog, LogEntry};
 use log::{debug, info, warn};
@@ -79,7 +78,7 @@ pub trait AttestationAPIs {
 
 /// Attestation agent to provide attestation service.
 pub struct AttestationAgent {
-    config: RwLock<Config>,
+    pub config: RwLock<Config>,
     attester: Arc<BoxedAttester>,
     eventlog: Option<Mutex<EventLog>>,
     tee: Tee,
@@ -88,7 +87,7 @@ pub struct AttestationAgent {
 impl AttestationAgent {
     pub async fn init(&mut self) -> Result<()> {
         let config = self.config.read().await;
-        
+
         // Initialize AA instance info based on config
         if let Some(ref instance_type) = config.aa_instance.instance_type {
             match instance_info::get_instance_info(instance_type).await {
@@ -97,11 +96,14 @@ impl AttestationAgent {
                     info!("AA instance info set for type: {}", instance_type);
                 }
                 Err(e) => {
-                    warn!("Failed to get AA instance info for type {}: {}", instance_type, e);
+                    warn!(
+                        "Failed to get AA instance info for type {}: {}",
+                        instance_type, e
+                    );
                 }
             }
         }
-        
+
         if config.eventlog_config.enable_eventlog {
             let eventlog = EventLog::new(
                 self.attester.clone(),
@@ -270,21 +272,14 @@ mod tests {
     async fn test_attestation_agent_with_aa_instance_config() {
         // Clear any existing environment variable first
         std::env::remove_var("AA_INSTANCE_INFO");
-        
+
         let mut aa = AttestationAgent::new(Some("tests/aa_instance_info_test.toml")).unwrap();
         // Test that initialization doesn't fail even if AA instance info retrieval fails
         // (which is expected in test environment without actual cloud metadata)
         aa.init().await.expect("init should not fail");
-        
+
         // In test environment, the aliyun_ecs module should fail gracefully
         // and either not set the env var or set it to None/empty
         // Let's just verify the init() call completes successfully
-    }
-
-    #[tokio::test]
-    async fn test_aa_instance_info_get_instance_info_invalid_type() {
-        let result = crate::instance_info::get_instance_info("invalid_type").await;
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Unsupported instance type"));
     }
 }

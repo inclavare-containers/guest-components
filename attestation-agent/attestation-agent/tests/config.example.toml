@@ -38,8 +38,16 @@ enable_eventlog = false
 
 [aa_instance]
 
-# Flag whether enable heartbeat (optional, default: false)
-heartbeat_enabled = false
-
 # AA instance type (currently only supports "aliyun_ecs")
 instance_type = "aliyun_ecs"
+
+[aa_instance.heartbeat]
+
+# Flag whether enable heartbeat (optional, default: false)
+enabled = true
+
+# Trustee server URL for heartbeat (optional, will fallback to TRUSTEE_URL env var)
+trustee_url = "https://trustee-server.example.com"
+
+# Heartbeat interval in minutes (optional, default: 5)
+interval_minutes = 3

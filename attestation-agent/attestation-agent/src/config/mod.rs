@@ -49,23 +49,27 @@ pub struct EventlogConfig {
     pub enable_eventlog: bool,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Default)]
 pub struct AAInstanceConfig {
-    /// Flag whether enable heartbeat
-    #[serde(default)]
-    pub heartbeat_enabled: bool,
-
     /// AA instance type
     pub instance_type: Option<String>,
+
+    /// Heartbeat configuration
+    #[serde(default)]
+    pub heartbeat: HeartbeatConfig,
 }
 
-impl Default for AAInstanceConfig {
-    fn default() -> Self {
-        Self {
-            heartbeat_enabled: false,
-            instance_type: None,
-        }
-    }
+#[derive(Clone, Debug, Deserialize, Default)]
+pub struct HeartbeatConfig {
+    /// Flag whether enable heartbeat
+    #[serde(default)]
+    pub enabled: bool,
+
+    /// Trustee server URL for heartbeat
+    pub trustee_url: Option<String>,
+
+    /// Heartbeat interval in minutes
+    pub interval_minutes: Option<u64>,
 }
 
 impl Default for EventlogConfig {
@@ -150,7 +154,9 @@ mod tests {
     #[test]
     fn test_aa_instance_config_default() {
         let config = super::Config::new().expect("failed to create config");
-        assert_eq!(config.aa_instance.heartbeat_enabled, false);
+        assert_eq!(config.aa_instance.heartbeat.enabled, false);
+        assert_eq!(config.aa_instance.heartbeat.trustee_url, None);
+        assert_eq!(config.aa_instance.heartbeat.interval_minutes, None);
         assert_eq!(config.aa_instance.instance_type, None);
     }
 }
