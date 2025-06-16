@@ -14,6 +14,8 @@ pub use attester::InitDataResult;
 
 pub mod config;
 mod eventlog;
+
+#[cfg(feature = "instance_info")]
 pub mod instance_info;
 pub mod token;
 
@@ -89,6 +91,7 @@ impl AttestationAgent {
         let config = self.config.read().await;
 
         // Initialize AA instance info based on config
+        #[cfg(feature = "instance_info")]
         if let Some(ref instance_type) = config.aa_instance.instance_type {
             match instance_info::get_instance_info(instance_type).await {
                 Ok(instance_info) => {

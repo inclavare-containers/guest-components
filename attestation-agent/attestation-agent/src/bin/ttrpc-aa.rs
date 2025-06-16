@@ -4,14 +4,12 @@
 //
 
 use anyhow::*;
-use attestation_agent::instance_info::InstanceHeartbeat;
 use attestation_agent::AttestationAgent;
 use clap::{arg, command, Parser};
 use const_format::concatcp;
-use log::{debug, info, warn};
+use log::{debug, info};
 use std::{collections::HashMap, path::Path, sync::Arc};
 use tokio::signal::unix::{signal, SignalKind};
-use tokio::time::{interval, Duration};
 use ttrpc::asynchronous::{Server, Service};
 use ttrpc_dep::server::AA;
 
@@ -73,8 +71,8 @@ pub async fn main() -> Result<()> {
 
     // Check if heartbeat is enabled and get interval
     let config = aa.config.read().await;
-    let heartbeat_enabled = config.aa_instance.heartbeat.enabled;
-    let heartbeat_interval = config.aa_instance.heartbeat.interval_minutes.unwrap_or(5); // Default 5 minutes
+    let _heartbeat_enabled = config.aa_instance.heartbeat.enabled;
+    let _heartbeat_interval = config.aa_instance.heartbeat.interval_minutes.unwrap_or(5); // Default 5 minutes
     drop(config);
 
     let att = start_ttrpc_service(aa)?;
@@ -91,9 +89,13 @@ pub async fn main() -> Result<()> {
     );
 
     // Start heartbeat task if enabled
-    let heartbeat_task = if heartbeat_enabled {
+    #[cfg(feature = "instance_info")]
+    let heartbeat_task = if _heartbeat_enabled {
         let config_file = cli.config_file.clone();
         Some(tokio::spawn(async move {
+            use attestation_agent::instance_info::InstanceHeartbeat;
+            use log::warn;
+            use tokio::time::{interval, Duration};
             let heartbeat = match InstanceHeartbeat::new_from_config_path(config_file.as_deref()) {
                 Result::Ok(h) => h,
                 Result::Err(e) => {
@@ -102,7 +104,7 @@ pub async fn main() -> Result<()> {
                 }
             };
 
-            let mut timer = interval(Duration::from_secs(heartbeat_interval * 60)); // Convert minutes to seconds
+            let mut timer = interval(Duration::from_secs(_heartbeat_interval * 60)); // Convert minutes to seconds
             loop {
                 timer.tick().await;
                 if let Err(e) = heartbeat.send_heartbeat().await {
@@ -130,6 +132,7 @@ pub async fn main() -> Result<()> {
     };
 
     // Cancel heartbeat task if it was started
+    #[cfg(feature = "instance_info")]
     if let Some(task) = heartbeat_task {
         task.abort();
     }
