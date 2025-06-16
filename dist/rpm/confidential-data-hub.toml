@@ -1,0 +1,28 @@
+# The ttrpc sock of CDH that is used to listen to the requests
+socket = "unix:///run/confidential-containers/cdh.sock"
+
+# KBC related configs.
+[kbc]
+# Required. The KBC name. It could be `cc_kbc`, `online_sev_kbc` or
+# `offline_fs_kbc`. All the items under `[credentials]` will be
+# retrieved using the kbc.
+name = "cc_kbc"
+
+# Required. The URL of KBS. If `name` is either `cc_kbc` or
+# `online_sev_kbc`, this URL will be used to connect to the
+# CoCoKBS (for cc_kbc) or Simple-KBS (for online_sev_kbc). If
+# `name` is `offline_fs_kbc`, This URL will be ignored.
+url = "http://example.io:8080"
+
+# Optional. The public key cert of KBS. If not given, CDH will
+# try to use HTTP to connect the server.
+# kbs_cert = ""
+
+# credentials are items that will be retrieved from KBS when CDH
+# is launched. `resource_uri` refers to the KBS resource uri and
+# `path` is where to place the file.
+# `path` must be with prefix `/run/confidential-containers/cdh`,
+# or it will be blocked by CDH.
+# [[credentials]]
+# path = "/run/confidential-containers/cdh/kms-credential/aliyun/ecsRamRole.json"
+# resource_uri = "kbs:///default/aliyun/ecs_ram_role"
