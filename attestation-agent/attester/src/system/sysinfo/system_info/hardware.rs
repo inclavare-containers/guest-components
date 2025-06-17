@@ -206,7 +206,7 @@ fn is_hypervisor_present() -> bool {
 /// Uses various detection techniques inspired by Al-khaser and Pafish projects.
 /// - Al-khaser: https://github.com/LordNoteworthy/al-khaser
 /// - Pafish: https://github.com/a0rtega/pafish
-/// TODO: more virtual machine detection methods are adding.
+///   TODO: more virtual machine detection methods are adding.
 fn determine_virtual_machine_status() -> bool {
     const CONTAINER_PATHS: [&str; 2] = ["/.dockerenv", "/.dockerinit"];
 
