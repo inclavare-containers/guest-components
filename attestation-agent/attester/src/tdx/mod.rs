@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
+use self::gpu::{GpuEvidenceCollector, GpuEvidenceList};
 use self::rtmr::TdxRtmrEvent;
 
 use super::tsm_report::*;
@@ -20,6 +21,8 @@ use tdx_attest_rs::tdx_report_t;
 
 mod report;
 mod rtmr;
+
+mod gpu;
 
 const TDX_REPORT_DATA_SIZE: usize = 64;
 
@@ -66,6 +69,8 @@ struct TdxEvidence {
     quote: String,
     // Eventlog of Attestation Agent
     aa_eventlog: Option<String>,
+    // GPU evidence (optional)
+    gpu_evidence: Option<GpuEvidenceList>,
 }
 
 #[derive(Debug, Default)]
@@ -144,10 +149,41 @@ impl Attester for TdxAttester {
             }
         };
 
+        // Try to collect GPU evidence
+        #[allow(unused_assignments)]
+        let mut gpu_evidence: Option<GpuEvidenceList> = None;
+        if let Result::Ok(gpu_collector) = GpuEvidenceCollector::new() {
+            match gpu_collector.has_gpu_devices() {
+                true => match gpu_collector.collect_gpu_evidence(&report_data) {
+                    Result::Ok(gpu_evidence_list) => {
+                        log::info!(
+                            "GPU evidence collected successfully, found {} GPU devices",
+                            gpu_evidence_list.gpu_count()
+                        );
+                        gpu_evidence = Some(gpu_evidence_list);
+                    }
+                    Result::Err(e) => {
+                        log::warn!("Failed to collect GPU evidence: {}", e);
+                        gpu_evidence = None;
+                    }
+                },
+                false => {
+                    log::info!("No GPU devices found, skipping GPU evidence collection");
+                    gpu_evidence = None;
+                }
+            }
+        } else {
+            log::warn!(
+                "Failed to initialize GPU evidence collector, skipping GPU evidence collection"
+            );
+            gpu_evidence = None;
+        }
+
         let evidence = TdxEvidence {
             cc_eventlog,
             quote,
             aa_eventlog,
+            gpu_evidence,
         };
 
         serde_json::to_string(&evidence).context("Serialize TDX evidence failed")
