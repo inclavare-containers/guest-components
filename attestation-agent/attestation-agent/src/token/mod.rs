@@ -13,6 +13,9 @@ pub mod kbs;
 #[cfg(feature = "coco_as")]
 pub mod coco_as;
 
+#[cfg(feature = "tpm_credential")]
+pub mod tpm_credential;
+
 #[derive(EnumString, Clone, Copy)]
 pub enum TokenType {
     #[cfg(feature = "kbs")]
@@ -22,6 +25,10 @@ pub enum TokenType {
     #[cfg(feature = "coco_as")]
     #[strum(serialize = "coco_as")]
     CoCoAS,
+
+    #[cfg(feature = "tpm_credential")]
+    #[strum(serialize = "tpm_credential")]
+    TpmCredential,
 }
 
 #[async_trait]

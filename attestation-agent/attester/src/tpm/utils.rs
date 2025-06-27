@@ -19,11 +19,12 @@ use tss_esapi::abstraction::{
 };
 use tss_esapi::attributes::SessionAttributesBuilder;
 use tss_esapi::constants::SessionType;
-use tss_esapi::handles::PcrHandle;
+use tss_esapi::handles::{PcrHandle, PersistentTpmHandle, TpmHandle};
 use tss_esapi::interface_types::algorithm::{
     AsymmetricAlgorithm, HashingAlgorithm, SignatureSchemeAlgorithm,
 };
 use tss_esapi::interface_types::key_bits::RsaKeyBits;
+use tss_esapi::interface_types::{dynamic_handles::Persistent, resource_handles::Provision};
 use tss_esapi::structures::digest_values::DigestValues;
 use tss_esapi::structures::{
     pcr_selection_list::PcrSelectionListBuilder, pcr_slot::PcrSlot, AttestInfo, PcrSelectionList,
@@ -32,6 +33,11 @@ use tss_esapi::structures::{
 use tss_esapi::tcti_ldr::{DeviceConfig, TctiNameConf};
 use tss_esapi::traits::Marshall;
 use tss_esapi::Context as TssContext;
+
+// AK persistent handle constant
+const PERSISTENT_AK_HANDLE: u32 = 0x81010060;
+// AK Cert persistent handle constant
+// const PERSISTENT_AK_CERT_NV_INDEX: u32 = 0x150001b;
 
 const TPM_QUOTE_PCR_SLOTS: [PcrSlot; 24] = [
     PcrSlot::Slot0,
@@ -182,11 +188,12 @@ pub struct AttestationKey {
     pub ak_public: Public,
 }
 
-pub fn generate_rsa_ak() -> Result<AttestationKey> {
+pub fn generate_rsa_ak() -> Result<()> {
     let mut context = create_ctx_without_session()?;
 
     let ek_handle = create_ek_object(&mut context, AsymmetricAlgorithm::Rsa, DefaultKey)?;
 
+    // Create transient AK first
     let ak = create_ak(
         &mut context,
         ek_handle,
@@ -196,23 +203,65 @@ pub fn generate_rsa_ak() -> Result<AttestationKey> {
         DefaultKey,
     )?;
 
-    Ok(AttestationKey {
-        ak_private: ak.out_private,
-        ak_public: ak.out_public,
-    })
+    // Convert PERSISTENT_AK_HANDLE to TpmHandle
+    let persistent_tpm_handle = PersistentTpmHandle::new(PERSISTENT_AK_HANDLE)?;
+    let persistent_handle = TpmHandle::Persistent(persistent_tpm_handle);
+
+    // Check if the persistent AK exists, if it exists, clear the existing AK
+    let handle_exists = context.tr_from_tpm_public(persistent_handle).is_ok();
+    if handle_exists {
+        match context.tr_from_tpm_public(persistent_handle) {
+            Result::Ok(existing_handle) => {
+                context.execute_with_nullauth_session::<_, _, anyhow::Error>(|ctx| {
+                    ctx.evict_control(
+                        Provision::Owner,
+                        existing_handle,
+                        Persistent::Persistent(persistent_tpm_handle),
+                    )
+                    .map_err(|e| anyhow!("Failed to evict existing AK: {:?}", e))
+                })?;
+                log::info!("Existing AK handle cleared");
+            }
+            Result::Err(e) => {
+                log::warn!("Failed to get existing handle: {:?}", e);
+            }
+        }
+    }
+
+    let ek_handle = create_ek_object(&mut context, AsymmetricAlgorithm::Rsa, DefaultKey)?;
+    let ak_handle = context.execute_with_nullauth_session::<_, _, anyhow::Error>(|ctx| {
+        load_ak(
+            ctx,
+            ek_handle,
+            None,
+            ak.out_private.clone(),
+            ak.out_public.clone(),
+        )
+        .map_err(|e| anyhow!("Failed to load AK: {:?}", e))
+    })?;
+
+    // Make AK persistent
+    context.execute_with_nullauth_session::<_, _, anyhow::Error>(|ctx| {
+        ctx.evict_control(
+            Provision::Owner,
+            ak_handle.into(),
+            Persistent::Persistent(persistent_tpm_handle),
+        )
+        .map_err(|e| anyhow!("Failed to make AK persistent: {:?}", e))
+    })?;
+
+    Ok(())
 }
 
-pub fn get_ak_pub(ak: AttestationKey) -> Result<rust_rsa::RsaPublicKey> {
+pub fn get_ak_pub() -> Result<rust_rsa::RsaPublicKey> {
     let mut context = create_ctx_without_session()?;
-    let ek_handle = create_ek_object(&mut context, AsymmetricAlgorithm::Rsa, DefaultKey)?;
-    let key_handle = load_ak(
-        &mut context,
-        ek_handle,
-        None,
-        ak.clone().ak_private,
-        ak.clone().ak_public,
-    )?;
-    let (pk, _, _) = context.read_public(key_handle)?;
+    let persistent_handle = PersistentTpmHandle::new(PERSISTENT_AK_HANDLE)?;
+    let persistent_ak_handle = TpmHandle::Persistent(persistent_handle);
+
+    let ak_handle = context
+        .tr_from_tpm_public(persistent_ak_handle)
+        .map_err(|_| anyhow!("AK handle not found, maybe not be generated yet"))?;
+    let (pk, _, _) = context.read_public(ak_handle.into())?;
 
     let decoded_key: DecodedKey = pk.try_into()?;
     let DecodedKey::RsaPublicKey(rsa_pk) = decoded_key else {
@@ -228,32 +277,40 @@ pub fn get_ak_pub(ak: AttestationKey) -> Result<rust_rsa::RsaPublicKey> {
     Ok(pkey)
 }
 
-pub fn get_quote(
-    attest_key: AttestationKey,
-    report_data: &[u8],
-    pcr_algorithm: &str,
-) -> Result<TpmQuote> {
-    let mut context = create_ctx_with_session()?;
+pub fn get_quote(report_data: &[u8], pcr_algorithm: &str) -> Result<TpmQuote> {
+    let persistent_handle = PersistentTpmHandle::new(PERSISTENT_AK_HANDLE)?;
+    let persistent_ak_handle = TpmHandle::Persistent(persistent_handle);
 
-    let ek_handle = create_ek_object(&mut context, AsymmetricAlgorithm::Rsa, DefaultKey)?;
-    let ak_handle = load_ak(
-        &mut context,
-        ek_handle,
-        None,
-        attest_key.ak_private,
-        attest_key.ak_public,
-    )?;
+    // First check if the AK exists
+    {
+        let mut context = create_ctx_without_session()?;
+        let handle_exists = context.tr_from_tpm_public(persistent_ak_handle).is_ok();
+        drop(context);
+
+        // If the AK does not exist, generate a new one
+        if !handle_exists {
+            log::info!("AK handle not found, generate a new one");
+            generate_rsa_ak().map_err(|e| anyhow!("Failed to generate AK: {:?}", e))?;
+        }
+    }
+
+    let mut context = create_ctx_without_session()?;
+    let ak_handle = context
+        .tr_from_tpm_public(persistent_ak_handle)
+        .map_err(|_| anyhow!("AK handle not found, maybe not be generated yet"))?;
 
     let selection_list = create_pcr_selection_list(pcr_algorithm)?;
 
-    let (attest, signature) = context
-        .quote(
-            ak_handle,
-            report_data.to_vec().try_into()?,
-            SignatureScheme::Null,
-            selection_list.clone(),
-        )
-        .context("Call TPM Quote API failed")?;
+    let (attest, signature) =
+        context.execute_with_nullauth_session::<_, _, anyhow::Error>(|ctx| {
+            ctx.quote(
+                ak_handle.into(),
+                report_data.to_vec().try_into()?,
+                SignatureScheme::Null,
+                selection_list.clone(),
+            )
+            .context("Call TPM Quote API failed")
+        })?;
 
     let AttestInfo::Quote { .. } = attest.attested() else {
         bail!("Get Quote failed");

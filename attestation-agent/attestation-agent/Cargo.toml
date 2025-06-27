@@ -34,7 +34,9 @@ kbs-types.workspace = true
 log.workspace = true
 prost = { workspace = true, optional = true }
 protobuf = { workspace = true, optional = true }
-reqwest = { workspace = true, features = ["json"], optional = true }
+reqwest = { workspace = true, features = ["json", "native-tls"], optional = true }
+rsa = { version = "0.9", features = ["pem"], optional = true }
+pkcs8 = { version = "0.10", optional = true }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
@@ -45,6 +47,8 @@ tokio = { workspace = true, features = ["fs", "sync"] }
 toml.workspace = true
 tonic = { workspace = true, optional = true }
 ttrpc = { workspace = true, features = ["async"], optional = true }
+urlencoding = { version = "2.1", optional = true }
+jsonwebtoken = { version = "9.2", optional = true }
 
 [dev-dependencies]
 rstest.workspace = true
@@ -69,6 +73,8 @@ coco_as = ["reqwest", "token"]
 
 # AA Instance Info support
 instance_info = ["reqwest"]
+# TPM Credential Token
+tpm_credential = ["reqwest", "rsa", "pkcs8", "urlencoding", "token", "tpm-attester", "jsonwebtoken", "kbs"]
 
 all-attesters = [
     "tdx-attester",

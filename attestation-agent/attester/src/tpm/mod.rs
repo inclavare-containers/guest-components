@@ -12,11 +12,12 @@ use rsa::pkcs8::EncodePublicKey;
 use std::collections::HashMap;
 use std::path::Path;
 
-mod utils;
+pub mod utils;
 
 const TPM_EVENTLOG_FILE_PATH: &str = "/sys/kernel/security/tpm0/binary_bios_measurements";
 const DEFAULT_AA_EVENTLOG_PATH: &str = "/run/attestation-agent/eventlog";
 const TPM_REPORT_DATA_SIZE: usize = 64;
+const DEFAULT_AK_CERT_PATH: &str = "/opt/tpm-credential/ak.cert";
 
 pub fn detect_platform() -> bool {
     Path::new("/dev/tpm0").exists()
@@ -33,17 +34,9 @@ impl Attester for TpmAttester {
         }
         report_data.resize(TPM_REPORT_DATA_SIZE, 0);
 
-        let attestation_key = generate_rsa_ak()?;
-
         let mut quote = HashMap::new();
-        quote.insert(
-            "SHA1".to_string(),
-            get_quote(attestation_key.clone(), &report_data, "SHA1")?,
-        );
-        quote.insert(
-            "SHA256".to_string(),
-            get_quote(attestation_key.clone(), &report_data, "SHA256")?,
-        );
+        quote.insert("SHA1".to_string(), get_quote(&report_data, "SHA1")?);
+        quote.insert("SHA256".to_string(), get_quote(&report_data, "SHA256")?);
 
         let engine = base64::engine::general_purpose::STANDARD;
         let eventlog = match std::fs::read(TPM_EVENTLOG_FILE_PATH) {
@@ -63,8 +56,8 @@ impl Attester for TpmAttester {
 
         let evidence = TpmEvidence {
             ek_cert: dump_ek_cert_pem().ok(),
-            ak_pubkey: get_ak_pub(attestation_key)?
-                .to_public_key_pem(rust_rsa::pkcs8::LineEnding::LF)?,
+            ak_cert: std::fs::read_to_string(DEFAULT_AK_CERT_PATH).ok(),
+            ak_pubkey: get_ak_pub()?.to_public_key_pem(rust_rsa::pkcs8::LineEnding::LF)?,
             quote,
             eventlog,
             aa_eventlog,

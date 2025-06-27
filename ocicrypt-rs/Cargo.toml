@@ -18,7 +18,7 @@ base64-serde = { workspace = true, optional = true }
 cfg-if.workspace = true
 ctr = { workspace = true, optional = true }
 hmac = { workspace = true, optional = true }
-josekit = { version = ">=0.7", optional = true }
+josekit = { version = "0.8.7", optional = true }
 kbc = { path = "../attestation-agent/kbc", default-features = false, optional = true }
 lazy_static.workspace = true
 openssl = { workspace = true, features = ["vendored"], optional = true }
