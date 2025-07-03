@@ -16,7 +16,7 @@ mod utils;
 
 const TPM_EVENTLOG_FILE_PATH: &str = "/sys/kernel/security/tpm0/binary_bios_measurements";
 const DEFAULT_AA_EVENTLOG_PATH: &str = "/run/attestation-agent/eventlog";
-const TPM_REPORT_DATA_SIZE: usize = 64;
+const TPM_REPORT_DATA_SIZE: usize = 32;
 
 pub fn detect_platform() -> bool {
     Path::new("/dev/tpm0").exists()
@@ -29,7 +29,12 @@ pub struct TpmAttester {}
 impl Attester for TpmAttester {
     async fn get_evidence(&self, mut report_data: Vec<u8>) -> Result<String> {
         if report_data.len() > TPM_REPORT_DATA_SIZE {
-            bail!("TPM Attester: Report data must be no more than {TPM_REPORT_DATA_SIZE} bytes");
+            log::warn!(
+                "TPM Attester: Report data truncated from {} to {} bytes",
+                report_data.len(),
+                TPM_REPORT_DATA_SIZE
+            );
+            report_data.truncate(TPM_REPORT_DATA_SIZE);
         }
         report_data.resize(TPM_REPORT_DATA_SIZE, 0);
 
