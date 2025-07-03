@@ -2,7 +2,6 @@
 Description=Attestation-Agent Detect Platform Attributes
 DefaultDependencies=no
 ConditionPathExists=/etc/initrd-release
-After=sysinit.target
 
 [Service]
 Type=oneshot
