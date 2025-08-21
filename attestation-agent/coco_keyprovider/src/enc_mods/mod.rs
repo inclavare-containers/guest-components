@@ -9,7 +9,7 @@ use anyhow::*;
 use base64::Engine;
 use jwt_simple::prelude::Ed25519KeyPair;
 use log::{debug, info};
-use rand::RngCore;
+use rand::TryRngCore;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use tokio::fs;
@@ -75,7 +75,7 @@ fn parse_input_params(input: &str) -> Result<InputParams> {
         .iter()
         .filter_map(|field| field.split_once('='))
         .collect();
-    debug!("Get new request: {:?}", map);
+    debug!("Get new request: {map:?}");
     let sample = map
         .get("sample")
         .map(|sa| sa.parse::<bool>().unwrap_or(false))
@@ -113,7 +113,7 @@ async fn generate_key_parameters(input_params: &InputParams) -> Result<(Vec<u8>,
                 debug!("use given key from: {kpath}");
                 let key = fs::read(kpath).await.context("read Key file failed")?;
                 let mut iv = [0; 12];
-                rand::rngs::OsRng.fill_bytes(&mut iv);
+                rand::rngs::OsRng.try_fill_bytes(&mut iv)?;
                 let kid = match &input_params.keyid {
                     Some(kid) => kid.to_string(),
                     None => {
@@ -129,10 +129,10 @@ async fn generate_key_parameters(input_params: &InputParams) -> Result<(Vec<u8>,
                 debug!("no key input, generate a random key");
 
                 let mut iv = [0; 12];
-                rand::rngs::OsRng.fill_bytes(&mut iv);
+                rand::rngs::OsRng.try_fill_bytes(&mut iv)?;
 
                 let mut key = [0; 32];
-                rand::rngs::OsRng.fill_bytes(&mut key);
+                rand::rngs::OsRng.try_fill_bytes(&mut key)?;
 
                 let kid = match &input_params.keyid {
                     Some(kid) => kid.to_string(),
