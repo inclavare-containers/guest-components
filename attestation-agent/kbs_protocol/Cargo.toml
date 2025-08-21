@@ -10,6 +10,7 @@ anyhow.workspace = true
 async-trait.workspace = true
 attester = { path = "../attester", default-features = false }
 base64.workspace = true
+canon-json = { git = "https://github.com/inclavare-containers/canon-json-rs.git", rev = "d6fa90c", optional = true }
 clap = { workspace = true, features = ["derive"], optional = true }
 crypto = { path = "../deps/crypto", default-features = false }
 env_logger = { workspace = true, optional = true }
@@ -49,7 +50,7 @@ passport = []
 # Allow to connect Attestation-Agent with TTRPC to get evidence, token, etc.
 aa_ttrpc = ["ttrpc-codegen", "passport", "ttrpc/async", "protobuf"]
 
-background_check = ["tokio/time"]
+background_check = ["tokio/time", "canon-json"]
 all-attesters = ["attester/all-attesters"]
 tdx-attester = ["attester/tdx-attester"]
 sgx-attester = ["attester/sgx-attester"]
