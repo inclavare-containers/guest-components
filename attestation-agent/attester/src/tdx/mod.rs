@@ -9,7 +9,7 @@ use self::rtmr::TdxRtmrEvent;
 use super::tsm_report::*;
 use super::Attester;
 use crate::utils::pad;
-use crate::InitDataResult;
+use crate::{InitDataResult, TeeEvidence};
 use anyhow::*;
 use base64::Engine;
 use report::TdReport;
@@ -112,7 +112,7 @@ impl TdxAttester {
 
 #[async_trait::async_trait]
 impl Attester for TdxAttester {
-    async fn get_evidence(&self, mut report_data: Vec<u8>) -> Result<String> {
+    async fn get_evidence(&self, mut report_data: Vec<u8>) -> Result<TeeEvidence> {
         if report_data.len() > TDX_REPORT_DATA_SIZE {
             bail!("TDX Attester: Report data must be no more than {TDX_REPORT_DATA_SIZE} bytes");
         }
@@ -186,7 +186,7 @@ impl Attester for TdxAttester {
             gpu_evidence,
         };
 
-        serde_json::to_string(&evidence).context("Serialize TDX evidence failed")
+        serde_json::to_value(&evidence).context("Serialize TDX evidence failed")
     }
 
     async fn extend_runtime_measurement(
@@ -236,6 +236,17 @@ impl Attester for TdxAttester {
         let rtmr_index = Self::pcr_to_rtmr(pcr_index) as usize;
 
         Ok(td_report.get_rtmr(rtmr_index))
+    }
+
+    fn pcr_to_ccmr(&self, pcr_index: u64) -> u64 {
+        // The match follows https://github.com/confidential-containers/td-shim/blob/main/doc/tdshim_spec.md#td-event-log
+        // and https://uefi.org/specs/UEFI/2.11/38_Confidential_Computing.html#intel-trust-domain-extension
+        match pcr_index {
+            1 | 7 => 1,
+            2..=6 => 2,
+            8..=15 => 3,
+            _ => 4,
+        }
     }
 }
 

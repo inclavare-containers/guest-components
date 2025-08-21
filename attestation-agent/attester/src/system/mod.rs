@@ -5,6 +5,7 @@
 mod inner;
 pub mod sysinfo;
 use super::Attester;
+use crate::TeeEvidence;
 use anyhow::*;
 use base64::Engine;
 use inner::SystemAttesterdInner;
@@ -44,7 +45,7 @@ impl SystemAttester {
 
 #[async_trait::async_trait]
 impl Attester for SystemAttester {
-    async fn get_evidence(&self, report_data: Vec<u8>) -> Result<String> {
+    async fn get_evidence(&self, report_data: Vec<u8>) -> Result<TeeEvidence> {
         let system_report = self.inner.read_sys_report()?;
         let measurements = serde_json::to_string(&self.inner.get_measurements())?;
         let mr_register = self.inner.read_mr_register();
@@ -60,7 +61,7 @@ impl Attester for SystemAttester {
             environment,
             report_data: base64::engine::general_purpose::STANDARD.encode(report_data),
         };
-        serde_json::to_string(&evidence).context("Serialize system evidence failed")
+        serde_json::to_value(&evidence).context("Serialize system evidence failed")
     }
 }
 

@@ -37,7 +37,7 @@ hmac = "0.12.1"
 jwt-simple = { version = "0.12", default-features = false, features = [
     "pure-rust",
 ] }
-kbs-types = { git = "https://github.com/inclavare-containers/kbs-types.git", rev = "1b4217f" }
+kbs-types = { git = "https://github.com/inclavare-containers/kbs-types.git", rev = "5c029c9" }
 lazy_static = "1.5.0"
 log = "0.4.22"
 nix = "0.29"
