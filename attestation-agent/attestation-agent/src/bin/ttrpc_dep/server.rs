@@ -10,9 +10,9 @@ use log::{debug, error};
 
 use crate::ttrpc_dep::ttrpc_protocol::{
     attestation_agent::{
-        ExtendRuntimeMeasurementRequest, ExtendRuntimeMeasurementResponse, GetEvidenceRequest,
-        GetEvidenceResponse, GetTeeTypeRequest, GetTeeTypeResponse, GetTokenRequest,
-        GetTokenResponse, UpdateConfigurationRequest, UpdateConfigurationResponse,
+        ExtendRuntimeMeasurementRequest, ExtendRuntimeMeasurementResponse,
+        GetAdditionalEvidenceRequest, GetEvidenceRequest, GetEvidenceResponse, GetTeeTypeRequest,
+        GetTeeTypeResponse, GetTokenRequest, GetTokenResponse,
     },
     attestation_agent_ttrpc::AttestationAgentService,
 };
@@ -76,6 +76,34 @@ impl AttestationAgentService for AA {
         ::ttrpc::Result::Ok(reply)
     }
 
+    async fn get_additional_evidence(
+        &self,
+        _ctx: &::ttrpc::r#async::TtrpcContext,
+        req: GetAdditionalEvidenceRequest,
+    ) -> ::ttrpc::Result<GetEvidenceResponse> {
+        debug!("AA (ttrpc): get evidence ...");
+
+        let evidence = self
+            .inner
+            .get_additional_evidence(&req.RuntimeData)
+            .await
+            .map_err(|e| {
+                error!("AA (ttrpc): get evidence failed:\n {e:?}");
+                let mut error_status = ::ttrpc::proto::Status::new();
+                error_status.set_code(Code::INTERNAL);
+                error_status
+                    .set_message(format!("[ERROR:{AGENT_NAME}] AA-KBC get evidence failed"));
+                ::ttrpc::Error::RpcStatus(error_status)
+            })?;
+
+        debug!("AA (ttrpc): Get evidence successfully!");
+
+        let mut reply = GetEvidenceResponse::new();
+        reply.Evidence = evidence;
+
+        ::ttrpc::Result::Ok(reply)
+    }
+
     async fn extend_runtime_measurement(
         &self,
         _ctx: &::ttrpc::r#async::TtrpcContext,
@@ -103,31 +131,6 @@ impl AttestationAgentService for AA {
 
         debug!("AA (ttrpc): extend runtime measurement succeeded.");
         let reply = ExtendRuntimeMeasurementResponse::new();
-        ::ttrpc::Result::Ok(reply)
-    }
-
-    async fn update_configuration(
-        &self,
-        _ctx: &::ttrpc::r#async::TtrpcContext,
-        req: UpdateConfigurationRequest,
-    ) -> ::ttrpc::Result<UpdateConfigurationResponse> {
-        debug!("AA (ttrpc): update configuration ...");
-
-        self.inner
-            .update_configuration(&req.config)
-            .await
-            .map_err(|e| {
-                error!("AA (ttrpc): update configuration failed:\n {e:?}");
-                let mut error_status = ::ttrpc::proto::Status::new();
-                error_status.set_code(Code::INTERNAL);
-                error_status.set_message(format!(
-                    "[ERROR:{AGENT_NAME}] AA update configuration failed"
-                ));
-                ::ttrpc::Error::RpcStatus(error_status)
-            })?;
-
-        debug!("AA (ttrpc): update configuration succeeded.");
-        let reply = UpdateConfigurationResponse::new();
         ::ttrpc::Result::Ok(reply)
     }
 
