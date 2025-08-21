@@ -1,9 +1,9 @@
-%define release 3
+%define release 1
 %global config_dir /etc/trustiflux
 %global libdir /usr/lib
 
 Name:		trustiflux
-Version:	1.2.1
+Version:	1.3.0
 Release:	%{release}%{?dist}
 Summary:	A daemon service running inside TEE (Trusted Execution Environment) to confidential resource related APIs
 
@@ -40,7 +40,7 @@ tar -xvf %{SOURCE1}
 
 %build
 # building the attestation-agent
-cargo build -p attestation-agent --bin ttrpc-aa --release --no-default-features --features bin,ttrpc,rust-crypto,coco_as,kbs,tdx-attester,system-attester,tpm-attester,instance_info --target x86_64-unknown-linux-gnu
+cargo build -p attestation-agent --bin ttrpc-aa --release --no-default-features --features bin,ttrpc,rust-crypto,coco_as,kbs,tdx-attester,system-attester,tpm-attester,instance_info,csv-attester,hygon-dcu-attester --target x86_64-unknown-linux-gnu
 cargo build -p attestation-agent --bin ttrpc-aa-client --release --no-default-features --features bin,ttrpc --target x86_64-unknown-linux-gnu
 
 # building the confidential-data-hub
@@ -103,6 +103,10 @@ rm -rf %{buildroot}
 %{libdir}/dracut/modules.d/99confidential-data-hub/module-setup.sh
 
 %changelog
+* Thu Aug 21 2025 Xynnn007 <mading.ma@alibaba-inc.com> -1.3.0-1
+- Kbs Protocol: update to v0.4.0
+- Hardware: add Hygon csv and hygon dcu support
+
 * Fri Jun 13 2025 Xynnn007 <mading.ma@alibaba-inc.com> -1.2.1-4
 - Spec: use config files in source code
 

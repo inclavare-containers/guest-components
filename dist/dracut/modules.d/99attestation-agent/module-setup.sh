@@ -18,5 +18,5 @@ install() {
 
 installkernel() {
     # Install kernel modules regardless of the hostonly mode
-    hostonly='' instmods tdx_guest
+    hostonly='' instmods tdx_guest csv-guest
 }
