@@ -12,9 +12,9 @@ pub mod mock;
 pub use mock::*;
 
 #[cfg(feature = "aa_ttrpc")]
-pub mod aa;
+pub mod aa_ttrpc;
 #[cfg(feature = "aa_ttrpc")]
-pub use aa::*;
+pub use aa_ttrpc::*;
 
 use crate::Result;
 use async_trait::async_trait;
