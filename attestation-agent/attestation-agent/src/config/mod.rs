@@ -33,6 +33,7 @@ pub struct Config {
     pub eventlog_config: EventlogConfig,
 
     /// configs about aa instance
+    #[cfg(feature = "instance_info")]
     #[serde(default)]
     pub aa_instance: AAInstanceConfig,
 }
@@ -49,7 +50,8 @@ pub struct EventlogConfig {
     pub enable_eventlog: bool,
 }
 
-#[derive(Clone, Debug, Deserialize, Default)]
+#[cfg(feature = "instance_info")]
+#[derive(Clone, Debug, Deserialize, Default, PartialEq)]
 pub struct AAInstanceConfig {
     /// AA instance type
     pub instance_type: Option<String>,
@@ -59,7 +61,8 @@ pub struct AAInstanceConfig {
     pub heartbeat: HeartbeatConfig,
 }
 
-#[derive(Clone, Debug, Deserialize, Default)]
+#[cfg(feature = "instance_info")]
+#[derive(Clone, Debug, Deserialize, Default, PartialEq)]
 pub struct HeartbeatConfig {
     /// Flag whether enable heartbeat
     #[serde(default)]
@@ -87,6 +90,7 @@ impl Config {
         Ok(Self {
             token_configs: TokenConfigs::new()?,
             eventlog_config: EventlogConfig::default(),
+            #[cfg(feature = "instance_info")]
             aa_instance: AAInstanceConfig::default(),
         })
     }
@@ -151,6 +155,7 @@ mod tests {
         assert_eq!(config.eventlog_config.enable_eventlog, false);
     }
 
+    #[cfg(feature = "instance_info")]
     #[test]
     fn test_aa_instance_config_default() {
         let config = super::Config::new().expect("failed to create config");

@@ -70,9 +70,13 @@ pub async fn main() -> Result<()> {
     aa.init().await.context("init AA")?;
 
     // Check if heartbeat is enabled and get interval
+    #[cfg(feature = "instance_info")]
     let config = aa.config.read().await;
+    #[cfg(feature = "instance_info")]
     let _heartbeat_enabled = config.aa_instance.heartbeat.enabled;
+    #[cfg(feature = "instance_info")]
     let _heartbeat_interval = config.aa_instance.heartbeat.interval_minutes.unwrap_or(5); // Default 5 minutes
+    #[cfg(feature = "instance_info")]
     drop(config);
 
     let att = start_ttrpc_service(aa)?;
