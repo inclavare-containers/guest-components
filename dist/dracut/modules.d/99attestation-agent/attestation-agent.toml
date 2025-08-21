@@ -11,5 +11,4 @@ url = "https://127.0.0.1:8080"
 
 [eventlog_config]
 enable_eventlog = true
-eventlog_algorithm = "sha384"
 init_pcr = 17
