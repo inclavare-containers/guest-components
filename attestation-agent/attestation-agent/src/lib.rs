@@ -174,7 +174,15 @@ impl AttestationAPIs for AttestationAgent {
             #[cfg(feature = "coco_as")]
             token::TokenType::CoCoAS => {
                 token::coco_as::CoCoASTokenGetter::new(
-                    &self.config.read().await.token_configs.coco_as,
+                    self.config
+                        .read()
+                        .await
+                        .token_configs
+                        .coco_as
+                        .as_ref()
+                        .ok_or(anyhow::anyhow!(
+                            "coco_as token config not configured in config file"
+                        ))?,
                 )
                 .get_token()
                 .await
