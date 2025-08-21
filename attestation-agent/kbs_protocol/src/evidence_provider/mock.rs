@@ -4,6 +4,7 @@
 //
 
 use async_trait::async_trait;
+use attester::TeeEvidence;
 use kbs_types::Tee;
 
 use super::EvidenceProvider;
@@ -15,8 +16,12 @@ pub struct MockedEvidenceProvider {}
 
 #[async_trait]
 impl EvidenceProvider for MockedEvidenceProvider {
-    async fn get_evidence(&self, _runtime_data: Vec<u8>) -> Result<String> {
+    async fn primary_evidence(&self, _runtime_data: Vec<u8>) -> Result<TeeEvidence> {
         Ok("test evidence".into())
+    }
+
+    async fn get_additional_evidence(&self, _runtime_data: Vec<u8>) -> Result<String> {
+        Ok("".into())
     }
 
     async fn get_tee_type(&self) -> Result<Tee> {
@@ -31,7 +36,7 @@ mod tests {
     #[tokio::test]
     async fn test_mocked_evidence_provider() {
         let provider = MockedEvidenceProvider::default();
-        let evidence = provider.get_evidence(vec![]).await.unwrap();
+        let evidence = provider.primary_evidence(vec![]).await.unwrap();
         assert_eq!(evidence, "test evidence");
     }
 }
