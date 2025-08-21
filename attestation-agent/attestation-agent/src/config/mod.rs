@@ -81,7 +81,7 @@ impl Default for EventlogConfig {
 impl Config {
     pub fn new() -> Result<Self> {
         Ok(Self {
-            token_configs: TokenConfigs::new()?,
+            token_configs: TokenConfigs::from_kernel_cmdline(),
             eventlog_config: EventlogConfig::default(),
             #[cfg(feature = "instance_info")]
             aa_instance: AAInstanceConfig::default(),
@@ -101,14 +101,17 @@ pub struct TokenConfigs {
 }
 
 impl TokenConfigs {
-    pub fn new() -> Result<Self> {
-        Ok(Self {
+    pub fn from_kernel_cmdline() -> Self {
+        #[cfg(feature = "kbs")]
+        let kbs = kbs::KbsConfig::new().ok();
+
+        Self {
             #[cfg(feature = "coco_as")]
-            coco_as: coco_as::CoCoASConfig::new()?,
+            coco_as: None,
 
             #[cfg(feature = "kbs")]
-            kbs: kbs::KbsConfig::new()?,
-        })
+            kbs,
+        }
     }
 }
 
