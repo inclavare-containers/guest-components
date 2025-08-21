@@ -7,6 +7,7 @@ use anyhow::*;
 use kbs_types::{HashAlgorithm, Tee};
 
 pub mod sample;
+pub mod sample_device;
 pub mod types;
 pub mod utils;
 
@@ -51,6 +52,7 @@ impl TryFrom<Tee> for BoxedAttester {
     fn try_from(value: Tee) -> Result<Self> {
         let attester: Box<dyn Attester + Send + Sync> = match value {
             Tee::Sample => Box::<sample::SampleAttester>::default(),
+            Tee::SampleDevice => Box::<sample_device::SampleDeviceAttester>::default(),
             #[cfg(feature = "tdx-attester")]
             Tee::Tdx => Box::<tdx::TdxAttester>::default(),
             #[cfg(feature = "sgx-attester")]
@@ -197,6 +199,19 @@ pub fn detect_tee_type() -> Tee {
          Attestation will continue using the fallback sample attester."
     );
     Tee::Sample
+}
+
+/// Get any additional TEEs that might be connected to the guest,
+/// such as a confidential device.
+pub fn detect_attestable_devices() -> Vec<Tee> {
+    let mut additional_devices = vec![];
+
+    if sample_device::detect_platform() {
+        additional_devices.push(Tee::SampleDevice);
+    }
+
+
+    additional_devices
 }
 
 #[cfg(test)]
