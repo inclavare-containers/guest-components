@@ -146,6 +146,128 @@ impl ::protobuf::reflect::ProtobufValue for GetEvidenceRequest {
     type RuntimeType = ::protobuf::reflect::rt::RuntimeTypeMessage<Self>;
 }
 
+// @@protoc_insertion_point(message:attestation_agent.GetAdditionalEvidenceRequest)
+#[derive(PartialEq,Clone,Default,Debug)]
+pub struct GetAdditionalEvidenceRequest {
+    // message fields
+    // @@protoc_insertion_point(field:attestation_agent.GetAdditionalEvidenceRequest.RuntimeData)
+    pub RuntimeData: ::std::vec::Vec<u8>,
+    // special fields
+    // @@protoc_insertion_point(special_field:attestation_agent.GetAdditionalEvidenceRequest.special_fields)
+    pub special_fields: ::protobuf::SpecialFields,
+}
+
+impl<'a> ::std::default::Default for &'a GetAdditionalEvidenceRequest {
+    fn default() -> &'a GetAdditionalEvidenceRequest {
+        <GetAdditionalEvidenceRequest as ::protobuf::Message>::default_instance()
+    }
+}
+
+impl GetAdditionalEvidenceRequest {
+    pub fn new() -> GetAdditionalEvidenceRequest {
+        ::std::default::Default::default()
+    }
+
+    fn generated_message_descriptor_data() -> ::protobuf::reflect::GeneratedMessageDescriptorData {
+        let mut fields = ::std::vec::Vec::with_capacity(1);
+        let mut oneofs = ::std::vec::Vec::with_capacity(0);
+        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
+            "RuntimeData",
+            |m: &GetAdditionalEvidenceRequest| { &m.RuntimeData },
+            |m: &mut GetAdditionalEvidenceRequest| { &mut m.RuntimeData },
+        ));
+        ::protobuf::reflect::GeneratedMessageDescriptorData::new_2::<GetAdditionalEvidenceRequest>(
+            "GetAdditionalEvidenceRequest",
+            fields,
+            oneofs,
+        )
+    }
+}
+
+impl ::protobuf::Message for GetAdditionalEvidenceRequest {
+    const NAME: &'static str = "GetAdditionalEvidenceRequest";
+
+    fn is_initialized(&self) -> bool {
+        true
+    }
+
+    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream<'_>) -> ::protobuf::Result<()> {
+        while let Some(tag) = is.read_raw_tag_or_eof()? {
+            match tag {
+                10 => {
+                    self.RuntimeData = is.read_bytes()?;
+                },
+                tag => {
+                    ::protobuf::rt::read_unknown_or_skip_group(tag, is, self.special_fields.mut_unknown_fields())?;
+                },
+            };
+        }
+        ::std::result::Result::Ok(())
+    }
+
+    // Compute sizes of nested messages
+    #[allow(unused_variables)]
+    fn compute_size(&self) -> u64 {
+        let mut my_size = 0;
+        if !self.RuntimeData.is_empty() {
+            my_size += ::protobuf::rt::bytes_size(1, &self.RuntimeData);
+        }
+        my_size += ::protobuf::rt::unknown_fields_size(self.special_fields.unknown_fields());
+        self.special_fields.cached_size().set(my_size as u32);
+        my_size
+    }
+
+    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream<'_>) -> ::protobuf::Result<()> {
+        if !self.RuntimeData.is_empty() {
+            os.write_bytes(1, &self.RuntimeData)?;
+        }
+        os.write_unknown_fields(self.special_fields.unknown_fields())?;
+        ::std::result::Result::Ok(())
+    }
+
+    fn special_fields(&self) -> &::protobuf::SpecialFields {
+        &self.special_fields
+    }
+
+    fn mut_special_fields(&mut self) -> &mut ::protobuf::SpecialFields {
+        &mut self.special_fields
+    }
+
+    fn new() -> GetAdditionalEvidenceRequest {
+        GetAdditionalEvidenceRequest::new()
+    }
+
+    fn clear(&mut self) {
+        self.RuntimeData.clear();
+        self.special_fields.clear();
+    }
+
+    fn default_instance() -> &'static GetAdditionalEvidenceRequest {
+        static instance: GetAdditionalEvidenceRequest = GetAdditionalEvidenceRequest {
+            RuntimeData: ::std::vec::Vec::new(),
+            special_fields: ::protobuf::SpecialFields::new(),
+        };
+        &instance
+    }
+}
+
+impl ::protobuf::MessageFull for GetAdditionalEvidenceRequest {
+    fn descriptor() -> ::protobuf::reflect::MessageDescriptor {
+        static descriptor: ::protobuf::rt::Lazy<::protobuf::reflect::MessageDescriptor> = ::protobuf::rt::Lazy::new();
+        descriptor.get(|| file_descriptor().message_by_package_relative_name("GetAdditionalEvidenceRequest").unwrap()).clone()
+    }
+}
+
+impl ::std::fmt::Display for GetAdditionalEvidenceRequest {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        ::protobuf::text_format::fmt(self, f)
+    }
+}
+
+impl ::protobuf::reflect::ProtobufValue for GetAdditionalEvidenceRequest {
+    type RuntimeType = ::protobuf::reflect::rt::RuntimeTypeMessage<Self>;
+}
+
 // @@protoc_insertion_point(message:attestation_agent.GetEvidenceResponse)
 #[derive(PartialEq,Clone,Default,Debug)]
 pub struct GetEvidenceResponse {
@@ -1156,231 +1278,6 @@ impl ::protobuf::reflect::ProtobufValue for BindInitDataResponse {
     type RuntimeType = ::protobuf::reflect::rt::RuntimeTypeMessage<Self>;
 }
 
-// @@protoc_insertion_point(message:attestation_agent.UpdateConfigurationRequest)
-#[derive(PartialEq,Clone,Default,Debug)]
-pub struct UpdateConfigurationRequest {
-    // message fields
-    // @@protoc_insertion_point(field:attestation_agent.UpdateConfigurationRequest.config)
-    pub config: ::std::string::String,
-    // special fields
-    // @@protoc_insertion_point(special_field:attestation_agent.UpdateConfigurationRequest.special_fields)
-    pub special_fields: ::protobuf::SpecialFields,
-}
-
-impl<'a> ::std::default::Default for &'a UpdateConfigurationRequest {
-    fn default() -> &'a UpdateConfigurationRequest {
-        <UpdateConfigurationRequest as ::protobuf::Message>::default_instance()
-    }
-}
-
-impl UpdateConfigurationRequest {
-    pub fn new() -> UpdateConfigurationRequest {
-        ::std::default::Default::default()
-    }
-
-    fn generated_message_descriptor_data() -> ::protobuf::reflect::GeneratedMessageDescriptorData {
-        let mut fields = ::std::vec::Vec::with_capacity(1);
-        let mut oneofs = ::std::vec::Vec::with_capacity(0);
-        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
-            "config",
-            |m: &UpdateConfigurationRequest| { &m.config },
-            |m: &mut UpdateConfigurationRequest| { &mut m.config },
-        ));
-        ::protobuf::reflect::GeneratedMessageDescriptorData::new_2::<UpdateConfigurationRequest>(
-            "UpdateConfigurationRequest",
-            fields,
-            oneofs,
-        )
-    }
-}
-
-impl ::protobuf::Message for UpdateConfigurationRequest {
-    const NAME: &'static str = "UpdateConfigurationRequest";
-
-    fn is_initialized(&self) -> bool {
-        true
-    }
-
-    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream<'_>) -> ::protobuf::Result<()> {
-        while let Some(tag) = is.read_raw_tag_or_eof()? {
-            match tag {
-                10 => {
-                    self.config = is.read_string()?;
-                },
-                tag => {
-                    ::protobuf::rt::read_unknown_or_skip_group(tag, is, self.special_fields.mut_unknown_fields())?;
-                },
-            };
-        }
-        ::std::result::Result::Ok(())
-    }
-
-    // Compute sizes of nested messages
-    #[allow(unused_variables)]
-    fn compute_size(&self) -> u64 {
-        let mut my_size = 0;
-        if !self.config.is_empty() {
-            my_size += ::protobuf::rt::string_size(1, &self.config);
-        }
-        my_size += ::protobuf::rt::unknown_fields_size(self.special_fields.unknown_fields());
-        self.special_fields.cached_size().set(my_size as u32);
-        my_size
-    }
-
-    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream<'_>) -> ::protobuf::Result<()> {
-        if !self.config.is_empty() {
-            os.write_string(1, &self.config)?;
-        }
-        os.write_unknown_fields(self.special_fields.unknown_fields())?;
-        ::std::result::Result::Ok(())
-    }
-
-    fn special_fields(&self) -> &::protobuf::SpecialFields {
-        &self.special_fields
-    }
-
-    fn mut_special_fields(&mut self) -> &mut ::protobuf::SpecialFields {
-        &mut self.special_fields
-    }
-
-    fn new() -> UpdateConfigurationRequest {
-        UpdateConfigurationRequest::new()
-    }
-
-    fn clear(&mut self) {
-        self.config.clear();
-        self.special_fields.clear();
-    }
-
-    fn default_instance() -> &'static UpdateConfigurationRequest {
-        static instance: UpdateConfigurationRequest = UpdateConfigurationRequest {
-            config: ::std::string::String::new(),
-            special_fields: ::protobuf::SpecialFields::new(),
-        };
-        &instance
-    }
-}
-
-impl ::protobuf::MessageFull for UpdateConfigurationRequest {
-    fn descriptor() -> ::protobuf::reflect::MessageDescriptor {
-        static descriptor: ::protobuf::rt::Lazy<::protobuf::reflect::MessageDescriptor> = ::protobuf::rt::Lazy::new();
-        descriptor.get(|| file_descriptor().message_by_package_relative_name("UpdateConfigurationRequest").unwrap()).clone()
-    }
-}
-
-impl ::std::fmt::Display for UpdateConfigurationRequest {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        ::protobuf::text_format::fmt(self, f)
-    }
-}
-
-impl ::protobuf::reflect::ProtobufValue for UpdateConfigurationRequest {
-    type RuntimeType = ::protobuf::reflect::rt::RuntimeTypeMessage<Self>;
-}
-
-// @@protoc_insertion_point(message:attestation_agent.UpdateConfigurationResponse)
-#[derive(PartialEq,Clone,Default,Debug)]
-pub struct UpdateConfigurationResponse {
-    // special fields
-    // @@protoc_insertion_point(special_field:attestation_agent.UpdateConfigurationResponse.special_fields)
-    pub special_fields: ::protobuf::SpecialFields,
-}
-
-impl<'a> ::std::default::Default for &'a UpdateConfigurationResponse {
-    fn default() -> &'a UpdateConfigurationResponse {
-        <UpdateConfigurationResponse as ::protobuf::Message>::default_instance()
-    }
-}
-
-impl UpdateConfigurationResponse {
-    pub fn new() -> UpdateConfigurationResponse {
-        ::std::default::Default::default()
-    }
-
-    fn generated_message_descriptor_data() -> ::protobuf::reflect::GeneratedMessageDescriptorData {
-        let mut fields = ::std::vec::Vec::with_capacity(0);
-        let mut oneofs = ::std::vec::Vec::with_capacity(0);
-        ::protobuf::reflect::GeneratedMessageDescriptorData::new_2::<UpdateConfigurationResponse>(
-            "UpdateConfigurationResponse",
-            fields,
-            oneofs,
-        )
-    }
-}
-
-impl ::protobuf::Message for UpdateConfigurationResponse {
-    const NAME: &'static str = "UpdateConfigurationResponse";
-
-    fn is_initialized(&self) -> bool {
-        true
-    }
-
-    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream<'_>) -> ::protobuf::Result<()> {
-        while let Some(tag) = is.read_raw_tag_or_eof()? {
-            match tag {
-                tag => {
-                    ::protobuf::rt::read_unknown_or_skip_group(tag, is, self.special_fields.mut_unknown_fields())?;
-                },
-            };
-        }
-        ::std::result::Result::Ok(())
-    }
-
-    // Compute sizes of nested messages
-    #[allow(unused_variables)]
-    fn compute_size(&self) -> u64 {
-        let mut my_size = 0;
-        my_size += ::protobuf::rt::unknown_fields_size(self.special_fields.unknown_fields());
-        self.special_fields.cached_size().set(my_size as u32);
-        my_size
-    }
-
-    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream<'_>) -> ::protobuf::Result<()> {
-        os.write_unknown_fields(self.special_fields.unknown_fields())?;
-        ::std::result::Result::Ok(())
-    }
-
-    fn special_fields(&self) -> &::protobuf::SpecialFields {
-        &self.special_fields
-    }
-
-    fn mut_special_fields(&mut self) -> &mut ::protobuf::SpecialFields {
-        &mut self.special_fields
-    }
-
-    fn new() -> UpdateConfigurationResponse {
-        UpdateConfigurationResponse::new()
-    }
-
-    fn clear(&mut self) {
-        self.special_fields.clear();
-    }
-
-    fn default_instance() -> &'static UpdateConfigurationResponse {
-        static instance: UpdateConfigurationResponse = UpdateConfigurationResponse {
-            special_fields: ::protobuf::SpecialFields::new(),
-        };
-        &instance
-    }
-}
-
-impl ::protobuf::MessageFull for UpdateConfigurationResponse {
-    fn descriptor() -> ::protobuf::reflect::MessageDescriptor {
-        static descriptor: ::protobuf::rt::Lazy<::protobuf::reflect::MessageDescriptor> = ::protobuf::rt::Lazy::new();
-        descriptor.get(|| file_descriptor().message_by_package_relative_name("UpdateConfigurationResponse").unwrap()).clone()
-    }
-}
-
-impl ::std::fmt::Display for UpdateConfigurationResponse {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        ::protobuf::text_format::fmt(self, f)
-    }
-}
-
-impl ::protobuf::reflect::ProtobufValue for UpdateConfigurationResponse {
-    type RuntimeType = ::protobuf::reflect::rt::RuntimeTypeMessage<Self>;
-}
-
 // @@protoc_insertion_point(message:attestation_agent.GetTeeTypeRequest)
 #[derive(PartialEq,Clone,Default,Debug)]
 pub struct GetTeeTypeRequest {
@@ -1609,32 +1506,31 @@ impl ::protobuf::reflect::ProtobufValue for GetTeeTypeResponse {
 static file_descriptor_proto_data: &'static [u8] = b"\
     \n\x17attestation-agent.proto\x12\x11attestation_agent\"6\n\x12GetEviden\
     ceRequest\x12\x20\n\x0bRuntimeData\x18\x01\x20\x01(\x0cR\x0bRuntimeData\
-    \"1\n\x13GetEvidenceResponse\x12\x1a\n\x08Evidence\x18\x01\x20\x01(\x0cR\
-    \x08Evidence\"/\n\x0fGetTokenRequest\x12\x1c\n\tTokenType\x18\x01\x20\
-    \x01(\tR\tTokenType\"(\n\x10GetTokenResponse\x12\x14\n\x05Token\x18\x01\
-    \x20\x01(\x0cR\x05Token\"\xae\x01\n\x1fExtendRuntimeMeasurementRequest\
-    \x12\x16\n\x06Domain\x18\x01\x20\x01(\tR\x06Domain\x12\x1c\n\tOperation\
-    \x18\x02\x20\x01(\tR\tOperation\x12\x18\n\x07Content\x18\x03\x20\x01(\tR\
-    \x07Content\x12)\n\rRegisterIndex\x18\x04\x20\x01(\x04H\0R\rRegisterInde\
-    x\x88\x01\x01B\x10\n\x0e_RegisterIndex\"\"\n\x20ExtendRuntimeMeasurement\
-    Response\"K\n\x11InitDataPlaintext\x12\x18\n\x07Content\x18\x01\x20\x01(\
-    \x0cR\x07Content\x12\x1c\n\tAlgorithm\x18\x02\x20\x01(\tR\tAlgorithm\"-\
-    \n\x13BindInitDataRequest\x12\x16\n\x06Digest\x18\x01\x20\x01(\x0cR\x06D\
-    igest\"\x16\n\x14BindInitDataResponse\"4\n\x1aUpdateConfigurationRequest\
-    \x12\x16\n\x06config\x18\x01\x20\x01(\tR\x06config\"\x1d\n\x1bUpdateConf\
-    igurationResponse\"\x13\n\x11GetTeeTypeRequest\"&\n\x12GetTeeTypeRespons\
-    e\x12\x10\n\x03tee\x18\x01\x20\x01(\tR\x03tee2\x84\x05\n\x17AttestationA\
-    gentService\x12\\\n\x0bGetEvidence\x12%.attestation_agent.GetEvidenceReq\
-    uest\x1a&.attestation_agent.GetEvidenceResponse\x12S\n\x08GetToken\x12\"\
-    .attestation_agent.GetTokenRequest\x1a#.attestation_agent.GetTokenRespon\
-    se\x12\x83\x01\n\x18ExtendRuntimeMeasurement\x122.attestation_agent.Exte\
-    ndRuntimeMeasurementRequest\x1a3.attestation_agent.ExtendRuntimeMeasurem\
-    entResponse\x12_\n\x0cBindInitData\x12&.attestation_agent.BindInitDataRe\
-    quest\x1a'.attestation_agent.BindInitDataResponse\x12t\n\x13UpdateConfig\
-    uration\x12-.attestation_agent.UpdateConfigurationRequest\x1a..attestati\
-    on_agent.UpdateConfigurationResponse\x12Y\n\nGetTeeType\x12$.attestation\
-    _agent.GetTeeTypeRequest\x1a%.attestation_agent.GetTeeTypeResponseb\x06p\
-    roto3\
+    \"@\n\x1cGetAdditionalEvidenceRequest\x12\x20\n\x0bRuntimeData\x18\x01\
+    \x20\x01(\x0cR\x0bRuntimeData\"1\n\x13GetEvidenceResponse\x12\x1a\n\x08E\
+    vidence\x18\x01\x20\x01(\x0cR\x08Evidence\"/\n\x0fGetTokenRequest\x12\
+    \x1c\n\tTokenType\x18\x01\x20\x01(\tR\tTokenType\"(\n\x10GetTokenRespons\
+    e\x12\x14\n\x05Token\x18\x01\x20\x01(\x0cR\x05Token\"\xae\x01\n\x1fExten\
+    dRuntimeMeasurementRequest\x12\x16\n\x06Domain\x18\x01\x20\x01(\tR\x06Do\
+    main\x12\x1c\n\tOperation\x18\x02\x20\x01(\tR\tOperation\x12\x18\n\x07Co\
+    ntent\x18\x03\x20\x01(\tR\x07Content\x12)\n\rRegisterIndex\x18\x04\x20\
+    \x01(\x04H\0R\rRegisterIndex\x88\x01\x01B\x10\n\x0e_RegisterIndex\"\"\n\
+    \x20ExtendRuntimeMeasurementResponse\"K\n\x11InitDataPlaintext\x12\x18\n\
+    \x07Content\x18\x01\x20\x01(\x0cR\x07Content\x12\x1c\n\tAlgorithm\x18\
+    \x02\x20\x01(\tR\tAlgorithm\"-\n\x13BindInitDataRequest\x12\x16\n\x06Dig\
+    est\x18\x01\x20\x01(\x0cR\x06Digest\"\x16\n\x14BindInitDataResponse\"\
+    \x13\n\x11GetTeeTypeRequest\"&\n\x12GetTeeTypeResponse\x12\x10\n\x03tee\
+    \x18\x01\x20\x01(\tR\x03tee2\x80\x05\n\x17AttestationAgentService\x12\\\
+    \n\x0bGetEvidence\x12%.attestation_agent.GetEvidenceRequest\x1a&.attesta\
+    tion_agent.GetEvidenceResponse\x12p\n\x15GetAdditionalEvidence\x12/.atte\
+    station_agent.GetAdditionalEvidenceRequest\x1a&.attestation_agent.GetEvi\
+    denceResponse\x12S\n\x08GetToken\x12\".attestation_agent.GetTokenRequest\
+    \x1a#.attestation_agent.GetTokenResponse\x12\x83\x01\n\x18ExtendRuntimeM\
+    easurement\x122.attestation_agent.ExtendRuntimeMeasurementRequest\x1a3.a\
+    ttestation_agent.ExtendRuntimeMeasurementResponse\x12_\n\x0cBindInitData\
+    \x12&.attestation_agent.BindInitDataRequest\x1a'.attestation_agent.BindI\
+    nitDataResponse\x12Y\n\nGetTeeType\x12$.attestation_agent.GetTeeTypeRequ\
+    est\x1a%.attestation_agent.GetTeeTypeResponseb\x06proto3\
 ";
 
 /// `FileDescriptorProto` object which was a source for this generated file
@@ -1652,8 +1548,9 @@ pub fn file_descriptor() -> &'static ::protobuf::reflect::FileDescriptor {
     file_descriptor.get(|| {
         let generated_file_descriptor = generated_file_descriptor_lazy.get(|| {
             let mut deps = ::std::vec::Vec::with_capacity(0);
-            let mut messages = ::std::vec::Vec::with_capacity(13);
+            let mut messages = ::std::vec::Vec::with_capacity(12);
             messages.push(GetEvidenceRequest::generated_message_descriptor_data());
+            messages.push(GetAdditionalEvidenceRequest::generated_message_descriptor_data());
             messages.push(GetEvidenceResponse::generated_message_descriptor_data());
             messages.push(GetTokenRequest::generated_message_descriptor_data());
             messages.push(GetTokenResponse::generated_message_descriptor_data());
@@ -1662,8 +1559,6 @@ pub fn file_descriptor() -> &'static ::protobuf::reflect::FileDescriptor {
             messages.push(InitDataPlaintext::generated_message_descriptor_data());
             messages.push(BindInitDataRequest::generated_message_descriptor_data());
             messages.push(BindInitDataResponse::generated_message_descriptor_data());
-            messages.push(UpdateConfigurationRequest::generated_message_descriptor_data());
-            messages.push(UpdateConfigurationResponse::generated_message_descriptor_data());
             messages.push(GetTeeTypeRequest::generated_message_descriptor_data());
             messages.push(GetTeeTypeResponse::generated_message_descriptor_data());
             let mut enums = ::std::vec::Vec::with_capacity(0);

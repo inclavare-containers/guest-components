@@ -36,6 +36,11 @@ impl AttestationAgentServiceClient {
         ::ttrpc::async_client_request!(self, ctx, req, "attestation_agent.AttestationAgentService", "GetEvidence", cres);
     }
 
+    pub async fn get_additional_evidence(&self, ctx: ttrpc::context::Context, req: &super::attestation_agent::GetAdditionalEvidenceRequest) -> ::ttrpc::Result<super::attestation_agent::GetEvidenceResponse> {
+        let mut cres = super::attestation_agent::GetEvidenceResponse::new();
+        ::ttrpc::async_client_request!(self, ctx, req, "attestation_agent.AttestationAgentService", "GetAdditionalEvidence", cres);
+    }
+
     pub async fn get_token(&self, ctx: ttrpc::context::Context, req: &super::attestation_agent::GetTokenRequest) -> ::ttrpc::Result<super::attestation_agent::GetTokenResponse> {
         let mut cres = super::attestation_agent::GetTokenResponse::new();
         ::ttrpc::async_client_request!(self, ctx, req, "attestation_agent.AttestationAgentService", "GetToken", cres);
@@ -49,11 +54,6 @@ impl AttestationAgentServiceClient {
     pub async fn bind_init_data(&self, ctx: ttrpc::context::Context, req: &super::attestation_agent::BindInitDataRequest) -> ::ttrpc::Result<super::attestation_agent::BindInitDataResponse> {
         let mut cres = super::attestation_agent::BindInitDataResponse::new();
         ::ttrpc::async_client_request!(self, ctx, req, "attestation_agent.AttestationAgentService", "BindInitData", cres);
-    }
-
-    pub async fn update_configuration(&self, ctx: ttrpc::context::Context, req: &super::attestation_agent::UpdateConfigurationRequest) -> ::ttrpc::Result<super::attestation_agent::UpdateConfigurationResponse> {
-        let mut cres = super::attestation_agent::UpdateConfigurationResponse::new();
-        ::ttrpc::async_client_request!(self, ctx, req, "attestation_agent.AttestationAgentService", "UpdateConfiguration", cres);
     }
 
     pub async fn get_tee_type(&self, ctx: ttrpc::context::Context, req: &super::attestation_agent::GetTeeTypeRequest) -> ::ttrpc::Result<super::attestation_agent::GetTeeTypeResponse> {
@@ -70,6 +70,17 @@ struct GetEvidenceMethod {
 impl ::ttrpc::r#async::MethodHandler for GetEvidenceMethod {
     async fn handler(&self, ctx: ::ttrpc::r#async::TtrpcContext, req: ::ttrpc::Request) -> ::ttrpc::Result<::ttrpc::Response> {
         ::ttrpc::async_request_handler!(self, ctx, req, attestation_agent, GetEvidenceRequest, get_evidence);
+    }
+}
+
+struct GetAdditionalEvidenceMethod {
+    service: Arc<dyn AttestationAgentService + Send + Sync>,
+}
+
+#[async_trait]
+impl ::ttrpc::r#async::MethodHandler for GetAdditionalEvidenceMethod {
+    async fn handler(&self, ctx: ::ttrpc::r#async::TtrpcContext, req: ::ttrpc::Request) -> ::ttrpc::Result<::ttrpc::Response> {
+        ::ttrpc::async_request_handler!(self, ctx, req, attestation_agent, GetAdditionalEvidenceRequest, get_additional_evidence);
     }
 }
 
@@ -106,17 +117,6 @@ impl ::ttrpc::r#async::MethodHandler for BindInitDataMethod {
     }
 }
 
-struct UpdateConfigurationMethod {
-    service: Arc<dyn AttestationAgentService + Send + Sync>,
-}
-
-#[async_trait]
-impl ::ttrpc::r#async::MethodHandler for UpdateConfigurationMethod {
-    async fn handler(&self, ctx: ::ttrpc::r#async::TtrpcContext, req: ::ttrpc::Request) -> ::ttrpc::Result<::ttrpc::Response> {
-        ::ttrpc::async_request_handler!(self, ctx, req, attestation_agent, UpdateConfigurationRequest, update_configuration);
-    }
-}
-
 struct GetTeeTypeMethod {
     service: Arc<dyn AttestationAgentService + Send + Sync>,
 }
@@ -133,6 +133,9 @@ pub trait AttestationAgentService: Sync {
     async fn get_evidence(&self, _ctx: &::ttrpc::r#async::TtrpcContext, _: super::attestation_agent::GetEvidenceRequest) -> ::ttrpc::Result<super::attestation_agent::GetEvidenceResponse> {
         Err(::ttrpc::Error::RpcStatus(::ttrpc::get_status(::ttrpc::Code::NOT_FOUND, "/attestation_agent.AttestationAgentService/GetEvidence is not supported".to_string())))
     }
+    async fn get_additional_evidence(&self, _ctx: &::ttrpc::r#async::TtrpcContext, _: super::attestation_agent::GetAdditionalEvidenceRequest) -> ::ttrpc::Result<super::attestation_agent::GetEvidenceResponse> {
+        Err(::ttrpc::Error::RpcStatus(::ttrpc::get_status(::ttrpc::Code::NOT_FOUND, "/attestation_agent.AttestationAgentService/GetAdditionalEvidence is not supported".to_string())))
+    }
     async fn get_token(&self, _ctx: &::ttrpc::r#async::TtrpcContext, _: super::attestation_agent::GetTokenRequest) -> ::ttrpc::Result<super::attestation_agent::GetTokenResponse> {
         Err(::ttrpc::Error::RpcStatus(::ttrpc::get_status(::ttrpc::Code::NOT_FOUND, "/attestation_agent.AttestationAgentService/GetToken is not supported".to_string())))
     }
@@ -141,9 +144,6 @@ pub trait AttestationAgentService: Sync {
     }
     async fn bind_init_data(&self, _ctx: &::ttrpc::r#async::TtrpcContext, _: super::attestation_agent::BindInitDataRequest) -> ::ttrpc::Result<super::attestation_agent::BindInitDataResponse> {
         Err(::ttrpc::Error::RpcStatus(::ttrpc::get_status(::ttrpc::Code::NOT_FOUND, "/attestation_agent.AttestationAgentService/BindInitData is not supported".to_string())))
-    }
-    async fn update_configuration(&self, _ctx: &::ttrpc::r#async::TtrpcContext, _: super::attestation_agent::UpdateConfigurationRequest) -> ::ttrpc::Result<super::attestation_agent::UpdateConfigurationResponse> {
-        Err(::ttrpc::Error::RpcStatus(::ttrpc::get_status(::ttrpc::Code::NOT_FOUND, "/attestation_agent.AttestationAgentService/UpdateConfiguration is not supported".to_string())))
     }
     async fn get_tee_type(&self, _ctx: &::ttrpc::r#async::TtrpcContext, _: super::attestation_agent::GetTeeTypeRequest) -> ::ttrpc::Result<super::attestation_agent::GetTeeTypeResponse> {
         Err(::ttrpc::Error::RpcStatus(::ttrpc::get_status(::ttrpc::Code::NOT_FOUND, "/attestation_agent.AttestationAgentService/GetTeeType is not supported".to_string())))
@@ -158,6 +158,9 @@ pub fn create_attestation_agent_service(service: Arc<dyn AttestationAgentService
     methods.insert("GetEvidence".to_string(),
                     Box::new(GetEvidenceMethod{service: service.clone()}) as Box<dyn ::ttrpc::r#async::MethodHandler + Send + Sync>);
 
+    methods.insert("GetAdditionalEvidence".to_string(),
+                    Box::new(GetAdditionalEvidenceMethod{service: service.clone()}) as Box<dyn ::ttrpc::r#async::MethodHandler + Send + Sync>);
+
     methods.insert("GetToken".to_string(),
                     Box::new(GetTokenMethod{service: service.clone()}) as Box<dyn ::ttrpc::r#async::MethodHandler + Send + Sync>);
 
@@ -166,9 +169,6 @@ pub fn create_attestation_agent_service(service: Arc<dyn AttestationAgentService
 
     methods.insert("BindInitData".to_string(),
                     Box::new(BindInitDataMethod{service: service.clone()}) as Box<dyn ::ttrpc::r#async::MethodHandler + Send + Sync>);
-
-    methods.insert("UpdateConfiguration".to_string(),
-                    Box::new(UpdateConfigurationMethod{service: service.clone()}) as Box<dyn ::ttrpc::r#async::MethodHandler + Send + Sync>);
 
     methods.insert("GetTeeType".to_string(),
                     Box::new(GetTeeTypeMethod{service: service.clone()}) as Box<dyn ::ttrpc::r#async::MethodHandler + Send + Sync>);
