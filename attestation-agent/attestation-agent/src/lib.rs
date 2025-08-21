@@ -15,6 +15,7 @@ pub use attester::InitDataResult;
 pub mod config;
 mod eventlog;
 
+pub mod initdata;
 #[cfg(feature = "instance_info")]
 pub mod instance_info;
 pub mod token;
@@ -87,6 +88,7 @@ pub struct AttestationAgent {
     primary_tee: Tee,
     pub config: RwLock<Config>,
     eventlog: Option<Mutex<EventLog>>,
+    initdata: Option<String>,
     primary_attester: Arc<BoxedAttester>,
     additional_attesters: HashMap<Tee, BoxedAttester>,
 }
@@ -151,11 +153,15 @@ impl AttestationAgent {
             primary_tee,
             config,
             eventlog: None,
+            initdata: None,
             additional_attesters,
             primary_attester: Arc::new(primary_tee.try_into()?),
         })
     }
 
+    /// Set initdata toml as status of current AA instance.
+    pub fn set_initdata_toml(&mut self, initdata_toml: String) {
+        self.initdata = Some(initdata_toml);
     }
 }
 
@@ -167,10 +173,21 @@ impl AttestationAPIs for AttestationAgent {
         match token_type {
             #[cfg(feature = "kbs")]
             token::TokenType::Kbs => {
-                token::kbs::KbsTokenGetter::new(&self.config.read().await.token_configs.kbs)
-                    .get_token()
-                    .await
+                token::kbs::KbsTokenGetter::new(
+                    self.config
+                        .read()
+                        .await
+                        .token_configs
+                        .kbs
+                        .as_ref()
+                        .ok_or(anyhow::anyhow!(
+                            "kbs token config not configured in config file"
+                        ))?,
+                )
+                .get_token(self.initdata.as_deref())
+                .await
             }
+            // TODO: add initdata plaintext for CoCoAS token
             #[cfg(feature = "coco_as")]
             token::TokenType::CoCoAS => {
                 token::coco_as::CoCoASTokenGetter::new(
