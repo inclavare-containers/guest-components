@@ -71,6 +71,7 @@ all-attesters = [
     "az-tdx-vtpm-attester",
     "snp-attester",
     "csv-attester",
+    "hygon-dcu-attester",
     "cca-attester",
     "se-attester",
     "system-attester",
@@ -88,6 +89,7 @@ az-snp-vtpm-attester = ["az-snp-vtpm"]
 az-tdx-vtpm-attester = ["az-snp-vtpm-attester", "az-tdx-vtpm"]
 snp-attester = ["sev"]
 csv-attester = ["hygon", "codicon", "hyper", "hyper-tls"]
+hygon-dcu-attester = ["hygon"]
 hygon = ["csv-rs"]
 cca-attester = ["tsm-report"]
 se-attester = ["pv"]
