@@ -4,7 +4,7 @@
 //
 use crate::tpm::utils::*;
 use crate::types::TpmEvidence;
-use crate::Attester;
+use crate::{Attester, TeeEvidence};
 use anyhow::*;
 use base64::Engine;
 use rsa as rust_rsa;
@@ -27,7 +27,7 @@ pub struct TpmAttester {}
 
 #[async_trait::async_trait]
 impl Attester for TpmAttester {
-    async fn get_evidence(&self, mut report_data: Vec<u8>) -> Result<String> {
+    async fn get_evidence(&self, mut report_data: Vec<u8>) -> Result<TeeEvidence> {
         if report_data.len() > TPM_REPORT_DATA_SIZE {
             log::warn!(
                 "TPM Attester: Report data truncated from {} to {} bytes",
@@ -75,7 +75,7 @@ impl Attester for TpmAttester {
             aa_eventlog,
         };
 
-        serde_json::to_string(&evidence)
+        serde_json::to_value(&evidence)
             .map_err(|e| anyhow!("Serialize TPM evidence failed: {:?}", e))
     }
 

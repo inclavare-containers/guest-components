@@ -4,7 +4,7 @@
 //
 
 use anyhow::*;
-use kbs_types::Tee;
+use kbs_types::{HashAlgorithm, Tee};
 
 pub mod sample;
 pub mod types;
@@ -83,12 +83,14 @@ pub enum InitDataResult {
     Unsupported,
 }
 
+pub type TeeEvidence = serde_json::Value;
+
 #[async_trait::async_trait]
 pub trait Attester {
     /// Call the hardware driver to get the Hardware specific evidence.
     /// The parameter `report_data` will be used as the user input of the
     /// evidence to avoid reply attack.
-    async fn get_evidence(&self, report_data: Vec<u8>) -> Result<String>;
+    async fn get_evidence(&self, report_data: Vec<u8>) -> Result<TeeEvidence>;
 
     /// Extend TEE specific dynamic measurement register
     /// to enable dynamic measurement capabilities for input data at runtime.
@@ -109,6 +111,24 @@ pub trait Attester {
     /// relationship between PCR and platform RTMR.
     async fn get_runtime_measurement(&self, _pcr_index: u64) -> Result<Vec<u8>> {
         bail!("Unimplemented")
+    }
+
+    /// This function is used to get the CC measurement register value of
+    /// the given PCR register index. Different platforms have different mapping
+    /// relationship between PCR and platform RTMR.
+    ///
+    /// Reference https://uefi.org/specs/UEFI/2.11/38_Confidential_Computing.html#vendor-specific-information
+    fn pcr_to_ccmr(&self, _pcr_index: u64) -> u64 {
+        panic!("Unimplemented")
+    }
+
+    /// Returns the hash algorithm used by the Confidential Computing Event Log (CCEL).
+    /// The algorithm is defined by the platform.  
+    ///
+    /// If the platform does not support runtime measurement or the algorithm cannot
+    /// be determined, this function will panic.
+    fn ccel_hash_algorithm(&self) -> HashAlgorithm {
+        panic!("Unimplemented")
     }
 }
 
