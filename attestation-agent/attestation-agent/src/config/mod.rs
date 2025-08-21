@@ -4,7 +4,6 @@
 //
 
 use anyhow::Result;
-use crypto::HashAlgorithm;
 use serde::Deserialize;
 
 /// Default PCR index used by AA. `17` is selected for its usage of dynamic root of trust for measurement.
@@ -22,9 +21,7 @@ pub mod kbs;
 
 pub const DEFAULT_AA_CONFIG_PATH: &str = "/etc/attestation-agent.conf";
 
-pub const DEFAULT_EVENTLOG_HASH: &str = "sha384";
-
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct Config {
     /// configs about token
     pub token_configs: TokenConfigs,
@@ -40,9 +37,6 @@ pub struct Config {
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct EventlogConfig {
-    /// Hash algorithm used to extend runtime measurement for eventlog.
-    pub eventlog_algorithm: HashAlgorithm,
-
     /// PCR Register to extend INIT entry
     pub init_pcr: u64,
 
@@ -78,7 +72,6 @@ pub struct HeartbeatConfig {
 impl Default for EventlogConfig {
     fn default() -> Self {
         Self {
-            eventlog_algorithm: HashAlgorithm::Sha384,
             init_pcr: DEFAULT_PCR_INDEX,
             enable_eventlog: false,
         }
@@ -124,7 +117,6 @@ impl TryFrom<&str> for Config {
     fn try_from(config_path: &str) -> Result<Self, Self::Error> {
         let c = config::Config::builder()
             .add_source(config::File::with_name(config_path))
-            .set_default("eventlog_config.eventlog_algorithm", DEFAULT_EVENTLOG_HASH)?
             .set_default("eventlog_config.init_pcr", DEFAULT_PCR_INDEX)?
             .set_default("eventlog_config.enable_eventlog", "false")?
             .build()?;
@@ -147,10 +139,6 @@ mod tests {
     #[test]
     fn test_config_default() {
         let config = super::Config::new().expect("failed to create config");
-        assert_eq!(
-            config.eventlog_config.eventlog_algorithm,
-            super::HashAlgorithm::Sha384
-        );
         assert_eq!(config.eventlog_config.init_pcr, super::DEFAULT_PCR_INDEX);
         assert_eq!(config.eventlog_config.enable_eventlog, false);
     }
