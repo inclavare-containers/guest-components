@@ -18,7 +18,7 @@ use confidential_data_hub::secret::{
 };
 
 use crypto::WrapType;
-use rand::Rng;
+use rand::TryRngCore;
 #[cfg(feature = "ehsm")]
 use serde_json::Value;
 use tokio::{fs, io::AsyncWriteExt};
@@ -225,9 +225,9 @@ async fn seal_secret(seal_args: &SealArgs) {
             let (mut encrypter, provider_settings, provider) =
                 handle_envelope_provider(&env.command).await;
             let mut iv = [0u8; 12];
-            rand::thread_rng().fill(&mut iv);
+            rand::rngs::OsRng.try_fill_bytes(&mut iv).unwrap();
             let mut key = [0u8; 32];
-            rand::thread_rng().fill(&mut key);
+            rand::rngs::OsRng.try_fill_bytes(&mut key).unwrap();
             let encrypted_data = crypto::encrypt(
                 Zeroizing::new(key.to_vec()),
                 blob,
