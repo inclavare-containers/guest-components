@@ -4,14 +4,14 @@
 //
 
 use crate::router::ApiHandler;
-use crate::ttrpc_proto::attestation_agent::{
-    ExtendRuntimeMeasurementRequest, GetEvidenceRequest, GetTokenRequest,
-};
-use crate::ttrpc_proto::attestation_agent_ttrpc::AttestationAgentServiceClient;
 use crate::TTRPC_TIMEOUT;
-use anyhow::{anyhow, Context, Result};
+use anyhow::*;
 use async_trait::async_trait;
 use hyper::{body, Body, Method, Request, Response};
+use protos::ttrpc::aa::attestation_agent::{
+    ExtendRuntimeMeasurementRequest, GetEvidenceRequest, GetTokenRequest,
+};
+use protos::ttrpc::aa::attestation_agent_ttrpc::AttestationAgentServiceClient;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -71,7 +71,9 @@ impl ApiHandler for AAClient {
                 }
                 match params.get("token_type") {
                     Some(token_type) => match self.get_token(token_type).await {
-                        Ok(results) => return self.octet_stream_response(results),
+                        std::result::Result::Ok(results) => {
+                            return self.octet_stream_response(results)
+                        }
                         Err(e) => return self.internal_error(e.to_string()),
                     },
                     None => return self.bad_request(),
@@ -90,7 +92,9 @@ impl ApiHandler for AAClient {
                 match params.get("runtime_data") {
                     Some(runtime_data) => {
                         match self.get_evidence(&runtime_data.clone().into_bytes()).await {
-                            Ok(results) => return self.octet_stream_response(results),
+                            std::result::Result::Ok(results) => {
+                                return self.octet_stream_response(results)
+                            }
                             Err(e) => return self.internal_error(e.to_string()),
                         }
                     }
@@ -118,7 +122,7 @@ impl ApiHandler for AAClient {
                     )
                     .await
                 {
-                    Ok(_) => {
+                    std::result::Result::Ok(_) => {
                         return Ok(Response::builder()
                             .status(hyper::StatusCode::OK)
                             .body(Body::empty())?)

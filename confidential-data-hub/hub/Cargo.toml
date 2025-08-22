@@ -32,11 +32,14 @@ path = "src/bin/secret_cli.rs"
 required-features = ["cli"]
 
 [dependencies]
+
+canon-json = { git = "https://github.com/inclavare-containers/canon-json-rs.git", rev = "d6fa90c", optional = true }
+
+hex = { workspace = true, optional = true }
 anyhow = { workspace = true, optional = true }
 async-trait.workspace = true
 attestation-agent = { path = "../../attestation-agent/attestation-agent", default-features = false }
 base64.workspace = true
-canon-json = { git = "https://github.com/inclavare-containers/canon-json-rs.git", rev = "d6fa90c", optional = true }
 bincode = { workspace = true, optional = true }
 cfg-if = { workspace = true, optional = true }
 chrono = { workspace = true, optional = true }
@@ -46,7 +49,6 @@ const_format.workspace = true
 crypto.path = "../../attestation-agent/deps/crypto"
 ehsm_client = { git = "https://github.com/intel/ehsm", rev = "3454cac66b968a593c3edc43410c0b52416bbd3e", optional = true }
 env_logger = { workspace = true, optional = true }
-hex = { workspace = true, optional = true }
 image-rs = { path = "../../image-rs", default-features = false, features = [
     "kata-cc-rustls-tls",
 ] }
@@ -60,7 +62,7 @@ lazy_static.workspace = true
 log.workspace = true
 p12 = { version = "0.6.3", optional = true }
 prost = { workspace = true, optional = true }
-protobuf = { workspace = true, optional = true }
+protos = { path = "../../protos", default-features = false, optional = true }
 rand.workspace = true
 reqwest = { workspace = true, optional = true }
 resource_uri.path = "../../attestation-agent/deps/resource_uri"
@@ -117,6 +119,7 @@ aliyun = [
     "tonic",
     "url",
     "yasna",
+    "protos/grpc",
 ]
 
 # support coco-KBS to provide confidential resources
@@ -133,8 +136,8 @@ ehsm = ["ehsm_client"]
 
 # Binary RPC type
 bin = ["anyhow", "cfg-if", "clap", "config", "env_logger", "serde"]
-ttrpc = ["dep:ttrpc", "protobuf", "ttrpc-codegen", "tokio/signal"]
-grpc = ["prost", "tonic", "tokio/signal"]
+ttrpc = ["dep:ttrpc", "tokio/signal", "protos/ttrpc"]
+grpc = ["prost", "tonic", "tokio/signal", "protos/grpc"]
 
 # for secret_cli
 cli = ["clap/derive", "tokio/rt-multi-thread", "tokio/sync", "tokio/macros"]

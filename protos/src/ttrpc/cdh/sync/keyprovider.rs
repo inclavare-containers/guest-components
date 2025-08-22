@@ -18,7 +18,7 @@
 #![allow(unused_results)]
 #![allow(unused_mut)]
 
-//! Generated file from `proto/keyprovider.proto`
+//! Generated file from `keyprovider.proto`
 
 /// Generated files are compatible only with the same version
 /// of protobuf runtime.
@@ -269,15 +269,15 @@ impl ::protobuf::reflect::ProtobufValue for KeyProviderKeyWrapProtocolOutput {
 }
 
 static file_descriptor_proto_data: &'static [u8] = b"\
-    \n\x17proto/keyprovider.proto\x12\x0bkeyprovider\"k\n\x1fKeyProviderKeyW\
-    rapProtocolInput\x12H\n\x1fKeyProviderKeyWrapProtocolInput\x18\x01\x20\
-    \x01(\x0cR\x1fKeyProviderKeyWrapProtocolInput\"n\n\x20KeyProviderKeyWrap\
-    ProtocolOutput\x12J\n\x20KeyProviderKeyWrapProtocolOutput\x18\x01\x20\
-    \x01(\x0cR\x20KeyProviderKeyWrapProtocolOutput2\xe6\x01\n\x12KeyProvider\
-    Service\x12f\n\x07WrapKey\x12,.keyprovider.KeyProviderKeyWrapProtocolInp\
-    ut\x1a-.keyprovider.KeyProviderKeyWrapProtocolOutput\x12h\n\tUnWrapKey\
-    \x12,.keyprovider.KeyProviderKeyWrapProtocolInput\x1a-.keyprovider.KeyPr\
-    oviderKeyWrapProtocolOutputb\x06proto3\
+    \n\x11keyprovider.proto\x12\x0bkeyprovider\"k\n\x1fKeyProviderKeyWrapPro\
+    tocolInput\x12H\n\x1fKeyProviderKeyWrapProtocolInput\x18\x01\x20\x01(\
+    \x0cR\x1fKeyProviderKeyWrapProtocolInput\"n\n\x20KeyProviderKeyWrapProto\
+    colOutput\x12J\n\x20KeyProviderKeyWrapProtocolOutput\x18\x01\x20\x01(\
+    \x0cR\x20KeyProviderKeyWrapProtocolOutput2\xe6\x01\n\x12KeyProviderServi\
+    ce\x12f\n\x07WrapKey\x12,.keyprovider.KeyProviderKeyWrapProtocolInput\
+    \x1a-.keyprovider.KeyProviderKeyWrapProtocolOutput\x12h\n\tUnWrapKey\x12\
+    ,.keyprovider.KeyProviderKeyWrapProtocolInput\x1a-.keyprovider.KeyProvid\
+    erKeyWrapProtocolOutputb\x06proto3\
 ";
 
 /// `FileDescriptorProto` object which was a source for this generated file

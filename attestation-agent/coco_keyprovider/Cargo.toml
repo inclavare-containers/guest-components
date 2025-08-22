@@ -16,7 +16,9 @@ env_logger.workspace = true
 futures = "0.3.31"
 jwt-simple.workspace = true
 log.workspace = true
-prost.workspace = true
+protos = { path = "../../protos", default-features = false, features = [
+    "grpc",
+] }
 rand.workspace = true
 reqwest.workspace = true
 serde.workspace = true
@@ -27,8 +29,6 @@ tonic.workspace = true
 uuid = { workspace = true, features = ["fast-rng", "v4"] }
 
 [build-dependencies]
-shadow-rs = "0.19"
-tonic-build.workspace = true
 
 [dev-dependencies]
 rstest.workspace = true

@@ -4,14 +4,14 @@
 //
 
 use crate::router::ApiHandler;
-use crate::ttrpc_proto::confidential_data_hub::{
-    CommitResourceInjectionRequest, GetResourceRequest, PrepareResourceInjectionRequest,
-};
-use crate::ttrpc_proto::confidential_data_hub_ttrpc::GetResourceServiceClient;
 use anyhow::*;
 use async_trait::async_trait;
 use base64::{engine::general_purpose::STANDARD, Engine};
 use hyper::{body, Body, Method, Request, Response, StatusCode};
+use protos::ttrpc::cdh::{
+    api::{CommitResourceInjectionRequest, GetResourceRequest, PrepareResourceInjectionRequest},
+    api_ttrpc::GetResourceServiceClient,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::net::SocketAddr;
