@@ -37,14 +37,14 @@ hmac = "0.12.1"
 jwt-simple = { version = "0.12", default-features = false, features = [
     "pure-rust",
 ] }
-kbs-types = { git = "https://github.com/inclavare-containers/kbs-types.git", rev = "d881395" }
+kbs-types = { git = "https://github.com/inclavare-containers/kbs-types.git", rev = "5c029c9" }
 lazy_static = "1.5.0"
 log = "0.4.22"
 nix = "0.29"
 openssl = "0.10"
 prost = "0.13"
 protobuf = "3.5.1"
-rand = "0.8.5"
+rand = "0.9.1"
 reqwest = { version = "0.12", default-features = false }
 resource_uri = { path = "attestation-agent/deps/resource_uri" }
 ring = "0.17"
@@ -57,7 +57,7 @@ serial_test = "3"
 sha2 = "0.10.7"
 strum = { version = "0.26", features = ["derive"] }
 tempfile = "3.14"
-testcontainers = "0.14"
+testcontainers = "0.22"
 thiserror = "2.0"
 tokio = "1.42"
 toml = "0.8.19"

@@ -24,8 +24,8 @@ use kbs_types::Tee;
 use crate::{keypair::TeeKeyPair, token_provider::Token};
 
 pub(crate) enum ClientTee {
-    Unitialized,
-    _Initializated(Tee),
+    Uninitialized,
+    _Initialized(Tee),
 }
 
 /// This Client is used to connect to the remote KBS.
@@ -46,9 +46,12 @@ pub struct KbsClient<T> {
 
     /// token
     pub(crate) token: Option<Token>,
+
+    /// initdata toml plaintext (if any)
+    pub(crate) _initdata: Option<String>,
 }
 
-pub const KBS_PROTOCOL_VERSION: &str = "0.1.0";
+pub const KBS_PROTOCOL_VERSION: &str = "0.4.0";
 
 pub const KBS_GET_RESOURCE_MAX_ATTEMPT: u64 = 3;
 

@@ -5,9 +5,7 @@
 
 use crate::config::kbs::KbsConfig;
 
-use super::GetToken;
 use anyhow::*;
-use async_trait::async_trait;
 use kbs_protocol::{evidence_provider::NativeEvidenceProvider, KbsClientBuilder};
 use serde::Serialize;
 
@@ -23,9 +21,8 @@ pub struct KbsTokenGetter {
     cert: Option<String>,
 }
 
-#[async_trait]
-impl GetToken for KbsTokenGetter {
-    async fn get_token(&self) -> Result<Vec<u8>> {
+impl KbsTokenGetter {
+    pub async fn get_token(&self, initdata: Option<&str>) -> Result<Vec<u8>> {
         let evidence_provider = Box::new(NativeEvidenceProvider::new()?);
 
         let mut builder =
@@ -35,12 +32,16 @@ impl GetToken for KbsTokenGetter {
             builder = builder.add_kbs_cert(cert);
         }
 
+        if let Some(initdata) = initdata {
+            builder = builder.add_initdata(initdata.to_string());
+        }
+
         let mut client = builder.build()?;
 
         let (token, tee_keypair) = client.get_token().await?;
         let message = Message {
             token: token.content,
-            tee_keypair: tee_keypair.to_pkcs1_pem()?.to_string(),
+            tee_keypair: tee_keypair.to_pem()?.to_string(),
         };
 
         let res = serde_json::to_vec(&message)?;
@@ -69,7 +70,7 @@ mod tests {
             cert: None,
         };
         let getter = KbsTokenGetter::new(&config);
-        let token = getter.get_token().await;
+        let token = getter.get_token(None).await;
         assert!(token.is_err());
     }
 }

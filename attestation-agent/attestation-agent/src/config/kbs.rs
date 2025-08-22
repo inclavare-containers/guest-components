@@ -8,7 +8,7 @@ use serde::Deserialize;
 
 use super::aa_kbc_params::AaKbcParams;
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct KbsConfig {
     /// URL Address of KBS.
     pub url: String,
