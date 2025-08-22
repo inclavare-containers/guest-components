@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
-use kbs_protocol::ttrpc_protos::{
+use protos::ttrpc::aa::{
     attestation_agent::GetEvidenceRequest, attestation_agent_ttrpc::AttestationAgentServiceClient,
 };
 use ttrpc::context;

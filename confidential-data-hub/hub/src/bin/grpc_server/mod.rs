@@ -17,30 +17,30 @@ use crate::{
     format_error,
     message::{KeyProviderInput, KeyUnwrapOutput, KeyUnwrapResults},
 };
-use api::{
-    get_resource_service_server::{GetResourceService, GetResourceServiceServer},
-    image_pull_service_server::{ImagePullService, ImagePullServiceServer},
-    key_provider_service_server::{KeyProviderService, KeyProviderServiceServer},
-    sealed_secret_service_server::{SealedSecretService, SealedSecretServiceServer},
-    secure_mount_service_server::{SecureMountService, SecureMountServiceServer},
-    CommitResourceInjectionRequest, CommitResourceInjectionResponse, GetResourceRequest,
-    GetResourceResponse, ImagePullRequest, ImagePullResponse, KeyProviderKeyWrapProtocolInput,
-    KeyProviderKeyWrapProtocolOutput, PrepareResourceInjectionRequest,
-    PrepareResourceInjectionResponse, SecureMountRequest, SecureMountResponse, UnsealSecretInput,
-    UnsealSecretOutput,
+use protos::grpc::cdh::{
+    api::{
+        get_resource_service_server::{GetResourceService, GetResourceServiceServer},
+        image_pull_service_server::{ImagePullService, ImagePullServiceServer},
+        sealed_secret_service_server::{SealedSecretService, SealedSecretServiceServer},
+        secure_mount_service_server::{SecureMountService, SecureMountServiceServer},
+        CommitResourceInjectionRequest, CommitResourceInjectionResponse, GetResourceRequest,
+        GetResourceResponse, ImagePullRequest, ImagePullResponse, PrepareResourceInjectionRequest,
+        PrepareResourceInjectionResponse, SecureMountRequest, SecureMountResponse,
+        UnsealSecretInput, UnsealSecretOutput,
+    },
+    keyprovider::{
+        key_provider_service_server::{KeyProviderService, KeyProviderServiceServer},
+        KeyProviderKeyWrapProtocolInput, KeyProviderKeyWrapProtocolOutput,
+    },
 };
 
-mod api {
-    tonic::include_proto!("api");
-    tonic::include_proto!("keyprovider");
-}
-
+#[derive(Clone)]
 pub struct Cdh {
-    inner: Hub,
+    inner: Arc<Hub>,
 }
 
 #[tonic::async_trait]
-impl SealedSecretService for Arc<Cdh> {
+impl SealedSecretService for Cdh {
     async fn unseal_secret(
         &self,
         request: Request<UnsealSecretInput>,
@@ -67,7 +67,7 @@ impl SealedSecretService for Arc<Cdh> {
 }
 
 #[tonic::async_trait]
-impl GetResourceService for Arc<Cdh> {
+impl GetResourceService for Cdh {
     async fn get_resource(
         &self,
         request: Request<GetResourceRequest>,
@@ -152,7 +152,7 @@ impl GetResourceService for Arc<Cdh> {
 }
 
 #[tonic::async_trait]
-impl SecureMountService for Arc<Cdh> {
+impl SecureMountService for Cdh {
     async fn secure_mount(
         &self,
         request: Request<SecureMountRequest>,
@@ -181,7 +181,7 @@ impl SecureMountService for Arc<Cdh> {
 }
 
 #[tonic::async_trait]
-impl ImagePullService for Arc<Cdh> {
+impl ImagePullService for Cdh {
     async fn pull_image(
         &self,
         request: Request<ImagePullRequest>,
@@ -208,7 +208,7 @@ impl ImagePullService for Arc<Cdh> {
 }
 
 #[tonic::async_trait]
-impl KeyProviderService for Arc<Cdh> {
+impl KeyProviderService for Cdh {
     async fn wrap_key(
         &self,
         _request: Request<KeyProviderKeyWrapProtocolInput>,
@@ -272,8 +272,9 @@ impl KeyProviderService for Arc<Cdh> {
 }
 
 pub async fn start_grpc_service(socket: SocketAddr, inner: Hub) -> Result<()> {
-    let service = Cdh { inner };
-    let service = Arc::new(service);
+    let service = Cdh {
+        inner: Arc::new(inner),
+    };
     Server::builder()
         .add_service(SealedSecretServiceServer::new(service.clone()))
         .add_service(GetResourceServiceServer::new(service.clone()))
