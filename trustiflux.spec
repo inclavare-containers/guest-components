@@ -3,7 +3,7 @@
 %global libdir /usr/lib
 
 Name:		trustiflux
-Version:	1.3.0
+Version:	1.4.0
 Release:	%{release}%{?dist}
 Summary:	A daemon service running inside TEE (Trusted Execution Environment) to confidential resource related APIs
 
@@ -103,9 +103,17 @@ rm -rf %{buildroot}
 %{libdir}/dracut/modules.d/99confidential-data-hub/module-setup.sh
 
 %changelog
-* Thu Aug 21 2025 Xynnn007 <mading.ma@alibaba-inc.com> -1.3.0-1
+* Thu Aug 28 2025 Xynnn007 <mading.ma@alibaba-inc.com> -1.4.0-1
 - Kbs Protocol: update to v0.4.0
 - Hardware: add Hygon csv and hygon dcu support
+
+* Thu Jul 3 2025 Xynnn007 <mading.ma@alibaba-inc.com> -1.3.1-1
+- Dracut: remove dependency on sysinit.target for AA
+- AA: Support configuring CoCoAS and KBS URL via ENV
+- AA: get as token support config policy id via ENV
+- AA: support instance information reporting to trustee
+- AA: add AAInstanceInfo HTTP header when access /attest and /attestation API of trustee
+- TDX attester: Add GPU attestation support
 
 * Fri Jun 13 2025 Xynnn007 <mading.ma@alibaba-inc.com> -1.2.1-4
 - Spec: use config files in source code
