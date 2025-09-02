@@ -139,11 +139,23 @@ rpm-build: create-tarball
 	yum-builddep -y ./trustiflux.spec
 
 	# build
-	rpmbuild -ba ./trustiflux.spec
+	rpmbuild -ba ./trustiflux.spec --define 'debug_package %{nil}' --define 'debugsource_package %{nil}'
 	@echo "RPM package is:" ~/rpmbuild/RPMS/*/trustiflux-*
 
-.PHONE: rpm-build-in-docker
-rpm-build-in-docker:
+.PHONE: rpm-build-in-an23-docker
+rpm-build-in-an23-docker:
+	mkdir -p ~/rpmbuild/SOURCES/
+	cp /tmp/v${VERSION}.tar.gz ~/rpmbuild/SOURCES/
+
+	docker run --rm -v ~/rpmbuild:/root/rpmbuild \
+		-v /tmp:/tmp \
+		-v .:/code --workdir=/code \
+		registry.openanolis.cn/openanolis/anolisos:23 \
+		bash -x -c \
+		"yum makecache -y && yum install anolis-epao-release -y && yum install make cargo clang perl protobuf-devel perl-FindBin git libtdx-attest-devel libgudev-devel tpm2-tss-devel rsync tar which -y && make rpm-build"
+
+.PHONE: rpm-build-in-al3-docker
+rpm-build-in-al3-docker:
 # copy sources
 	mkdir -p ~/rpmbuild/SOURCES/
 	cp /tmp/v${VERSION}.tar.gz ~/rpmbuild/SOURCES/

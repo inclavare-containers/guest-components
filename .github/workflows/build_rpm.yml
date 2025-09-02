@@ -38,7 +38,8 @@ jobs:
       - name: Build RPM package
         run: |
           make create-tarball
-          make rpm-build-in-docker
+          make rpm-build-in-al3-docker
+          make rpm-build-in-an23-docker
           mkdir -p $GITHUB_WORKSPACE/rpmbuild
           cp -r ~/rpmbuild/SRPMS/ $GITHUB_WORKSPACE/rpmbuild/
           cp -r ~/rpmbuild/RPMS/ $GITHUB_WORKSPACE/rpmbuild/
@@ -98,8 +99,8 @@ jobs:
           set -x
 
           # test rpm package install
-          cat /etc/os-release | grep "Anolis OS 23" && yum install -y anolis-epao-release
-          yum install -y ./rpm-packages/RPMS/*/*.rpm
+          cat /etc/os-release | grep "Anolis OS 23" && yum install -y anolis-epao-release && yum install -y ./rpm-packages/RPMS/*/*an23*.rpm
+          cat /etc/os-release | grep "Alibaba Cloud Linux 3" && yum install -y ./rpm-packages/RPMS/*/*al8*.rpm
           attestation-agent --version
           confidential-data-hub --version
 
