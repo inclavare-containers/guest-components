@@ -3,7 +3,7 @@
 %global libdir /usr/lib
 
 Name:		trustiflux
-Version:	1.4.0
+Version:	1.4.1
 Release:	%{release}%{?dist}
 Summary:	A daemon service running inside TEE (Trusted Execution Environment) to confidential resource related APIs
 
@@ -103,6 +103,9 @@ rm -rf %{buildroot}
 %{libdir}/dracut/modules.d/99confidential-data-hub/module-setup.sh
 
 %changelog
+* Fri Sep 5 2025 Xynnn007 <mading.ma@alibaba-inc.com> -1.4.1-1
+- TDX Attester: fix CCEL algorithm
+
 * Thu Aug 28 2025 Xynnn007 <mading.ma@alibaba-inc.com> -1.4.0-1
 - Kbs Protocol: update to v0.4.0
 - Hardware: add Hygon csv and hygon dcu support
