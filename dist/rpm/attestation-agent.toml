@@ -1,0 +1,15 @@
+[token_configs]
+
+[token_configs.coco_as]
+url = "http://127.0.0.1:8000"
+
+[token_configs.kbs]
+url = "https://127.0.0.1:8080"
+
+# KBS certificate
+# cert = 
+
+[eventlog_config]
+enable_eventlog = false
+eventlog_algorithm = "sha384"
+init_pcr = 17
