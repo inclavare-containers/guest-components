@@ -12,6 +12,7 @@ use crate::utils::pad;
 use crate::{InitDataResult, TeeEvidence};
 use anyhow::*;
 use base64::Engine;
+use kbs_types::HashAlgorithm;
 use report::TdReport;
 use scroll::Pread;
 use serde::{Deserialize, Serialize};
@@ -247,6 +248,10 @@ impl Attester for TdxAttester {
             8..=15 => 3,
             _ => 4,
         }
+    }
+
+    fn ccel_hash_algorithm(&self) -> HashAlgorithm {
+        HashAlgorithm::Sha384
     }
 }
 
