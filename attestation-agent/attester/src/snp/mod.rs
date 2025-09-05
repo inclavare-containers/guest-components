@@ -50,7 +50,7 @@ impl Attester for SnpAttester {
             cert_chain: certs,
         };
 
-        serde_json::to_value(&evidence).context("Serialize SNP evidence failed")
+        serde_json::to_value(evidence).context("Serialize SNP evidence failed")
     }
 
     async fn bind_init_data(&self, init_data_digest: &[u8]) -> Result<InitDataResult> {

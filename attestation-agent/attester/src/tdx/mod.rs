@@ -187,7 +187,7 @@ impl Attester for TdxAttester {
             gpu_evidence,
         };
 
-        serde_json::to_value(&evidence).context("Serialize TDX evidence failed")
+        serde_json::to_value(evidence).context("Serialize TDX evidence failed")
     }
 
     async fn extend_runtime_measurement(

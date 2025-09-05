@@ -61,7 +61,7 @@ impl Attester for SystemAttester {
             environment,
             report_data: base64::engine::general_purpose::STANDARD.encode(report_data),
         };
-        serde_json::to_value(&evidence).context("Serialize system evidence failed")
+        serde_json::to_value(evidence).context("Serialize system evidence failed")
     }
 }
 

@@ -80,7 +80,7 @@ impl MetadataClient {
 
         let response = self
             .client
-            .put(&format!("{}/api/token", BASE_URL))
+            .put(format!("{BASE_URL}/api/token"))
             .headers(headers)
             .send()
             .await
@@ -107,7 +107,7 @@ impl MetadataClient {
     ) -> Result<Option<String>> {
         let response = self
             .client
-            .get(&format!("{}/meta-data/{}", BASE_URL, metadata_field))
+            .get(format!("{BASE_URL}/meta-data/{metadata_field}"))
             .header("X-aliyun-ecs-metadata-token", token)
             .send()
             .await

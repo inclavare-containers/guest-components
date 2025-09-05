@@ -37,7 +37,7 @@ impl Attester for CcaAttester {
         let tsm = TsmReportPath::new(TsmReportProvider::Cca)?;
         let token = tsm.attestation_report(TsmReportData::Cca(challenge))?;
         let evidence = CcaEvidence { token };
-        let ev = serde_json::to_value(&evidence).context("Serialization of CCA evidence failed")?;
+        let ev = serde_json::to_value(evidence).context("Serialization of CCA evidence failed")?;
         Ok(ev)
     }
 }

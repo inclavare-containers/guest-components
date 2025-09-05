@@ -99,14 +99,14 @@ pub async fn main() -> Result<()> {
     if let Some(initdata_toml_path) = cli.initdata_toml {
         info!("Initdata TOML file is given by parameter");
         let initdata_toml =
-            std::fs::read_to_string(&initdata_toml_path).context("read initdata toml file")?;
+            std::fs::read_to_string(initdata_toml_path).context("read initdata toml file")?;
         let (_, digest) = Initdata::parse_and_get_digest(&initdata_toml)?;
         aa.set_initdata_toml(initdata_toml);
         initdata_digest = Some(digest);
     } else if let Some(initdata) = cli.initdata_digest {
         info!("Initdata digest is given by parameter");
         let initdata = base64::engine::general_purpose::STANDARD
-            .decode(&initdata)
+            .decode(initdata)
             .context("base64 decode initdata")?;
         initdata_digest = Some(initdata);
     }

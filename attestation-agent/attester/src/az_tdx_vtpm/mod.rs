@@ -47,7 +47,7 @@ impl Attester for AzTdxVtpmAttester {
             hcl_report: hcl_report_bytes,
             td_quote: td_quote_bytes,
         };
-        Ok(serde_json::to_value(&evidence)?)
+        Ok(serde_json::to_value(evidence)?)
     }
 
     async fn bind_init_data(&self, init_data_digest: &[u8]) -> anyhow::Result<InitDataResult> {

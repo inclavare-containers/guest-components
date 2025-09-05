@@ -75,7 +75,7 @@ impl Attester for TpmAttester {
             aa_eventlog,
         };
 
-        serde_json::to_value(&evidence)
+        serde_json::to_value(evidence)
             .map_err(|e| anyhow!("Serialize TPM evidence failed: {:?}", e))
     }
 

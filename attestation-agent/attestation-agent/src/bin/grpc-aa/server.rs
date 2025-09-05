@@ -9,8 +9,8 @@ use attestation::attestation_agent_service_server::{
 };
 use attestation::{
     BindInitDataRequest, BindInitDataResponse, ExtendRuntimeMeasurementRequest,
-    ExtendRuntimeMeasurementResponse, GetEvidenceRequest, GetEvidenceResponse, GetTeeTypeRequest,
-    GetTeeTypeResponse, GetTokenRequest, GetTokenResponse,
+    ExtendRuntimeMeasurementResponse, GetAdditionalEvidenceRequest, GetEvidenceRequest,
+    GetEvidenceResponse, GetTeeTypeRequest, GetTeeTypeResponse, GetTokenRequest, GetTokenResponse,
 };
 use attestation_agent::{AttestationAPIs, AttestationAgent};
 use log::{debug, error};
