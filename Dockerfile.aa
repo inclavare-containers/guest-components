@@ -4,6 +4,13 @@
 
 FROM registry.openanolis.cn/openanolis/anolisos:23.2 as builder
 
+ARG ALL_PROXY
+ARG NO_PROXY
+ENV ALL_PROXY=$ALL_PROXY
+ENV NO_PROXY=$NO_PROXY
+
+ARG CARGO_JOBS
+
 WORKDIR /tmp
 RUN curl https://download.01.org/intel-sgx/sgx-dcap/1.21/linux/distro/Anolis86/sgx_rpm_local_repo.tgz --output sgx_rpm_local_repo.tgz && \
     tar zxvf sgx_rpm_local_repo.tgz && \
@@ -22,6 +29,21 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 RUN rustup toolchain install 1.79.0-x86_64-unknown-linux-gnu
+
+RUN if [ -n "${CARGO_JOBS}" ]; then \
+      [ ! -d /root/.cargo ] && mkdir /root/.cargo; \
+      printf '[build]\njobs = %s\n' "${CARGO_JOBS}" >> /root/.cargo/config.toml; \
+    fi
+
+# Cargo 1.79 uses libgit2 to download the git source,
+# so it doesn't support related proxy environment variables.
+# To work around this, enable git-fetch-with-cli to call
+# git command with awareness of proxy environment variables
+# to download the source.
+RUN if [ -n "${ALL_PROXY}" ]; then \
+      [ ! -d /root/.cargo ] && mkdir /root/.cargo; \
+      printf "[net]\ngit-fetch-with-cli = true" >> /root/.cargo/config.toml; \
+    fi
 
 # Build attestation-agent. Notice that libc version is not enough thus --release cannot pass
 RUN cargo +1.79.0 build -p attestation-agent --bin ttrpc-aa --no-default-features --features bin,ttrpc,rust-crypto,coco_as,kbs,tdx-attester,system-attester,csv-attester,hygon-dcu-attester --target x86_64-unknown-linux-gnu
