@@ -6,6 +6,13 @@ ARG BASE_IMAGE=eci-nydus-registry.cn-hangzhou.cr.aliyuncs.com/docker/debian:stab
 
 FROM ${BASE_IMAGE} AS builder
 
+ARG ALL_PROXY
+ARG NO_PROXY
+ENV ALL_PROXY=$ALL_PROXY
+ENV NO_PROXY=$NO_PROXY
+
+ARG CARGO_JOBS
+
 WORKDIR /usr/src/guest-components
 COPY . .
 
@@ -19,6 +26,21 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 RUN rustup target add x86_64-unknown-linux-musl
+
+RUN if [ -n "${CARGO_JOBS}" ]; then \
+      mkdir -p /root/.cargo; \
+      printf '[build]\njobs = %s\n' "${CARGO_JOBS}" > /root/.cargo/config.toml; \
+    fi
+
+# Cargo 1.79 uses libgit2 to download the git source,
+# so it doesn't support related proxy environment variables.
+# To work around this, enable git-fetch-with-cli to call
+# git command with awareness of proxy environment variables
+# to download the source.
+RUN if [ -n "${ALL_PROXY}" ]; then \
+      [ ! -d /root/.cargo ] && mkdir /root/.cargo; \
+      printf "[net]\ngit-fetch-with-cli = true" >> /root/.cargo/config.toml; \
+    fi
 
 # Build confidential-data-hub
 RUN cd confidential-data-hub/hub && \
