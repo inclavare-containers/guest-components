@@ -32,7 +32,8 @@ RUN rustup toolchain install 1.79.0-x86_64-unknown-linux-gnu
 
 RUN if [ -n "${CARGO_JOBS}" ]; then \
       [ ! -d /usr/src/guest-components/.cargo ] && mkdir /usr/src/guest-components/.cargo; \
-      printf '[build]\njobs = %s\n' "${CARGO_JOBS}" > /usr/src/guest-components/.cargo/config.toml; \
+      ! grep -q 'jobs =' /usr/src/guest-components/.cargo/config.toml && \
+          printf '\n[build]\njobs = %s' "${CARGO_JOBS}" >> /usr/src/guest-components/.cargo/config.toml; \
     fi
 
 # Cargo 1.79 uses libgit2 to download the git source,
@@ -42,7 +43,8 @@ RUN if [ -n "${CARGO_JOBS}" ]; then \
 # to download the source.
 RUN if [ -n "${ALL_PROXY}" ]; then \
       [ ! -d /usr/src/guest-components/.cargo ] && mkdir /usr/src/guest-components/.cargo; \
-      printf "[net]\ngit-fetch-with-cli = true" >> /usr/src/guest-components/.cargo/config.toml; \
+      ! grep -q 'git-fetch-with-cli =' /usr/src/guest-components/.cargo/config.toml && \
+          printf '\n[net]\ngit-fetch-with-cli = true' >> /usr/src/guest-components/.cargo/config.toml; \
     fi
 
 # Build attestation-agent. Notice that libc version is not enough thus --release cannot pass
