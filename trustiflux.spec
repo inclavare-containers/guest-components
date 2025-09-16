@@ -3,7 +3,7 @@
 %global libdir /usr/lib
 
 Name:		trustiflux
-Version:	1.4.1
+Version:	1.4.2
 Release:	%{release}%{?dist}
 Summary:	A daemon service running inside TEE (Trusted Execution Environment) to confidential resource related APIs
 
@@ -103,6 +103,9 @@ rm -rf %{buildroot}
 %{libdir}/dracut/modules.d/99confidential-data-hub/module-setup.sh
 
 %changelog
+* Tue Sep 16 2025 Xynnn007 <mading.ma@alibaba-inc.com> -1.4.2-1
+- TDX Attester: fix GPU attester error
+
 * Fri Sep 5 2025 Xynnn007 <mading.ma@alibaba-inc.com> -1.4.1-1
 - TDX Attester: fix CCEL algorithm
 
