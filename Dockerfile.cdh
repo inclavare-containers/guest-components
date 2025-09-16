@@ -6,15 +6,23 @@ ARG BASE_IMAGE=eci-nydus-registry.cn-hangzhou.cr.aliyuncs.com/docker/debian:stab
 
 FROM ${BASE_IMAGE} AS builder
 
-ARG ALL_PROXY
+ARG PROXY
 ARG NO_PROXY
-ENV ALL_PROXY=$ALL_PROXY
-ENV NO_PROXY=$NO_PROXY
+ENV HTTPS_PROXY=${PROXY}
+ENV HTTP_PROXY=${PROXY}
+ENV NO_PROXY=${NO_PROXY}
 
 ARG CARGO_JOBS
 
 WORKDIR /usr/src/guest-components
 COPY . .
+
+# Write 
+RUN if [ -n "${PROXY}" ]; then \
+      [ ! -d /etc/apt/apt.conf.d ] && mkdir -p /etc/apt/apt.conf.d; \
+      printf 'Acquire::https::Proxy "%s";' "${PROXY}" > /etc/apt/apt.conf.d/80proxy; \
+      printf '\nAcquire::http::Proxy "%s";' "${PROXY}" >> /etc/apt/apt.conf.d/80proxy; \
+    fi
 
 RUN apt update -y && apt install -y clang protobuf-compiler git curl musl-tools libssl-dev make && \
     apt clean all && \
@@ -38,7 +46,7 @@ RUN if [ -n "${CARGO_JOBS}" ]; then \
 # To work around this, enable git-fetch-with-cli to call
 # git command with awareness of proxy environment variables
 # to download the source.
-RUN if [ -n "${ALL_PROXY}" ]; then \
+RUN if [ -n "${PROXY}" ]; then \
       [ ! -d /usr/src/guest-components/.cargo ] && mkdir /usr/src/guest-components/.cargo; \
       ! grep -q 'git-fetch-with-cli =' /usr/src/guest-components/.cargo/config.toml && \
           printf '\n[net]\ngit-fetch-with-cli = true' >> /usr/src/guest-components/.cargo/config.toml; \
