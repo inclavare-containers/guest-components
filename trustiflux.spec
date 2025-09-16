@@ -44,9 +44,25 @@ Confidential Data Hub is a daemon service running inside TEE (Trusted Execution 
 
 %prep
 %autosetup -n guest-components-%{version}
-tar -xvf %{SOURCE1} 
+tar -xvf %{SOURCE1}
 
 %build
+%define proxy_url %{getenv:PROXY}
+%define no_proxy_url %{getenv:NO_PROXY}
+
+%if "%{proxy_url}" != ""
+  export HTTPS_PROXY="%{proxy_url}"
+  export HTTP_PROXY="%{proxy_url}"
+  export NO_PROXY="%{no_proxy_url}"
+
+  # Use git command to pull the source code
+  mkdir .cargo || true
+  cat > .cargo/config.toml <<EOF
+[net]
+git-fetch-with-cli = true
+EOF
+%endif
+
 # building the attestation-agent
 OPENSSL_NO_VENDOR=1 cargo build -p attestation-agent --bin ttrpc-aa --release --no-default-features --features bin,ttrpc,rust-crypto,coco_as,kbs,tdx-attester,system-attester,tpm-attester,instance_info,csv-attester,hygon-dcu-attester --target x86_64-unknown-linux-gnu
 cargo build -p attestation-agent --bin ttrpc-aa-client --release --no-default-features --features bin,ttrpc,eventlog --target x86_64-unknown-linux-gnu

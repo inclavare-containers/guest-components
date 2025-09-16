@@ -4,10 +4,11 @@
 
 FROM registry.openanolis.cn/openanolis/anolisos:23.2 as builder
 
-ARG ALL_PROXY
+ARG PROXY
 ARG NO_PROXY
-ENV ALL_PROXY=$ALL_PROXY
-ENV NO_PROXY=$NO_PROXY
+ENV HTTPS_PROXY=${PROXY}
+ENV HTTP_PROXY=${PROXY}
+ENV NO_PROXY=${NO_PROXY}
 
 ARG CARGO_JOBS
 
@@ -41,7 +42,7 @@ RUN if [ -n "${CARGO_JOBS}" ]; then \
 # To work around this, enable git-fetch-with-cli to call
 # git command with awareness of proxy environment variables
 # to download the source.
-RUN if [ -n "${ALL_PROXY}" ]; then \
+RUN if [ -n "${PROXY}" ]; then \
       [ ! -d /usr/src/guest-components/.cargo ] && mkdir /usr/src/guest-components/.cargo; \
       ! grep -q 'git-fetch-with-cli =' /usr/src/guest-components/.cargo/config.toml && \
           printf '\n[net]\ngit-fetch-with-cli = true' >> /usr/src/guest-components/.cargo/config.toml; \
@@ -53,6 +54,12 @@ RUN cargo +1.79.0 build -p attestation-agent --bin ttrpc-aa --no-default-feature
 RUN strip target/x86_64-unknown-linux-gnu/debug/ttrpc-aa
 
 FROM registry.openanolis.cn/openanolis/anolisos:23.2
+
+ARG PROXY
+ARG NO_PROXY
+ENV HTTPS_PROXY=${PROXY}
+ENV HTTP_PROXY=${PROXY}
+ENV NO_PROXY=${NO_PROXY}
 
 WORKDIR /tmp
 RUN curl https://download.01.org/intel-sgx/sgx-dcap/1.21/linux/distro/Anolis86/sgx_rpm_local_repo.tgz --output sgx_rpm_local_repo.tgz && \
