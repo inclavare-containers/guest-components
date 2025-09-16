@@ -58,6 +58,9 @@ ifeq ($(ARCH), $(filter $(ARCH), s390x powerpc64le))
   LIBC = gnu
 endif
 
+PROXY ?=
+NO_PROXY ?=
+
 CDH := confidential-data-hub
 AA := attestation-agent
 ASR := api-server-rest
@@ -136,7 +139,7 @@ rpm-build: create-tarball
 
 	# install build dependencies
 	which yum-builddep || { yum install -y yum-utils ; }
-	yum-builddep -y ./trustiflux.spec
+	PROXY=$(PROXY) NO_PROXY=$(NO_PROXY) yum-builddep -y ./trustiflux.spec
 
 	# build
 	rpmbuild -ba ./trustiflux.spec --define 'debug_package %{nil}' --define 'debugsource_package %{nil}'
@@ -163,9 +166,10 @@ rpm-build-in-al3-docker:
 	docker run --rm -v ~/rpmbuild:/root/rpmbuild \
 		-v /tmp:/tmp \
 		-v .:/code --workdir=/code \
+		--network=host \
 		alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/alinux3:latest \
 		bash -x -c \
-		"yum makecache -y && yum install make cargo clang perl protobuf-devel git libtdx-attest-devel libgudev-devel tpm2-tss-devel rsync tar which -y && make rpm-build"
+		"yum makecache -y && yum install make cargo clang perl protobuf-devel git libtdx-attest-devel libgudev-devel tpm2-tss-devel rsync tar which -y && PROXY=$(PROXY) NO_PROXY=$(NO_PROXY) make rpm-build"
 
 clean:
 	rm -rf target
