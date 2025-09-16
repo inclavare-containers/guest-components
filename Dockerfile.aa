@@ -31,8 +31,8 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 RUN rustup toolchain install 1.79.0-x86_64-unknown-linux-gnu
 
 RUN if [ -n "${CARGO_JOBS}" ]; then \
-      [ ! -d /root/.cargo ] && mkdir /root/.cargo; \
-      printf '[build]\njobs = %s\n' "${CARGO_JOBS}" >> /root/.cargo/config.toml; \
+      [ ! -d /usr/src/guest-components/.cargo ] && mkdir /usr/src/guest-components/.cargo; \
+      printf '[build]\njobs = %s\n' "${CARGO_JOBS}" > /usr/src/guest-components/.cargo/config.toml; \
     fi
 
 # Cargo 1.79 uses libgit2 to download the git source,
@@ -41,8 +41,8 @@ RUN if [ -n "${CARGO_JOBS}" ]; then \
 # git command with awareness of proxy environment variables
 # to download the source.
 RUN if [ -n "${ALL_PROXY}" ]; then \
-      [ ! -d /root/.cargo ] && mkdir /root/.cargo; \
-      printf "[net]\ngit-fetch-with-cli = true" >> /root/.cargo/config.toml; \
+      [ ! -d /usr/src/guest-components/.cargo ] && mkdir /usr/src/guest-components/.cargo; \
+      printf "[net]\ngit-fetch-with-cli = true" >> /usr/src/guest-components/.cargo/config.toml; \
     fi
 
 # Build attestation-agent. Notice that libc version is not enough thus --release cannot pass
