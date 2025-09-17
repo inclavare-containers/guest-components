@@ -5,5 +5,5 @@ ConditionPathExists=/etc/initrd-release
 
 [Service]
 Type=oneshot
-ExecStart=bash /usr/bin/attestation-agent-platform-detect.sh
+ExecStart=/bin/bash /usr/bin/attestation-agent-platform-detect.sh
 RemainAfterExit=true
