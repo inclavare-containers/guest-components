@@ -106,7 +106,7 @@ install: $(CDH_BINARY) $(ASR_BINARY) $(AA_BINARY)
 	@echo "Generating vendor tarball..."
 	rm -rf /tmp/guest-components-tarball/guest-components-${VERSION}/ && mkdir -p /tmp/guest-components-tarball/guest-components-${VERSION}/vendor
 	mkdir -p /tmp/guest-components-tarball/guest-components-${VERSION}/.cargo/
-	cargo vendor --locked --manifest-path ./Cargo.toml --no-delete --versioned-dirs --respect-source-config /tmp/guest-components-tarball/guest-components-${VERSION}/vendor/ | tee /tmp/guest-components-tarball/guest-components-${VERSION}/.cargo/config.toml
+	HTTPS_PROXY=$(PROXY) NO_PROXY=$(NO_PROXY) cargo vendor --locked --manifest-path ./Cargo.toml --no-delete --versioned-dirs --respect-source-config /tmp/guest-components-tarball/guest-components-${VERSION}/vendor/ | tee /tmp/guest-components-tarball/guest-components-${VERSION}/.cargo/config.toml
 
 	sed -i 's;^.*directory = .*/vendor/.*$$;directory = "vendor";g' /tmp/guest-components-tarball/guest-components-${VERSION}/.cargo/config.toml
 
