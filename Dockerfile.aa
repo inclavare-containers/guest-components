@@ -69,6 +69,10 @@ RUN curl https://download.01.org/intel-sgx/sgx-dcap/1.21/linux/distro/Anolis86/s
     yum clean all && \
     rm -rf /tmp/*
 
+ENV HTTPS_PROXY=
+ENV HTTP_PROXY=
+ENV NO_PROXY=
+
 # Copy binaries
 COPY --from=builder /usr/src/guest-components/target/x86_64-unknown-linux-gnu/debug/ttrpc-aa /usr/local/bin/attestation-agent
 COPY aa-start.sh /usr/bin/start.sh
