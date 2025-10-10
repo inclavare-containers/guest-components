@@ -7,6 +7,7 @@ use crate::types::TpmEvidence;
 use crate::{Attester, TeeEvidence};
 use anyhow::*;
 use base64::Engine;
+use kbs_types::HashAlgorithm;
 use rsa as rust_rsa;
 use rsa::pkcs8::EncodePublicKey;
 use std::collections::HashMap;
@@ -94,6 +95,10 @@ impl Attester for TpmAttester {
         let pcr_value = hex::decode(target_pcr)?;
 
         Ok(pcr_value)
+    }
+
+    fn ccel_hash_algorithm(&self) -> HashAlgorithm {
+        HashAlgorithm::Sha256
     }
 }
 
