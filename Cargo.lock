@@ -2222,9 +2222,9 @@ dependencies = [
 
 [[package]]
 name = "eventlog-rs"
-version = "0.1.7"
+version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8032cb35e23e548f50306064c37de06e04eb51378bce8ad99f0a7f119b30204e"
+checksum = "7354e333c4b1f13ab0a9b4b55531bf3f80e01f87cb0c1f0ce86591fd6a02ddfb"
 dependencies = [
  "anyhow",
  "byteorder",
