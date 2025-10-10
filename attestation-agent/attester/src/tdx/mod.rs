@@ -8,7 +8,7 @@ use self::rtmr::TdxRtmrEvent;
 
 use super::tsm_report::*;
 use super::Attester;
-use crate::utils::pad;
+use crate::utils::{pad, read_eventlog};
 use crate::{InitDataResult, TeeEvidence};
 use anyhow::*;
 use base64::Engine;
@@ -16,7 +16,6 @@ use kbs_types::HashAlgorithm;
 use report::TdReport;
 use scroll::Pread;
 use serde::{Deserialize, Serialize};
-use std::fs;
 use std::path::Path;
 use tdx_attest_rs::tdx_report_t;
 
@@ -63,13 +62,15 @@ pub const DEFAULT_EVENTLOG_PATH: &str = "/run/attestation-agent/eventlog";
 
 #[derive(Serialize, Deserialize)]
 struct TdxEvidence {
-    // Base64 encoded CC Eventlog ACPI table
-    // refer to https://uefi.org/specs/ACPI/6.5/05_ACPI_Software_Programming_Model.html#cc-event-log-acpi-table.
-    cc_eventlog: Option<String>,
     // Base64 encoded TD quote.
     quote: String,
-    // Eventlog of Attestation Agent
-    aa_eventlog: Option<String>,
+
+    /// Base64 encoded Eventlog
+    /// This might include the
+    /// - CCEL: <https://uefi.org/specs/ACPI/6.5/05_ACPI_Software_Programming_Model.html#cc-event-log-acpi-table>
+    /// - AAEL in TCG2 encoding: <https://github.com/confidential-containers/trustee/blob/main/kbs/docs/confidential-containers-eventlog.md>
+    cc_eventlog: Option<String>,
+
     // GPU evidence (optional)
     gpu_evidence: Option<GpuEvidenceList>,
 }
@@ -134,21 +135,7 @@ impl Attester for TdxAttester {
         let engine = base64::engine::general_purpose::STANDARD;
         let quote = engine.encode(quote_bytes);
 
-        let cc_eventlog = match eventlog_rs::read::read_ccel() {
-            Result::Ok(el) => Some(engine.encode(el)),
-            Result::Err(e) => {
-                log::warn!("Read CC Eventlog failed: {:?}", e);
-                None
-            }
-        };
-
-        let aa_eventlog = match fs::read_to_string(DEFAULT_EVENTLOG_PATH) {
-            Result::Ok(el) => Some(el),
-            Result::Err(e) => {
-                log::warn!("Read AA Eventlog failed: {:?}", e);
-                None
-            }
-        };
+        let cc_eventlog = read_eventlog().await?;
 
         // Try to collect GPU evidence
         #[allow(unused_assignments)]
@@ -183,7 +170,6 @@ impl Attester for TdxAttester {
         let evidence = TdxEvidence {
             cc_eventlog,
             quote,
-            aa_eventlog,
             gpu_evidence,
         };
 
