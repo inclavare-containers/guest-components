@@ -15,7 +15,7 @@ required-features = ["bin", "ttrpc"]
 
 [[bin]]
 name = "ttrpc-aa-client"
-required-features = ["bin", "ttrpc"]
+required-features = ["bin", "ttrpc", "eventlog"]
 
 [dependencies]
 anyhow.workspace = true
@@ -27,6 +27,7 @@ clap = { workspace = true, features = ["derive"], optional = true }
 config.workspace = true
 const_format.workspace = true
 env_logger = { workspace = true, optional = true }
+eventlog = { git = "https://github.com/openanolis/trustee.git", rev = "23fd9b6", optional = true }
 eventlog-rs = "0.1.8"
 hex.workspace = true
 kbs_protocol = { path = "../kbs_protocol", default-features = false, optional = true }

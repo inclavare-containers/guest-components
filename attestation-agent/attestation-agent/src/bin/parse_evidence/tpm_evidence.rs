@@ -6,6 +6,7 @@
 use anyhow::*;
 use attester::types::TpmEvidence;
 use base64::Engine;
+use eventlog::CcEventLog;
 
 pub fn parse_tpm_ev(evidence: String) -> Result<String> {
     let ev = serde_json::from_str::<TpmEvidence>(&evidence)?;
@@ -57,30 +58,10 @@ pub fn parse_tpm_ev(evidence: String) -> Result<String> {
     let aael = ev
         .aa_eventlog
         .ok_or_else(|| anyhow!("No AA Eventlog in evidence"))?;
-    let aa_eventlog: Vec<&str> = aael.split('\n').collect();
-
-    for event in aa_eventlog.iter() {
-        let event_split: Vec<&str> = event.splitn(3, ' ').collect();
-
-        if event_split[0] == "INIT" {
-            output.push_str(&format!(
-                "\nEvent Entry\n\tOperation: {}\n\tContent: {}\n\t",
-                event_split[0], event_split[1]
-            ));
-            continue;
-        } else if event_split[0].to_string().is_empty() {
-            break;
-        }
-
-        if event_split.len() != 3 {
-            bail!("Illegal AA eventlog format");
-        }
-
-        output.push_str(&format!(
-            "\nEvent Entry\n\tDomain: {}\n\tOperation: {}\n\tContent: {}\n\t",
-            event_split[0], event_split[1], event_split[2]
-        ));
-    }
+    let aa_ccel_data = base64::engine::general_purpose::STANDARD.decode(aael)?;
+    let aa_ccel = CcEventLog::try_from(aa_ccel_data)?;
+    let aa_ccel_string = serde_json::to_string_pretty(&aa_ccel.clone().log)?;
+    output.push_str(&aa_ccel_string);
 
     Ok(output)
 }

@@ -59,8 +59,8 @@ impl Attester for TpmAttester {
                 None
             }
         };
-        let aa_eventlog = match std::fs::read_to_string(DEFAULT_AA_EVENTLOG_PATH) {
-            Result::Ok(el) => Some(el),
+        let aa_eventlog = match std::fs::read(DEFAULT_AA_EVENTLOG_PATH) {
+            Result::Ok(el) => Some(engine.encode(el)),
             Result::Err(e) => {
                 log::warn!("Read AA Eventlog failed: {:?}", e);
                 None

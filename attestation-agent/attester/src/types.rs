@@ -17,7 +17,7 @@ pub struct TpmEvidence {
     pub quote: HashMap<String, TpmQuote>,
     // Base64 encoded Eventlog ACPI table
     pub eventlog: Option<String>,
-    // AA Eventlog
+    // Base64 encoded AA Eventlog
     pub aa_eventlog: Option<String>,
 }
 
