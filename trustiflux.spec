@@ -41,7 +41,7 @@ tar -xvf %{SOURCE1}
 %build
 # building the attestation-agent
 cargo build -p attestation-agent --bin ttrpc-aa --release --no-default-features --features bin,ttrpc,rust-crypto,coco_as,kbs,tdx-attester,system-attester,tpm-attester,instance_info,csv-attester,hygon-dcu-attester --target x86_64-unknown-linux-gnu
-cargo build -p attestation-agent --bin ttrpc-aa-client --release --no-default-features --features bin,ttrpc --target x86_64-unknown-linux-gnu
+cargo build -p attestation-agent --bin ttrpc-aa-client --release --no-default-features --features bin,ttrpc,eventlog --target x86_64-unknown-linux-gnu
 
 # building the confidential-data-hub
 cargo build -p confidential-data-hub --release --bin cdh-oneshot --no-default-features --features "bin,aliyun,kbs" --target x86_64-unknown-linux-gnu
