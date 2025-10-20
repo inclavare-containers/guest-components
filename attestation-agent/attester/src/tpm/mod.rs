@@ -97,6 +97,10 @@ impl Attester for TpmAttester {
         Ok(pcr_value)
     }
 
+    fn pcr_to_ccmr(&self, pcr_index: u64) -> u64 {
+        pcr_index
+    }
+
     fn ccel_hash_algorithm(&self) -> HashAlgorithm {
         HashAlgorithm::Sha256
     }
