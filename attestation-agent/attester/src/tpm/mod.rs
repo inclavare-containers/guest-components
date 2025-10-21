@@ -4,6 +4,7 @@
 //
 use crate::tpm::utils::*;
 use crate::types::TpmEvidence;
+use crate::utils::read_eventlog;
 use crate::{Attester, TeeEvidence};
 use anyhow::*;
 use base64::Engine;
@@ -16,7 +17,6 @@ use std::path::Path;
 mod utils;
 
 const TPM_EVENTLOG_FILE_PATH: &str = "/sys/kernel/security/tpm0/binary_bios_measurements";
-const DEFAULT_AA_EVENTLOG_PATH: &str = "/run/attestation-agent/eventlog";
 const TPM_REPORT_DATA_SIZE: usize = 32;
 
 pub fn detect_platform() -> bool {
@@ -59,19 +59,7 @@ impl Attester for TpmAttester {
                 None
             }
         };
-        let aa_eventlog = match std::fs::read(DEFAULT_AA_EVENTLOG_PATH) {
-            Result::Ok(el) => {
-                if el.is_empty() {
-                    None
-                } else {
-                    Some(engine.encode(el))
-                }
-            }
-            Result::Err(e) => {
-                log::warn!("Read AA Eventlog failed: {:?}", e);
-                None
-            }
-        };
+        let aa_eventlog = read_eventlog().await?;
 
         let evidence = TpmEvidence {
             ek_cert: dump_ek_cert_pem().ok(),
