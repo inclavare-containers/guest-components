@@ -13,6 +13,8 @@ pub struct TpmEvidence {
     pub ek_cert: Option<String>,
     // PEM format of AK public key
     pub ak_pubkey: String,
+    // UUID of keylime agent
+    pub keylime_agent_uuid: Option<String>,
     // TPM Quote (Contained PCRs)
     pub quote: HashMap<String, TpmQuote>,
     // Base64 encoded Eventlog ACPI table

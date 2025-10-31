@@ -19,6 +19,29 @@ mod utils;
 const TPM_EVENTLOG_FILE_PATH: &str = "/sys/kernel/security/tpm0/binary_bios_measurements";
 const TPM_REPORT_DATA_SIZE: usize = 32;
 
+const KEYLIME_AGENT_INFO_URL: &str = "http://127.0.0.1:9002/v2.2/agent/info";
+
+#[derive(serde::Deserialize)]
+struct KeylimeAgentResults {
+    agent_uuid: Option<String>,
+    ak_handle: Option<u32>,
+}
+
+#[derive(serde::Deserialize)]
+struct KeylimeAgentResp {
+    results: Option<KeylimeAgentResults>,
+}
+
+async fn try_get_keylime_info() -> Option<(String, u32)> {
+    let resp = reqwest::get(KEYLIME_AGENT_INFO_URL).await.ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let info: KeylimeAgentResp = resp.json().await.ok()?;
+    let r = info.results?;
+    Some((r.agent_uuid?, r.ak_handle?))
+}
+
 pub fn detect_platform() -> bool {
     Path::new("/dev/tpm0").exists()
 }
@@ -39,17 +62,45 @@ impl Attester for TpmAttester {
         }
         report_data.resize(TPM_REPORT_DATA_SIZE, 0);
 
-        let attestation_key = generate_rsa_ak()?;
-
+        let mut keylime_uuid: Option<String> = None;
         let mut quote = HashMap::new();
-        quote.insert(
-            "SHA1".to_string(),
-            get_quote(attestation_key.clone(), &report_data, "SHA1")?,
-        );
-        quote.insert(
-            "SHA256".to_string(),
-            get_quote(attestation_key.clone(), &report_data, "SHA256")?,
-        );
+        let mut ak_pubkey_pem: Option<String> = None;
+
+        if let Some((uuid, akh)) = try_get_keylime_info().await {
+            keylime_uuid = Some(uuid);
+            let mut ctx = create_ctx_with_session()?;
+            if let Result::Ok(handle) = load_ak_handle_from_persistent(&mut ctx, akh) {
+                quote.insert(
+                    "SHA1".to_string(),
+                    get_quote(&mut ctx, handle, &report_data, "SHA1")?,
+                );
+                quote.insert(
+                    "SHA256".to_string(),
+                    get_quote(&mut ctx, handle, &report_data, "SHA256")?,
+                );
+                ak_pubkey_pem = Some(
+                    get_ak_pub_from_persistent(akh)?
+                        .to_public_key_pem(rust_rsa::pkcs8::LineEnding::LF)?,
+                );
+            }
+        }
+
+        if ak_pubkey_pem.is_none() {
+            let attestation_key = generate_rsa_ak()?;
+            let mut ctx = create_ctx_with_session()?;
+            let handle = import_ak_handle(&mut ctx, attestation_key.clone())?;
+            quote.insert(
+                "SHA1".to_string(),
+                get_quote(&mut ctx, handle, &report_data, "SHA1")?,
+            );
+            quote.insert(
+                "SHA256".to_string(),
+                get_quote(&mut ctx, handle, &report_data, "SHA256")?,
+            );
+            ak_pubkey_pem = Some(
+                get_ak_pub(attestation_key)?.to_public_key_pem(rust_rsa::pkcs8::LineEnding::LF)?,
+            );
+        }
 
         let engine = base64::engine::general_purpose::STANDARD;
         let eventlog = match std::fs::read(TPM_EVENTLOG_FILE_PATH) {
@@ -63,8 +114,8 @@ impl Attester for TpmAttester {
 
         let evidence = TpmEvidence {
             ek_cert: dump_ek_cert_pem().ok(),
-            ak_pubkey: get_ak_pub(attestation_key)?
-                .to_public_key_pem(rust_rsa::pkcs8::LineEnding::LF)?,
+            ak_pubkey: ak_pubkey_pem.ok_or_else(|| anyhow!("AK pubkey must be set"))?,
+            keylime_agent_uuid: keylime_uuid,
             quote,
             eventlog,
             aa_eventlog,
