@@ -53,7 +53,6 @@ udev = { version = "0.9.1", optional = true }
 nvml-wrapper = { git = "https://github.com/rust-nvml/nvml-wrapper.git", rev = "7e0752f", optional = true }
 uuid = { workspace = true, features = ["v4"], optional = true }
 chrono = { workspace = true, features = ["serde"], optional = true }
-reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"], optional = true }
 
 [dev-dependencies]
 tokio.workspace = true
@@ -101,6 +100,6 @@ hygon = ["csv-rs"]
 cca-attester = ["tsm-report"]
 se-attester = ["pv"]
 system-attester = ["nix/feature", "pnet", "udev"]
-tpm-attester = ["openssl", "rsa", "num-traits", "tss-esapi", "reqwest"]
+tpm-attester = ["openssl", "rsa", "num-traits", "tss-esapi"]
 
 bin = ["tokio/rt", "tokio/macros", "clap"]

@@ -19,8 +19,7 @@ use tss_esapi::abstraction::{
 };
 use tss_esapi::attributes::SessionAttributesBuilder;
 use tss_esapi::constants::SessionType;
-use tss_esapi::handles::PersistentTpmHandle;
-use tss_esapi::handles::{KeyHandle, PcrHandle, TpmHandle};
+use tss_esapi::handles::{KeyHandle, PcrHandle};
 use tss_esapi::interface_types::algorithm::{
     AsymmetricAlgorithm, HashingAlgorithm, SignatureSchemeAlgorithm,
 };
@@ -209,16 +208,6 @@ pub fn import_ak_handle(ctx: &mut TssContext, ak: AttestationKey) -> Result<KeyH
     Ok(ak_handle)
 }
 
-pub fn load_ak_handle_from_persistent(
-    ctx: &mut TssContext,
-    handle_value: u32,
-) -> Result<KeyHandle> {
-    let p = PersistentTpmHandle::new(handle_value)
-        .map_err(|_| anyhow!("Invalid persistent AK handle"))?;
-    let obj = ctx.tr_from_tpm_public(TpmHandle::Persistent(p))?;
-    Ok(obj.into())
-}
-
 pub fn get_ak_pub(ak: AttestationKey) -> Result<rust_rsa::RsaPublicKey> {
     let mut context = create_ctx_without_session()?;
     let ek_handle = create_ek_object(&mut context, AsymmetricAlgorithm::Rsa, DefaultKey)?;
@@ -245,33 +234,10 @@ pub fn get_ak_pub(ak: AttestationKey) -> Result<rust_rsa::RsaPublicKey> {
     Ok(pkey)
 }
 
-pub fn get_ak_pub_from_persistent(handle_value: u32) -> Result<rust_rsa::RsaPublicKey> {
-    let mut context = create_ctx_without_session()?;
-    let p = PersistentTpmHandle::new(handle_value)
-        .map_err(|_| anyhow!("Invalid persistent AK handle"))?;
-    let obj = context.tr_from_tpm_public(TpmHandle::Persistent(p))?;
-    let (pk, _, _) = context.read_public(obj.into())?;
+pub fn get_quote(ak: AttestationKey, report_data: &[u8], pcr_algorithm: &str) -> Result<TpmQuote> {
+    let mut context = create_ctx_with_session()?;
+    let ak_handle = import_ak_handle(&mut context, ak.clone())?;
 
-    let decoded_key: DecodedKey = pk.try_into()?;
-    let DecodedKey::RsaPublicKey(rsa_pk) = decoded_key else {
-        bail!("unexpected key type");
-    };
-
-    let bytes = rsa_pk.modulus.as_unsigned_bytes_be();
-    let n = rust_rsa::BigUint::from_bytes_be(bytes);
-    let bytes = rsa_pk.public_exponent.as_unsigned_bytes_be();
-    let e = rust_rsa::BigUint::from_bytes_be(bytes);
-
-    let pkey = rust_rsa::RsaPublicKey::new(n, e)?;
-    Ok(pkey)
-}
-
-pub fn get_quote(
-    context: &mut TssContext,
-    ak_handle: KeyHandle,
-    report_data: &[u8],
-    pcr_algorithm: &str,
-) -> Result<TpmQuote> {
     let selection_list = create_pcr_selection_list(pcr_algorithm)?;
 
     let (attest, signature) = context
@@ -289,6 +255,7 @@ pub fn get_quote(
     let Signature::RsaSsa(rsa_sig) = signature.clone() else {
         bail!("Wrong Signature");
     };
+    drop(context);
 
     let engine = base64::engine::general_purpose::STANDARD;
 
