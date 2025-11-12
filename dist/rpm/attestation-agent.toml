@@ -1,15 +1,23 @@
 [token_configs]
 
 [token_configs.coco_as]
-url = "http://127.0.0.1:8000"
+url = "http://127.0.0.1:8081/api/attestation-service"
 
 [token_configs.kbs]
-url = "https://127.0.0.1:8080"
+url = "http://127.0.0.1:8081/api"
 
 # KBS certificate
 # cert = 
 
 [eventlog_config]
-enable_eventlog = false
-eventlog_algorithm = "sha384"
-init_pcr = 17
+enable_eventlog = true
+eventlog_algorithm = "sha256"
+init_pcr = 16
+
+[aa_instance]
+instance_type = "aliyun_ecs"
+
+[aa_instance.heartbeat]
+enabled = true
+trustee_url = "http://127.0.0.1:8081/api"
+interval_minutes = 5
