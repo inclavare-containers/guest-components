@@ -3,7 +3,7 @@
 %global libdir /usr/lib
 
 Name:		trustiflux
-Version:	1.4.4
+Version:	1.4.5
 Release:	%{release}%{?dist}
 Summary:	A daemon service running inside TEE (Trusted Execution Environment) to confidential resource related APIs
 
@@ -40,7 +40,7 @@ tar -xvf %{SOURCE1}
 
 %build
 # building the attestation-agent
-cargo build -p attestation-agent --bin ttrpc-aa --release --no-default-features --features bin,ttrpc,rust-crypto,coco_as,kbs,tdx-attester,system-attester,tpm-attester,instance_info,csv-attester,hygon-dcu-attester --target x86_64-unknown-linux-gnu
+OPENSSL_NO_VENDOR=1 cargo build -p attestation-agent --bin ttrpc-aa --release --no-default-features --features bin,ttrpc,rust-crypto,coco_as,kbs,tdx-attester,system-attester,tpm-attester,instance_info,csv-attester,hygon-dcu-attester --target x86_64-unknown-linux-gnu
 cargo build -p attestation-agent --bin ttrpc-aa-client --release --no-default-features --features bin,ttrpc,eventlog --target x86_64-unknown-linux-gnu
 
 # building the confidential-data-hub
@@ -103,6 +103,10 @@ rm -rf %{buildroot}
 %{libdir}/dracut/modules.d/99confidential-data-hub/module-setup.sh
 
 %changelog
+* Thu Nov 12 2025 Jiale Zhang <zhangjiale@linux.alibaba.com> - 1.4.5-1
+- TPM attester: Support TCG format AAEL
+- TPM attester: support keylime agent AK
+
 * Sat Oct 11 2025 Xynnn007 <mading.ma@alibaba-inc.com> -1.4.4-1
 - TDX Attester: fix CCEL generation
 
