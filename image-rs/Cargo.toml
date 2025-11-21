@@ -71,6 +71,7 @@ anyhow.workspace = true
 
 [dev-dependencies]
 cfg-if.workspace = true
+criterion = "0.5"
 nix = { workspace = true, features = ["user"] }
 ring.workspace = true
 rstest.workspace = true
@@ -187,3 +188,8 @@ kbs = []
 nydus = ["lazy_static", "nydus-api", "nydus-service"]
 
 verity = ["devicemapper"]
+
+[[bench]]
+name = "image-pull"
+harness = false
+test = false
