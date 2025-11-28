@@ -1,12 +1,19 @@
 use anyhow::{Context, Result};
-use log::debug;
+use log::{debug, warn};
 use reqwest::header::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
+use std::fs;
+use std::io::ErrorKind;
+use std::process::Command;
 
 use super::InstanceInfoFetcher;
 
 const BASE_URL: &str = "http://100.100.100.200/latest";
 const TTL_SECONDS: &str = "300";
+const PRODUCT_SERIAL_PATHS: [&str; 2] = [
+    "/sys/devices/virtual/dmi/id/product_serial",
+    "/sys/class/dmi/id/product_serial",
+];
 
 pub struct AliyunEcsInfo {}
 
@@ -14,7 +21,19 @@ pub struct AliyunEcsInfo {}
 impl InstanceInfoFetcher for AliyunEcsInfo {
     async fn get_instance_info(&self) -> Result<String> {
         let metadata_client = MetadataClient::new();
-        let ecs_info = metadata_client.get_ecs_info().await?;
+        let ecs_info = match metadata_client.get_ecs_info().await {
+            Ok(Some(info)) => Some(info),
+            Ok(None) => {
+                warn!("ECS metadata is unavailable; falling back to local system information");
+                build_local_ecs_info()
+            }
+            Err(err) => {
+                warn!(
+                    "Failed to retrieve ECS metadata: {err}. Falling back to local system information"
+                );
+                build_local_ecs_info()
+            }
+        };
         let ecs_info_str = serde_json::to_string(&ecs_info)?;
         Ok(ecs_info_str)
     }
@@ -134,4 +153,96 @@ impl MetadataClient {
 
         Ok(metadata)
     }
+}
+
+fn build_local_ecs_info() -> Option<EcsInfo> {
+    let instance_id = match get_system_serial_number() {
+        Some(id) => Some(id),
+        None => {
+            warn!("Unable to read system serial number for instance id fallback");
+            None
+        }
+    };
+
+    let instance_name = match get_system_fqdn() {
+        Some(name) => Some(name),
+        None => {
+            warn!("Unable to read system FQDN for instance name fallback");
+            None
+        }
+    };
+
+    if instance_id.is_none() && instance_name.is_none() {
+        None
+    } else {
+        Some(EcsInfo {
+            instance_id,
+            instance_name,
+            owner_account_id: None,
+            image_id: None,
+        })
+    }
+}
+
+fn get_system_serial_number() -> Option<String> {
+    for path in PRODUCT_SERIAL_PATHS {
+        match fs::read_to_string(path) {
+            Ok(serial) => {
+                let trimmed = serial.trim();
+                if !trimmed.is_empty() && trimmed != "None" {
+                    return Some(trimmed.to_string());
+                }
+            }
+            Err(err) if err.kind() == ErrorKind::NotFound => {}
+            Err(err) => debug!("Failed to read serial number from {path}: {err}"),
+        }
+    }
+
+    match Command::new("dmidecode")
+        .args(["-s", "system-serial-number"])
+        .output()
+    {
+        Ok(output) if output.status.success() => {
+            let serial = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !serial.is_empty() {
+                return Some(serial);
+            }
+        }
+        Ok(output) => debug!("dmidecode returned status {}", output.status),
+        Err(err) => debug!("Failed to execute dmidecode for serial number: {err}"),
+    }
+
+    None
+}
+
+fn get_system_fqdn() -> Option<String> {
+    if let Some(fqdn) = run_hostname_command(&["-f"]) {
+        if fqdn.contains('.') {
+            return Some(fqdn);
+        }
+    }
+
+    run_hostname_command(&[])
+}
+
+fn run_hostname_command(args: &[&str]) -> Option<String> {
+    match Command::new("hostname").args(args).output() {
+        Ok(output) if output.status.success() => {
+            let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !value.is_empty() {
+                return Some(value);
+            }
+        }
+        Ok(output) => {
+            debug!(
+                "hostname command {:?} failed with status {}",
+                args, output.status
+            );
+        }
+        Err(err) => {
+            debug!("Failed to execute hostname command {:?}: {err}", args);
+        }
+    }
+
+    None
 }
