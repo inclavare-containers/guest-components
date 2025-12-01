@@ -3,7 +3,7 @@
 %global libdir /usr/lib
 
 Name:		trustiflux
-Version:	1.4.5
+Version:	1.4.6
 Release:	%{release}%{?dist}
 Summary:	A daemon service running inside TEE (Trusted Execution Environment) to confidential resource related APIs
 
@@ -103,6 +103,10 @@ rm -rf %{buildroot}
 %{libdir}/dracut/modules.d/99confidential-data-hub/module-setup.sh
 
 %changelog
+* Mon Dec 1 2025 Jiale Zhang <zhangjiale@linux.alibaba.com> - 1.4.6-1
+- CI: Add SLSA provenance generation logic
+- AA instance info: aliyun ecs type support fqdn as instance name
+
 * Thu Nov 12 2025 Jiale Zhang <zhangjiale@linux.alibaba.com> - 1.4.5-1
 - TPM attester: Support TCG format AAEL
 - TPM attester: support keylime agent AK
