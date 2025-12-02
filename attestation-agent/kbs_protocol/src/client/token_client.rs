@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
+use std::env;
+
 use async_trait::async_trait;
 use kbs_types::{ErrorInformation, Response};
 use log::{debug, warn};
@@ -26,6 +28,24 @@ impl KbsClient<Box<dyn TokenProvider>> {
         self.tee_key = teekey;
         Ok(())
     }
+
+    fn use_attestation_header() -> bool {
+        matches!(
+            env::var("SPECIAL_RCAR_TOKEN_HEADER"),
+            Ok(val) if val.eq_ignore_ascii_case("true")
+        )
+    }
+
+    fn apply_token_header(
+        builder: reqwest::RequestBuilder,
+        token: &str,
+    ) -> reqwest::RequestBuilder {
+        if Self::use_attestation_header() {
+            builder.header("Attestation", token)
+        } else {
+            builder.bearer_auth(token)
+        }
+    }
 }
 
 #[async_trait]
@@ -47,10 +67,10 @@ impl KbsClientCapabilities for KbsClient<Box<dyn TokenProvider>> {
 
             let token = self.token.as_ref().expect("token must have been got");
 
-            let res = self
-                .http_client
-                .get(&remote_url)
-                .bearer_auth(&token.content)
+            let request =
+                Self::apply_token_header(self.http_client.get(&remote_url), &token.content);
+
+            let res = request
                 .send()
                 .await
                 .map_err(|e| Error::HttpError(format!("get failed: {e:?}")))?;
