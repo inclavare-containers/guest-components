@@ -90,6 +90,10 @@ struct GetTokenArgs {
     /// token type
     #[arg(short, long)]
     token_type: String,
+
+    /// additional data sent to attestation service
+    #[arg(short, long, default_value_t = String::new())]
+    additional_data: String,
 }
 
 #[derive(Args)]
@@ -173,6 +177,7 @@ pub async fn main() {
         Operation::GetToken(get_token_args) => {
             let req = GetTokenRequest {
                 TokenType: get_token_args.token_type,
+                AdditionalData: get_token_args.additional_data,
                 ..Default::default()
             };
             let res = client

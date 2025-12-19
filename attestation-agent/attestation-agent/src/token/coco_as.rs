@@ -15,7 +15,7 @@ pub struct CoCoASTokenGetter {
 }
 
 impl CoCoASTokenGetter {
-    pub async fn get_token(&self) -> Result<Vec<u8>> {
+    pub async fn get_token(&self, additional_data: &str) -> Result<Vec<u8>> {
         let primary_tee = attester::detect_tee_type();
         let attester = attester::BoxedAttester::try_from(primary_tee)?;
         let evidence = attester.get_evidence(vec![]).await?;
@@ -29,6 +29,7 @@ impl CoCoASTokenGetter {
             "verification_requests": [{
                 "tee": tee_string,
                 "evidence": URL_SAFE_NO_PAD.encode(serde_json::to_string(&evidence)?.as_bytes()),
+                "additional_data": additional_data,
             }],
             "policy_ids": std::env::var("COCO_AS_POLICY_ID")
                 .unwrap_or_default()
