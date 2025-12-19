@@ -59,7 +59,7 @@ use crate::{config::Config, eventlog::Event};
 #[async_trait]
 pub trait AttestationAPIs {
     /// Get attestation Token
-    async fn get_token(&self, token_type: &str) -> Result<Vec<u8>>;
+    async fn get_token(&self, token_type: &str, additional_data: &str) -> Result<Vec<u8>>;
 
     /// Get TEE hardware signed evidence that includes the runtime data.
     async fn get_evidence(&self, runtime_data: &[u8]) -> Result<Vec<u8>>;
@@ -167,7 +167,7 @@ impl AttestationAgent {
 
 #[async_trait]
 impl AttestationAPIs for AttestationAgent {
-    async fn get_token(&self, token_type: &str) -> Result<Vec<u8>> {
+    async fn get_token(&self, token_type: &str, additional_data: &str) -> Result<Vec<u8>> {
         let token_type = TokenType::from_str(token_type).context("Unsupported token type")?;
 
         match token_type {
@@ -201,7 +201,7 @@ impl AttestationAPIs for AttestationAgent {
                             "coco_as token config not configured in config file"
                         ))?,
                 )
-                .get_token()
+                .get_token(additional_data)
                 .await
             }
         }
