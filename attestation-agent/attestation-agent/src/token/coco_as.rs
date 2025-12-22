@@ -44,6 +44,10 @@ impl CoCoASTokenGetter {
             .post(attest_endpoint)
             .header("Content-Type", "application/json");
 
+        if let Result::Ok(api_key) = std::env::var("TRUSTEE_API_KEY") {
+            request_builder = request_builder.bearer_auth(api_key);
+        }
+
         // Add AAInstanceInfo header if the environment variable is set
         if let Result::Ok(aa_instance_info) = std::env::var("AA_INSTANCE_INFO") {
             request_builder = request_builder.header("AAInstanceInfo", aa_instance_info);

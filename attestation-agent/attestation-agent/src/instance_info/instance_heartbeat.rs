@@ -58,9 +58,15 @@ impl InstanceHeartbeat {
         let client = reqwest::Client::new();
 
         // Send POST request with AAInstanceInfo header
-        let response = client
+        let mut request_builder = client
             .post(&heartbeat_url)
-            .header("AAInstanceInfo", aa_instance_info)
+            .header("AAInstanceInfo", aa_instance_info);
+
+        if let Ok(api_key) = std::env::var("TRUSTEE_API_KEY") {
+            request_builder = request_builder.bearer_auth(api_key);
+        }
+
+        let response = request_builder
             .send()
             .await
             .with_context(|| format!("Failed to send heartbeat to {}", heartbeat_url))?;

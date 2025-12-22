@@ -29,19 +29,13 @@ impl KbsClient<Box<dyn TokenProvider>> {
         Ok(())
     }
 
-    fn use_attestation_header() -> bool {
-        matches!(
-            env::var("SPECIAL_RCAR_TOKEN_HEADER"),
-            Ok(val) if val.eq_ignore_ascii_case("true")
-        )
-    }
-
     fn apply_token_header(
         builder: reqwest::RequestBuilder,
         token: &str,
     ) -> reqwest::RequestBuilder {
-        if Self::use_attestation_header() {
-            builder.header("Attestation", token)
+        let api_key = env::var("TRUSTEE_API_KEY").ok().filter(|k| !k.is_empty());
+        if let Some(ref key) = api_key {
+            builder.bearer_auth(key).header("Attestation", token)
         } else {
             builder.bearer_auth(token)
         }

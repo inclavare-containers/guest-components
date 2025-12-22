@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
-use std::time::Duration;
+use std::{env, time::Duration};
 
 use anyhow::{bail, Context};
 use async_trait::async_trait;
@@ -233,13 +233,17 @@ impl KbsClient<Box<dyn EvidenceProvider>> {
 
         debug!("send auth request {request:?} to {auth_endpoint}");
 
-        let resp = self
+        let mut request_builder = self
             .http_client
             .post(auth_endpoint)
             .header("Content-Type", "application/json")
-            .json(&request)
-            .send()
-            .await?;
+            .json(&request);
+
+        if let Some(api_key) = env::var("TRUSTEE_API_KEY").ok().filter(|k| !k.is_empty()) {
+            request_builder = request_builder.bearer_auth(api_key);
+        }
+
+        let resp = request_builder.send().await?;
 
         match resp.status() {
             reqwest::StatusCode::OK => {
@@ -304,6 +308,10 @@ impl KbsClient<Box<dyn EvidenceProvider>> {
             request_builder = request_builder.header("AAInstanceInfo", aa_instance_info);
         }
 
+        if let Some(api_key) = env::var("TRUSTEE_API_KEY").ok().filter(|k| !k.is_empty()) {
+            request_builder = request_builder.bearer_auth(api_key);
+        }
+
         let attest_response = request_builder.json(&attest).send().await?;
 
         match attest_response.status() {
@@ -342,9 +350,23 @@ impl KbsClientCapabilities for KbsClient<Box<dyn EvidenceProvider>> {
         for attempt in 1..=KBS_GET_RESOURCE_MAX_ATTEMPT {
             debug!("KBS client: trying to request KBS, attempt {attempt}");
 
-            let res = self
-                .http_client
-                .get(&remote_url)
+            let mut request_builder = self.http_client.get(&remote_url);
+
+            if let Some(api_key) = env::var("TRUSTEE_API_KEY").ok().filter(|k| !k.is_empty()) {
+                if self.token.is_none() {
+                    self.rcar_handshake()
+                        .await
+                        .map_err(|e| Error::RcarHandshake(format!("{e:#?}")))?;
+                }
+
+                if let Some(token) = &self.token {
+                    request_builder = request_builder
+                        .header("Attestation", &token.content)
+                        .bearer_auth(api_key);
+                }
+            }
+
+            let res = request_builder
                 .send()
                 .await
                 .map_err(|e| Error::HttpError(format!("get failed: {e:?}")))?;
