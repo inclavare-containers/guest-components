@@ -90,11 +90,11 @@ jobs:
 
             pushd "$workdir" >/dev/null
             # Generate sha256 for each file inside the RPM.
-            # Subject name format: "<rpm-basename>:<path-inside-rpm>"
+            # Subject name format: "<absolute-path-inside-rpm>"
             while IFS= read -r -d '' f; do
               rel="${f#./}"
               sha="$(sha256sum "$f" | awk '{print $1}')"
-              echo "$sha  ${rpm##*/}:$rel" >> "$subjects_txt"
+              echo "$sha  /$rel" >> "$subjects_txt"
             done < <(find . -type f -print0 | sort -z)
             popd >/dev/null
 
