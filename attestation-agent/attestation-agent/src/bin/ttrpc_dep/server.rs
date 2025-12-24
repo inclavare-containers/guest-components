@@ -34,7 +34,7 @@ impl AttestationAgentService for AA {
 
         let token = self
             .inner
-            .get_token(&req.TokenType, &req.AdditionalData)
+            .get_token(&req.TokenType, req.AdditionalData.as_deref())
             .await
             .map_err(|e| {
                 error!("AA (ttrpc): get token failed\n {e:?}");
