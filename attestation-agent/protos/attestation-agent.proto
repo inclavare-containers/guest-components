@@ -17,7 +17,7 @@ message GetEvidenceResponse {
 
 message GetTokenRequest {
     string TokenType = 1;
-    string AdditionalData = 2;
+    optional string AdditionalData = 2;
 }
 
 message GetTokenResponse {
