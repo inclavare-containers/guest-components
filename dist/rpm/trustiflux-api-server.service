@@ -5,10 +5,9 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/trustiflux-api-server --bind 0.0.0.0:8006 --features all --aa_addr unix:///run/confidential-containers/attestation-agent/attestation-agent.sock --cdh_addr unix:///run/confidential-containers/cdh.sock
+ExecStart=/usr/bin/trustiflux-api-server --config /etc/trustiflux/trustiflux-api-server.toml
 Restart=on-failure
 RestartSec=1s
 
 [Install]
 WantedBy=multi-user.target
-

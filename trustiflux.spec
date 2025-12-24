@@ -94,6 +94,8 @@ install -m 755 target/x86_64-unknown-linux-gnu/release/ttrpc-cdh-tool %{buildroo
 # installing the api-server-rest
 install -d -p %{buildroot}%{libdir}/systemd/system
 install -m 644 dist/rpm/trustiflux-api-server.service %{buildroot}%{libdir}/systemd/system/trustiflux-api-server.service
+install -d -p %{buildroot}%{config_dir}
+install -m 644 dist/rpm/trustiflux-api-server.toml %{buildroot}%{config_dir}/trustiflux-api-server.toml
 install -d -p %{buildroot}%{_prefix}/bin
 install -m 755 target/x86_64-unknown-linux-gnu/release/api-server-rest %{buildroot}%{_prefix}/bin/trustiflux-api-server
 
@@ -119,6 +121,8 @@ rm -rf %{buildroot}
 %{libdir}/dracut/modules.d/99attestation-agent/attestation-agent-platform-detect.service
 
 %files -n trustiflux-api-server
+%dir %{config_dir}
+%config(noreplace) %{config_dir}/trustiflux-api-server.toml
 %{_bindir}/trustiflux-api-server
 %{libdir}/systemd/system/trustiflux-api-server.service
 

@@ -1,0 +1,12 @@
+# Bind address for the REST API server
+bind = "0.0.0.0:8006"
+
+# Whether to forward Confidential Data Hub APIs
+enable_cdh = false
+# Socket address of the Confidential Data Hub ttrpc service
+cdh_socket = "unix:///run/confidential-containers/cdh.sock"
+
+# Whether to forward Attestation Agent APIs
+enable_aa = true
+# Socket address of the Attestation Agent ttrpc service
+aa_socket = "unix:///run/confidential-containers/attestation-agent/attestation-agent.sock"
