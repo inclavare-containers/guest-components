@@ -53,6 +53,8 @@ cargo build -p attestation-agent --bin ttrpc-aa-client --release --no-default-fe
 
 # building the confidential-data-hub
 cargo build -p confidential-data-hub --release --bin cdh-oneshot --no-default-features --features "bin,aliyun,kbs" --target x86_64-unknown-linux-gnu
+cargo build -p confidential-data-hub --release --bin ttrpc-cdh --no-default-features --features "bin,aliyun,kbs,ttrpc" --target x86_64-unknown-linux-gnu
+cargo build -p confidential-data-hub --release --bin ttrpc-cdh-tool --no-default-features --features "bin,ttrpc" --target x86_64-unknown-linux-gnu
 
 # building the api-server-rest
 cargo build -p api-server-rest --release --target x86_64-unknown-linux-gnu
@@ -82,8 +84,12 @@ install -m 644 dist/dracut/modules.d/99attestation-agent/attestation-agent-platf
 # installing the confidential-data-hub
 install -d -p %{buildroot}/etc/trustiflux
 install -m 644 dist/rpm/confidential-data-hub.toml %{buildroot}%{config_dir}/confidential-data-hub.toml
+install -d -p %{buildroot}%{libdir}/systemd/system
+install -m 644 dist/rpm/confidential-data-hub-daemon.service %{buildroot}%{libdir}/systemd/system/confidential-data-hub-daemon.service
 install -d -p %{buildroot}%{_prefix}/bin
 install -m 755 target/x86_64-unknown-linux-gnu/release/cdh-oneshot %{buildroot}%{_prefix}/bin/confidential-data-hub
+install -m 755 target/x86_64-unknown-linux-gnu/release/ttrpc-cdh %{buildroot}%{_prefix}/bin/confidential-data-hub-daemon
+install -m 755 target/x86_64-unknown-linux-gnu/release/ttrpc-cdh-tool %{buildroot}%{_prefix}/bin/confidential-data-hub-client
 
 # installing the api-server-rest
 install -d -p %{buildroot}%{libdir}/systemd/system
@@ -118,7 +124,10 @@ rm -rf %{buildroot}
 
 %files -n confidential-data-hub
 %{_bindir}/confidential-data-hub
+%{_bindir}/confidential-data-hub-daemon
+%{_bindir}/confidential-data-hub-client
 %{config_dir}/confidential-data-hub.toml
+%{libdir}/systemd/system/confidential-data-hub-daemon.service
 %dir %{libdir}/dracut/modules.d/99confidential-data-hub
 %{libdir}/dracut/modules.d/99confidential-data-hub/confidential-data-hub.toml
 %{libdir}/dracut/modules.d/99confidential-data-hub/module-setup.sh
