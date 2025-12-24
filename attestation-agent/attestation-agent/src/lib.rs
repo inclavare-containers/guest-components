@@ -59,7 +59,7 @@ use crate::{config::Config, eventlog::Event};
 #[async_trait]
 pub trait AttestationAPIs {
     /// Get attestation Token
-    async fn get_token(&self, token_type: &str, additional_data: &str) -> Result<Vec<u8>>;
+    async fn get_token(&self, token_type: &str, additional_data: Option<&str>) -> Result<Vec<u8>>;
 
     /// Get TEE hardware signed evidence that includes the runtime data.
     async fn get_evidence(&self, runtime_data: &[u8]) -> Result<Vec<u8>>;
@@ -167,7 +167,7 @@ impl AttestationAgent {
 
 #[async_trait]
 impl AttestationAPIs for AttestationAgent {
-    async fn get_token(&self, token_type: &str, additional_data: &str) -> Result<Vec<u8>> {
+    async fn get_token(&self, token_type: &str, additional_data: Option<&str>) -> Result<Vec<u8>> {
         let token_type = TokenType::from_str(token_type).context("Unsupported token type")?;
 
         match token_type {
@@ -294,7 +294,7 @@ mod tests {
         let res = AttestationAgent::new(None);
         let aa = res.unwrap();
         assert_eq!(aa.get_tee_type(), Tee::Sample);
-        assert!(aa.get_token("kbs").await.is_err());
+        assert!(aa.get_token("kbs", None).await.is_err());
         assert!(aa.get_evidence(&[]).await.is_ok());
         assert!(aa.bind_init_data(&[]).await.is_ok());
         assert!(aa

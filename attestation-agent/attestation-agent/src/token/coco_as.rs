@@ -15,7 +15,7 @@ pub struct CoCoASTokenGetter {
 }
 
 impl CoCoASTokenGetter {
-    pub async fn get_token(&self, additional_data: &str) -> Result<Vec<u8>> {
+    pub async fn get_token(&self, additional_data: Option<&str>) -> Result<Vec<u8>> {
         let primary_tee = attester::detect_tee_type();
         let attester = attester::BoxedAttester::try_from(primary_tee)?;
         let evidence = attester.get_evidence(vec![]).await?;
@@ -95,7 +95,7 @@ mod tests {
             url: "http://localhost:8080".to_string(),
         };
         let getter = CoCoASTokenGetter::new(&config);
-        let result = getter.get_token().await;
+        let result = getter.get_token(None).await;
         assert!(result.is_err());
     }
 }
