@@ -7,6 +7,7 @@ use base64::Engine;
 use clap::{arg, command, Args, Parser, Subcommand};
 use const_format::concatcp;
 use parse_evidence::parse_evidence;
+use std::env;
 use ttrpc::context;
 use ttrpc_dep::ttrpc_protocol::{
     attestation_agent::{
@@ -18,7 +19,19 @@ use ttrpc_dep::ttrpc_protocol::{
 mod parse_evidence;
 mod ttrpc_dep;
 
-const TIMEOUT: i64 = 5 * 1000 * 1000 * 1000;
+const DEFAULT_TIMEOUT_SEC: i64 = 20;
+
+fn client_timeout_ns() -> i64 {
+    const NANOS_PER_SEC: i64 = 1_000_000_000;
+
+    let secs = env::var("AA_CLIENT_TIMEOUT")
+        .ok()
+        .and_then(|v| v.trim().parse::<i64>().ok())
+        .filter(|&s| s > 0)
+        .unwrap_or(DEFAULT_TIMEOUT_SEC);
+
+    secs.saturating_mul(NANOS_PER_SEC)
+}
 
 const DEFAULT_UNIX_SOCKET_DIR: &str = "/run/confidential-containers/attestation-agent/";
 const UNIX_SOCKET_PREFIX: &str = "unix://";
@@ -102,6 +115,7 @@ struct ExtendRuntimeMeasurementArgs {
 #[tokio::main]
 pub async fn main() {
     let args = Cli::parse();
+    let timeout = client_timeout_ns();
     let inner =
         ttrpc::asynchronous::Client::connect(&args.attestation_sock).expect("connect ttrpc socket");
     let client = AttestationAgentServiceClient::new(inner);
@@ -111,7 +125,7 @@ pub async fn main() {
                 ..Default::default()
             };
             let res = client
-                .get_tee_type(context::with_timeout(TIMEOUT), &req)
+                .get_tee_type(context::with_timeout(timeout), &req)
                 .await
                 .expect("request to AA");
             println!("{}", res.tee);
@@ -125,7 +139,7 @@ pub async fn main() {
                 ..Default::default()
             };
             let res = client
-                .get_evidence(context::with_timeout(TIMEOUT), &req)
+                .get_evidence(context::with_timeout(timeout), &req)
                 .await
                 .expect("request to AA");
             let evidence = String::from_utf8(res.Evidence).unwrap();
@@ -140,7 +154,7 @@ pub async fn main() {
                 ..Default::default()
             };
             let evidence_res = client
-                .get_evidence(context::with_timeout(TIMEOUT), &evidence_req)
+                .get_evidence(context::with_timeout(timeout), &evidence_req)
                 .await
                 .expect("request to AA");
             let evidence = String::from_utf8(evidence_res.Evidence).unwrap();
@@ -148,7 +162,7 @@ pub async fn main() {
                 ..Default::default()
             };
             let tee_type_res = client
-                .get_tee_type(context::with_timeout(TIMEOUT), &tee_type_req)
+                .get_tee_type(context::with_timeout(timeout), &tee_type_req)
                 .await
                 .expect("request to AA");
             println!(
@@ -162,7 +176,7 @@ pub async fn main() {
                 ..Default::default()
             };
             let res = client
-                .get_token(context::with_timeout(TIMEOUT), &req)
+                .get_token(context::with_timeout(timeout), &req)
                 .await
                 .expect("request to AA");
             let token = String::from_utf8(res.Token).unwrap();
@@ -178,7 +192,7 @@ pub async fn main() {
             };
 
             client
-                .extend_runtime_measurement(context::with_timeout(TIMEOUT), &req)
+                .extend_runtime_measurement(context::with_timeout(timeout), &req)
                 .await
                 .expect("request to AA");
             println!("Extended.");
