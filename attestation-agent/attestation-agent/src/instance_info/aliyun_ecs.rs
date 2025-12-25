@@ -5,11 +5,16 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::ErrorKind;
 use std::process::Command;
+use std::time::Duration;
 
 use super::InstanceInfoFetcher;
 
 const BASE_URL: &str = "http://100.100.100.200/latest";
 const TTL_SECONDS: &str = "300";
+// Avoid blocking AA startup for a long time when not running on Aliyun ECS.
+// These timeouts bound the metadata HTTP requests (token + metadata fields).
+const METADATA_CONNECT_TIMEOUT_MS: u64 = 1000;
+const METADATA_REQUEST_TIMEOUT_MS: u64 = 1000;
 const PRODUCT_SERIAL_PATHS: [&str; 2] = [
     "/sys/devices/virtual/dmi/id/product_serial",
     "/sys/class/dmi/id/product_serial",
@@ -59,9 +64,21 @@ impl Default for MetadataClient {
 
 impl MetadataClient {
     pub fn new() -> Self {
-        MetadataClient {
-            client: reqwest::Client::new(),
-        }
+        let connect_timeout = Duration::from_millis(METADATA_CONNECT_TIMEOUT_MS);
+        let request_timeout = Duration::from_millis(METADATA_REQUEST_TIMEOUT_MS);
+
+        let client = reqwest::Client::builder()
+            .connect_timeout(connect_timeout)
+            .timeout(request_timeout)
+            .build()
+            .unwrap_or_else(|e| {
+                // If building a client with timeouts fails for some reason, fall back
+                // to the default client rather than breaking AA startup.
+                warn!("Failed to build metadata reqwest client with timeouts: {e}");
+                reqwest::Client::new()
+            });
+
+        MetadataClient { client }
     }
 
     pub async fn get_ecs_info(&self) -> Result<Option<EcsInfo>> {
