@@ -4,15 +4,17 @@
 //
 
 use crate::router::ApiHandler;
-use crate::ttrpc_proto::attestation_agent::{GetEvidenceRequest, GetTokenRequest};
+use crate::ttrpc_proto::attestation_agent::{
+    ExtendRuntimeMeasurementRequest, GetEvidenceRequest, GetTokenRequest,
+};
 use crate::ttrpc_proto::attestation_agent_ttrpc::AttestationAgentServiceClient;
-use anyhow::*;
+use crate::TTRPC_TIMEOUT;
+use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
-use hyper::{Body, Method, Request, Response};
+use hyper::{body, Body, Method, Request, Response};
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::net::SocketAddr;
-
-use crate::TTRPC_TIMEOUT;
 
 /// ROOT path for Confidential Data Hub API
 pub const AA_ROOT: &str = "/aa";
@@ -20,6 +22,16 @@ pub const AA_ROOT: &str = "/aa";
 /// URL for querying CDH get resource API
 const AA_TOKEN_URL: &str = "/token";
 const AA_EVIDENCE_URL: &str = "/evidence";
+const AA_AAEL_URL: &str = "/aael";
+
+#[derive(Debug, Deserialize)]
+struct AaelRequest {
+    domain: String,
+    operation: String,
+    content: String,
+    #[serde(default)]
+    register_index: Option<u64>,
+}
 
 pub struct AAClient {
     client: AttestationAgentServiceClient,
@@ -50,30 +62,64 @@ impl ApiHandler for AAClient {
             .map(|v| form_urlencoded::parse(v.as_bytes()).into_owned().collect())
             .unwrap_or_default();
 
-        if params.len() != 1 {
-            return self.not_allowed();
-        }
-
         match url_path {
-            AA_TOKEN_URL => match params.get("token_type") {
-                Some(token_type) => match self.get_token(token_type).await {
-                    std::result::Result::Ok(results) => return self.octet_stream_response(results),
-                    Err(e) => return self.internal_error(e.to_string()),
-                },
-                None => return self.bad_request(),
-            },
-            AA_EVIDENCE_URL => match params.get("runtime_data") {
-                Some(runtime_data) => {
-                    match self.get_evidence(&runtime_data.clone().into_bytes()).await {
-                        std::result::Result::Ok(results) => {
-                            return self.octet_stream_response(results)
-                        }
-                        Err(e) => return self.internal_error(e.to_string()),
-                    }
+            AA_TOKEN_URL => {
+                if req.method() != Method::GET {
+                    return self.not_allowed();
                 }
-                None => return self.bad_request(),
-            },
-
+                if params.len() != 1 {
+                    return self.not_allowed();
+                }
+                match params.get("token_type") {
+                    Some(token_type) => match self.get_token(token_type).await {
+                        Ok(results) => return self.octet_stream_response(results),
+                        Err(e) => return self.internal_error(e.to_string()),
+                    },
+                    None => return self.bad_request(),
+                }
+            }
+            AA_EVIDENCE_URL => {
+                if req.method() != Method::GET {
+                    return self.not_allowed();
+                }
+                if params.len() != 1 {
+                    return self.not_allowed();
+                }
+                match params.get("runtime_data") {
+                    Some(runtime_data) => match self.get_evidence(&runtime_data.clone().into_bytes()).await {
+                        Ok(results) => return self.octet_stream_response(results),
+                        Err(e) => return self.internal_error(e.to_string()),
+                    },
+                    None => return self.bad_request(),
+                }
+            }
+            AA_AAEL_URL => {
+                if req.method() != Method::POST {
+                    return self.not_allowed();
+                }
+                let body_bytes = body::to_bytes(req.into_body())
+                    .await
+                    .map_err(|e| anyhow!("Failed to read request body: {}", e))?;
+                let payload: AaelRequest = serde_json::from_slice(&body_bytes).map_err(|e| {
+                    anyhow!("Failed to parse request body as JSON: {}", e)
+                })?;
+                match self
+                    .extend_runtime_measurement(
+                        payload.register_index,
+                        &payload.domain,
+                        &payload.operation,
+                        &payload.content,
+                    )
+                    .await
+                {
+                    Ok(_) => {
+                        return Ok(Response::builder()
+                            .status(hyper::StatusCode::OK)
+                            .body(Body::empty())?)
+                    }
+                    Err(e) => return self.internal_error(e.to_string()),
+                }
+            }
             _ => {
                 return self.not_found();
             }
@@ -115,5 +161,30 @@ impl AAClient {
             .get_evidence(ttrpc::context::with_timeout(TTRPC_TIMEOUT), &req)
             .await?;
         Ok(res.Evidence)
+    }
+
+    pub async fn extend_runtime_measurement(
+        &self,
+        register_index: Option<u64>,
+        domain: &str,
+        operation: &str,
+        content: &str,
+    ) -> Result<()> {
+        let req = ExtendRuntimeMeasurementRequest {
+            Domain: domain.to_string(),
+            Operation: operation.to_string(),
+            Content: content.to_string(),
+            RegisterIndex: register_index,
+            ..Default::default()
+        };
+
+        self.client
+            .extend_runtime_measurement(
+                ttrpc::context::with_timeout(TTRPC_TIMEOUT),
+                &req,
+            )
+            .await
+            .context("ttrpc extend_runtime_measurement failed")?;
+        Ok(())
     }
 }

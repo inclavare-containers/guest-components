@@ -66,7 +66,10 @@ async fn main() -> Result<()> {
     if config.enable_aa {
         router.register_route(
             AA_ROOT,
-            Box::new(AAClient::new(&config.aa_socket, vec![Method::GET])?),
+            Box::new(AAClient::new(
+                &config.aa_socket,
+                vec![Method::GET, Method::POST],
+            )?),
         );
     }
 
