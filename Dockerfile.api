@@ -1,26 +1,58 @@
-# Multi-stage build for api-server-rest
-FROM rust:1.74-bullseye AS builder
-WORKDIR /workspace
+# Multi-stage build for api-server-rest (align with anolis23 base like AA)
+FROM registry.openanolis.cn/openanolis/anolisos:23.2 AS builder
 
-# Pre-fetch deps
-COPY Cargo.toml Cargo.lock ./
-COPY api-server-rest/Cargo.toml api-server-rest/Cargo.toml
-RUN mkdir -p api-server-rest/src && echo "fn main() {}" > api-server-rest/src/main.rs
-RUN cargo fetch
+ARG ALL_PROXY
+ARG NO_PROXY
+ARG CARGO_JOBS
+ENV ALL_PROXY=$ALL_PROXY
+ENV NO_PROXY=$NO_PROXY
+
+WORKDIR /usr/src/guest-components
+COPY . .
+
+RUN yum -y install yum-utils && \
+    yum install -y --setopt=install_weak_deps=False --nogpgcheck \
+        clang \
+        protobuf-devel \
+        git \
+        curl \
+        openssl-devel \
+        pkgconfig \
+        make && \
+    yum clean all && \
+    rm -rf /tmp/*
+
+# Install Rust
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+RUN rustup toolchain install 1.76.0-x86_64-unknown-linux-gnu
+
+# Optional cargo jobs
+RUN if [ -n "${CARGO_JOBS}" ]; then \
+      mkdir -p /root/.cargo; \
+      printf '[build]\njobs = %s\n' "${CARGO_JOBS}" >> /root/.cargo/config.toml; \
+    fi
+
+# Proxy-friendly git fetch
+RUN if [ -n "${ALL_PROXY}" ]; then \
+      mkdir -p /root/.cargo; \
+      printf "[net]\ngit-fetch-with-cli = true" >> /root/.cargo/config.toml; \
+    fi
 
 # Build
-COPY . .
-RUN cargo build -p api-server-rest --release
+RUN cargo +1.76.0 fetch -p api-server-rest --locked
+RUN cargo +1.76.0 build --bin api-server-rest --release --locked
 
-FROM debian:bullseye-slim
-RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /workspace/target/release/api-server-rest /usr/bin/api-server-rest
+FROM registry.openanolis.cn/openanolis/anolisos:23.2
+RUN yum install -y --setopt=install_weak_deps=False --nogpgcheck ca-certificates && \
+    yum clean all && \
+    rm -rf /tmp/*
+
+COPY --from=builder /usr/src/guest-components/target/release/api-server-rest /usr/local/bin/trustiflux-api-server
+RUN mkdir -p /etc/trustiflux
+COPY dist/rpm/trustiflux-api-server.toml /etc/trustiflux/trustiflux-api-server.toml
 
 EXPOSE 8006
-ENV BIND=0.0.0.0:8006 \
-    FEATURES=all \
-    AA_ADDR=unix:///run/confidential-containers/attestation-agent/attestation-agent.sock \
-    CDH_ADDR=unix:///run/confidential-containers/cdh.sock
-
-CMD ["/bin/sh", "-c", "/usr/bin/api-server-rest --bind ${BIND} --features ${FEATURES} --aa_addr ${AA_ADDR} --cdh_addr ${CDH_ADDR}"]
+ENTRYPOINT ["/usr/local/bin/trustiflux-api-server"]
+CMD []
 
