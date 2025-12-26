@@ -2,11 +2,8 @@ name: Build RPM Package
 
 on:
   push:
-    branches:
-      - main
     tags:
       - "v*.*.*"
-  pull_request:
 
 permissions:
   contents: write
@@ -44,16 +41,52 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@1.75.0
 
-      - name: Build RPM package
+      - name: Create buildspec from template for AnolisOS23
+        run: |
+          GITHUB_RELEASE="${GITHUB_REF#refs/tags/}"
+          VERSION=$(grep -m1 '^Version:' trustiflux.spec | awk '{print $2}')
+          RELEASE=$(grep -m1 '^%define release' trustiflux.spec | awk '{print $3}')
+          
+          echo "Using GITHUB_RELEASE: $GITHUB_RELEASE"
+          echo "Using VERSION: $VERSION"
+          echo "Using RELEASE:   $RELEASE"
+
+          export GITHUB_RELEASE VERSION RELEASE
+          envsubst '$GITHUB_RELEASE $VERSION $RELEASE' \
+            < dist/buildspec/trustiflux.an23.buildspec.yaml.template \
+            > dist/buildspec/trustiflux.an23.buildspec.yaml
+
+      - name: Create build manifest
         run: |
           make create-tarball
+      
+      - name: Release build manifest
+        uses: softprops/action-gh-release@v2
+        with:
+          fail_on_unmatched_files: true
+          prerelease: ${{ env.PRE_RELEASE }}
+          files: |
+            /tmp/v*.tar.gz
+            /tmp/guest-components-v*-vendor.tar.gz
+            ./dist/buildspec/trustiflux.an23.buildspec.yaml
+
+      - name: Build AnolisOS23 RPM package
+        uses: 1570005763/GuanFu/.github/actions/guanfu-build@v1.0.0
+        with:
+          spec_path: dist/buildspec/trustiflux.an23.buildspec.yaml
+
+      - name: Place AnolisOS23 RPM packages
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/rpmbuild
+          cp -r /tmp/rpmbuild/SRPMS/ $GITHUB_WORKSPACE/rpmbuild/
+          cp -r /tmp/rpmbuild/RPMS/ $GITHUB_WORKSPACE/rpmbuild/
+      
+      - name: Build AnolisOS8 RPM package
+        run: |
           make rpm-build-in-al3-docker
-          make rpm-build-in-an23-docker
           mkdir -p $GITHUB_WORKSPACE/rpmbuild
           cp -r ~/rpmbuild/SRPMS/ $GITHUB_WORKSPACE/rpmbuild/
           cp -r ~/rpmbuild/RPMS/ $GITHUB_WORKSPACE/rpmbuild/
-          mkdir -p $GITHUB_WORKSPACE/rpmbuild/SOURCES/
-          cp -r /tmp/guest-components-*.tar.gz $GITHUB_WORKSPACE/rpmbuild/SOURCES/
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -61,7 +94,6 @@ jobs:
           name: rpm-packages
           if-no-files-found: error
           path: |
-            ./rpmbuild/SOURCES/guest-components-*.tar.gz
             ./rpmbuild/SRPMS/*.src.rpm
             ./rpmbuild/RPMS/*/*.rpm
 
@@ -102,6 +134,7 @@ jobs:
         with:
           path: ./
           merge-multiple: false
+
       - name: Install RPM packages
         run: |
           set -e
@@ -140,13 +173,13 @@ jobs:
         with:
           path: ./
           merge-multiple: false
+
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
           fail_on_unmatched_files: true
           prerelease: ${{ env.PRE_RELEASE }}
           files: |
-            ./rpm-packages/SOURCES/guest-components-*.tar.gz
             ./rpm-packages/SRPMS/*.src.rpm
             ./rpm-packages/RPMS/*/*.rpm
             ./rpm-provenance/*.intoto.jsonl
@@ -193,13 +226,9 @@ jobs:
           done
           slsa_json="[${slsa_entries[*]}]"
 
-          cat > rvds_payload.json <<EOF
-{
-  "artifact_type": "rpm",
-  "slsa_provenance": ${slsa_json},
-  "artifacts_download_url": ${urls_json}
-}
-EOF
+          # Use jq to safely create the JSON payload file, preventing any formatting or escaping issues
+          echo '{}' | jq --arg slsa "${slsa_json}" --arg urls "${urls_json}" \
+            '.artifact_type = "rpm" | .slsa_provenance = ($slsa | fromjson) | .artifacts_download_url = ($urls | fromjson)' > rvds_payload.json
 
           echo "Sending release event to RVDS at ${RVDS_ENDPOINT}"
           curl --fail --show-error --silent \
