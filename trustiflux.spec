@@ -3,7 +3,7 @@
 %global libdir /usr/lib
 
 Name:		trustiflux
-Version:	1.4.6
+Version:	1.4.8
 Release:	%{release}%{?dist}
 Summary:	A daemon service running inside TEE (Trusted Execution Environment) to confidential resource related APIs
 
@@ -137,6 +137,17 @@ rm -rf %{buildroot}
 %{libdir}/dracut/modules.d/99confidential-data-hub/module-setup.sh
 
 %changelog
+* Mon Dec 29 2025 Jiale Zhang <zhangjiale@linux.alibaba.com> - 1.4.8-1
+- kbs protocol: support carry attest token via Attestation header
+- Release CI: support push event to RVDS
+- RPM spec: add api-server-rest as trustiflux-api-server
+- Sample attester: Support dummy measurement register
+- Support trustee API key
+- slsa provenance: use absolute path as file measurement name
+- Add CDH daemon and fix timeout nits
+- API Server: support /aa/aael API
+- Update CI: use script for long shell operations
+
 * Mon Dec 1 2025 Jiale Zhang <zhangjiale@linux.alibaba.com> - 1.4.6-1
 - CI: Add SLSA provenance generation logic
 - AA instance info: aliyun ecs type support fqdn as instance name
