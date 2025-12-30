@@ -64,6 +64,76 @@ jobs:
             ./rpmbuild/SOURCES/guest-components-*.tar.gz
             ./rpmbuild/SRPMS/*.src.rpm
             ./rpmbuild/RPMS/*/*.rpm
+    
+  guanfu-build:
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: 'true'
+
+      - uses: dtolnay/rust-toolchain@1.75.0
+
+      - name: Create buildspec from template for AnolisOS23
+        run: |
+          GITHUB_RELEASE="${GITHUB_REF#refs/tags/}"
+          VERSION=$(grep -m1 '^Version:' trustiflux.spec | awk '{print $2}')
+          RELEASE=$(grep -m1 '^%define release' trustiflux.spec | awk '{print $3}')
+          
+          echo "Using GITHUB_RELEASE: $GITHUB_RELEASE"
+          echo "Using VERSION: $VERSION"
+          echo "Using RELEASE: $RELEASE"
+
+          export GITHUB_RELEASE VERSION RELEASE
+          envsubst '$GITHUB_RELEASE $VERSION $RELEASE' \
+            < dist/buildspec/trustiflux.an23.buildspec.yaml.template \
+            > dist/buildspec/trustiflux.an23.buildspec.yaml
+
+      - name: Create build manifest
+        run: |
+          make create-tarball
+          for pattern in '/tmp/v*.tar.gz' '/tmp/guest-components-*.tar.gz'; do
+            for f in $pattern; do
+              mv "$f" "/tmp/reproducible-$(basename "$f")"
+            done
+          done
+      
+      - name: Release build manifest
+        uses: softprops/action-gh-release@v2
+        with:
+          fail_on_unmatched_files: true
+          prerelease: ${{ env.PRE_RELEASE }}
+          files: |
+            /tmp/reproducible-v*.tar.gz
+            /tmp/reproducible-guest-components-v*-vendor.tar.gz
+            ./dist/buildspec/trustiflux.an23.buildspec.yaml
+
+      - name: Build AnolisOS23 RPM package
+        uses: 1570005763/GuanFu/.github/actions/guanfu-build@v1.0.0
+        with:
+          spec_path: dist/buildspec/trustiflux.an23.buildspec.yaml
+
+      - name: Place AnolisOS23 RPM packages
+        run: |
+          for f in /tmp/rpmbuild/RPMS/*/*.rpm /tmp/rpmbuild/SRPMS/*.src.rpm; do
+            dir=${f%/*}
+            base=${f##*/}
+            mv "$f" "$dir/reproducible-$base"
+          done
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: reproducible-rpm-packages
+          if-no-files-found: error
+          path: |
+            /tmp/rpmbuild/SRPMS/*.src.rpm
+            /tmp/rpmbuild/RPMS/*/*.rpm
 
   test:
     strategy:
@@ -74,7 +144,8 @@ jobs:
     defaults:
       run:
         shell: bash
-    needs: build
+    needs:
+      - build
     container:
       image: ${{ matrix.distro }}
       volumes:
@@ -102,20 +173,22 @@ jobs:
         with:
           path: ./
           merge-multiple: false
+
       - name: Install RPM packages
         run: |
           set -e
           set -x
 
           # test rpm package install
-          cat /etc/os-release | grep "Anolis OS 23" && yum install -y anolis-epao-release && yum install -y ./rpm-packages/RPMS/*/*an23*.rpm
+          cat /etc/os-release | grep "Anolis OS 23" && yum install -y anolis-epao-release && yum install -y $(find ./rpm-packages/RPMS -maxdepth 2 -name '*an23*.rpm' | grep -v '/reproducible[^/]*an23.*\.rpm$')
           cat /etc/os-release | grep "Alibaba Cloud Linux 3" && yum install -y ./rpm-packages/RPMS/*/*al8*.rpm
           attestation-agent --version
           confidential-data-hub --version
 
   provenance:
     if: startsWith(github.ref, 'refs/tags/')
-    needs: build
+    needs: 
+      - build
     permissions:
       contents: write
       actions: read
@@ -134,6 +207,7 @@ jobs:
     needs:
       - test
       - provenance
+      - guanfu-build
     steps:
       - name: Checkout repository (scripts only)
         uses: actions/checkout@v4
@@ -145,6 +219,7 @@ jobs:
         with:
           path: ./
           merge-multiple: false
+
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
@@ -154,6 +229,8 @@ jobs:
             ./rpm-packages/SOURCES/guest-components-*.tar.gz
             ./rpm-packages/SRPMS/*.src.rpm
             ./rpm-packages/RPMS/*/*.rpm
+            ./reproducible-rpm-packages/SRPMS/*.src.rpm
+            ./reproducible-rpm-packages/RPMS/*/*.rpm
             ./rpm-provenance/*.intoto.jsonl
 
       - name: Notify RVDS of release

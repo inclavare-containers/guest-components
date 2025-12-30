@@ -1,0 +1,62 @@
+version: 1
+
+container:
+  image: "openanolis/anolisos:23@sha256:b0067a96f6f8a02d378304bd27ef7c3081f28d75a0003e2f145bf4412001d37c"
+
+inputs:
+  source:
+    url: "https://github.com/inclavare-containers/guest-components/releases/download/${GITHUB_RELEASE}/reproducible-v${VERSION}.tar.gz"
+    targetDir: "/tmp/rpmbuild/SOURCES/"
+  rustVendor:
+    url: "https://github.com/inclavare-containers/guest-components/releases/download/${GITHUB_RELEASE}/reproducible-guest-components-v${VERSION}-vendor.tar.gz"
+    targetDir: "/tmp/rpmbuild/SOURCES/"
+
+environment:
+  systemPackages:
+    - name: "anolis-epao-release"
+      version: "23-4.an23"
+    - name: "make"
+      version: "1:4.4.1-2.an23"
+    - name: "perl"
+      version: "4:5.36.3-18.an23"
+    - name: "protobuf-devel"
+      version: "3.19.6-7.an23"
+    - name: "perl-FindBin"
+      version: "1.53-18.an23"
+    - name: "git"
+      version: "2.47.3-1.an23"
+    - name: "libtdx-attest-devel"
+      version: "1.22-1.an23"
+    - name: "libgudev-devel"
+      version: "238-1.an23"
+    - name: "tpm2-tss-devel"
+      version: "4.0.1-6.an23"
+    - name: "rsync"
+      version: "3.4.1-2.an23"
+    - name: "tar"
+      version: "2:1.35-1.an23"
+    - name: "which"
+      version: "2.21-18.an23"
+  tools:
+    - name: "rpmdevtools"
+      version: "9.6-5.an23"
+    - name: "cargo"
+      version: "1.84.1-4.an23"
+    - name: "clang"
+      version: "17.0.6-8.an23"
+
+phases:
+  prepare:
+    commands:
+      - mkdir -p /tmp/rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
+      - mv /tmp/rpmbuild/SOURCES/reproducible-v${VERSION}.tar.gz /tmp/rpmbuild/SOURCES/v${VERSION}.tar.gz
+      - mv /tmp/rpmbuild/SOURCES/reproducible-guest-components-v${VERSION}-vendor.tar.gz /tmp/rpmbuild/SOURCES/guest-components-v${VERSION}-vendor.tar.gz
+  build:
+    commands:
+      - tar -xzf /tmp/rpmbuild/SOURCES/v${VERSION}.tar.gz -C /tmp/rpmbuild/SPECS --strip-components=1 guest-components-${VERSION}/trustiflux.spec
+      - rpmbuild --define "_topdir /tmp/rpmbuild" -ba /tmp/rpmbuild/SPECS/trustiflux.spec --define 'debug_package %{nil}' --define 'debugsource_package %{nil}'
+
+outputs:
+  - path: /tmp/rpmbuild/SRPMS/trustiflux-${VERSION}-${RELEASE}.an23.src.rpm
+  - path: /tmp/rpmbuild/RPMS/x86_64/attestation-agent-${VERSION}-${RELEASE}.an23.x86_64.rpm
+  - path: /tmp/rpmbuild/RPMS/x86_64/confidential-data-hub-${VERSION}-${RELEASE}.an23.x86_64.rpm
