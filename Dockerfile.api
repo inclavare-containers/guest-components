@@ -25,7 +25,7 @@ RUN yum -y install yum-utils && \
 # Install Rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
-RUN rustup toolchain install 1.76.0-x86_64-unknown-linux-gnu
+RUN rustup toolchain install 1.79.0-x86_64-unknown-linux-gnu
 
 # Optional cargo jobs
 RUN if [ -n "${CARGO_JOBS}" ]; then \
@@ -40,8 +40,7 @@ RUN if [ -n "${ALL_PROXY}" ]; then \
     fi
 
 # Build
-RUN cargo +1.76.0 fetch -p api-server-rest --locked
-RUN cargo +1.76.0 build --bin api-server-rest --release --locked
+RUN cargo +1.79.0 build -p api-server-rest --release --locked
 
 FROM registry.openanolis.cn/openanolis/anolisos:23.2
 RUN yum install -y --setopt=install_weak_deps=False --nogpgcheck ca-certificates && \
@@ -54,5 +53,5 @@ COPY dist/rpm/trustiflux-api-server.toml /etc/trustiflux/trustiflux-api-server.t
 
 EXPOSE 8006
 ENTRYPOINT ["/usr/local/bin/trustiflux-api-server"]
-CMD []
+CMD ["--config", "/etc/trustiflux/trustiflux-api-server.toml"]
 

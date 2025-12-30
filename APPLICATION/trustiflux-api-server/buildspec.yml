@@ -21,13 +21,13 @@ t-one:
 # 构建镜像配置
 images:
   # 分组名称，支持自定义
-  Confidential-Data-Hub:
+  Trustiflux-Api-Server:
     build: true
-    test: true
+    test: false
     region: cn-hongkong
     platform: [linux/amd64]
     docker_file:
-      path: Dockerfile.cdh
+      path: Dockerfile.api
       scene:
         args: []
         tags: [[1.4.8, latest]]
