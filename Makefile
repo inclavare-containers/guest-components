@@ -118,7 +118,8 @@ install: $(CDH_BINARY) $(ASR_BINARY) $(AA_BINARY)
 	rm -fr /tmp/guest-components-tarball/guest-components-${VERSION}/vendor/winapi*/lib/*.lib
 	rm -fr /tmp/guest-components-tarball/guest-components-${VERSION}/vendor/windows*/lib/*.lib
 
-	tar -czf /tmp/guest-components-v${VERSION}-vendor.tar.gz -C /tmp/guest-components-tarball/guest-components-${VERSION}/ vendor
+	# Include .cargo/config.toml so downstream builds can use vendored sources without extra config.
+	tar -czf /tmp/guest-components-v${VERSION}-vendor.tar.gz -C /tmp/guest-components-tarball/guest-components-${VERSION}/ vendor .cargo/config.toml
 	@echo "Vendor tarball generated:" /tmp/guest-components-v${VERSION}-vendor.tar.gz
 
 .PHONE: create-tarball
