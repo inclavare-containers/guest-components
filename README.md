@@ -69,6 +69,27 @@ default except for only builtin `offline-fs-kbc`, you can build with `NO_RESOURC
 make build TEE_PLATFORM=$(TEE_PLATFORM) NO_RESOURCE_PROVIDER=true
 ```
 
+## Release
+
+We provide the following types of release packages:
+
+- **RPM Packages**: Including source packages (SRPMS) and binary packages (RPMS).
+
+### Supported Distributions
+
+- Alibaba Cloud Linux 3
+- AnolisOS 23
+
+### Reproducible Builds
+
+We provide reproducible builds implemented with [GuanFu](https://github.com/1570005763/GuanFu/tree/v1.0.0) to ensure verifiability. This means that anyone can reproduce the same build results in the same environment.
+
+For detailed instructions on how to perform local rebuilds, please refer to the [Build Specifications README](REPRODUCIBLE_BUILD.md).
+
+### Supply Chain Security
+
+We generate SLSA Level 3+ provenance files to ensure supply chain security, providing additional trust guarantees for users.
+
 ## Unit Test Coverage
 
 Run the following command to generate the unit test coverage report.
