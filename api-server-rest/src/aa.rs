@@ -86,10 +86,12 @@ impl ApiHandler for AAClient {
                     return self.not_allowed();
                 }
                 match params.get("runtime_data") {
-                    Some(runtime_data) => match self.get_evidence(&runtime_data.clone().into_bytes()).await {
-                        Ok(results) => return self.octet_stream_response(results),
-                        Err(e) => return self.internal_error(e.to_string()),
-                    },
+                    Some(runtime_data) => {
+                        match self.get_evidence(&runtime_data.clone().into_bytes()).await {
+                            Ok(results) => return self.octet_stream_response(results),
+                            Err(e) => return self.internal_error(e.to_string()),
+                        }
+                    }
                     None => return self.bad_request(),
                 }
             }
@@ -100,9 +102,8 @@ impl ApiHandler for AAClient {
                 let body_bytes = body::to_bytes(req.into_body())
                     .await
                     .map_err(|e| anyhow!("Failed to read request body: {}", e))?;
-                let payload: AaelRequest = serde_json::from_slice(&body_bytes).map_err(|e| {
-                    anyhow!("Failed to parse request body as JSON: {}", e)
-                })?;
+                let payload: AaelRequest = serde_json::from_slice(&body_bytes)
+                    .map_err(|e| anyhow!("Failed to parse request body as JSON: {}", e))?;
                 match self
                     .extend_runtime_measurement(
                         payload.register_index,
@@ -179,10 +180,7 @@ impl AAClient {
         };
 
         self.client
-            .extend_runtime_measurement(
-                ttrpc::context::with_timeout(TTRPC_TIMEOUT),
-                &req,
-            )
+            .extend_runtime_measurement(ttrpc::context::with_timeout(TTRPC_TIMEOUT), &req)
             .await
             .context("ttrpc extend_runtime_measurement failed")?;
         Ok(())

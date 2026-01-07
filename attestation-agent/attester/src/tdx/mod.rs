@@ -4,20 +4,19 @@
 //
 
 use self::gpu::{GpuEvidenceCollector, GpuEvidenceList};
-use self::rtmr::TdxRtmrEvent;
 
 use super::tsm_report::*;
-use super::Attester;
+use super::{Attester, TeeEvidence};
 use crate::utils::{pad, read_eventlog};
-use crate::{InitDataResult, TeeEvidence};
+use crate::InitDataResult;
 use anyhow::*;
 use base64::Engine;
+use iocuddle::{Group, Ioctl, WriteRead};
 use kbs_types::HashAlgorithm;
 use report::TdReport;
 use scroll::Pread;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use tdx_attest_rs::tdx_report_t;
 
 mod report;
 mod rtmr;
@@ -26,36 +25,60 @@ mod gpu;
 
 const TDX_REPORT_DATA_SIZE: usize = 64;
 
+const TDX_RTMR_PATH: &str = "/sys/devices/virtual/misc/tdx_guest/measurements";
+const TDX_GUEST_IOCTL: &str = "/dev/tdx_guest";
+
 pub fn detect_platform() -> bool {
-    TsmReportPath::new(TsmReportProvider::Tdx).is_ok() || Path::new("/dev/tdx_guest").exists()
+    TsmReportPath::new(TsmReportProvider::Tdx).is_ok() || Path::new(TDX_GUEST_IOCTL).exists()
 }
 
-fn get_quote_ioctl(report_data: &Vec<u8>) -> Result<Vec<u8>> {
+fn get_quote_ioctl(report_data: &[u8]) -> Result<Vec<u8>> {
     let tdx_report_data = tdx_attest_rs::tdx_report_data_t {
         // report_data.resize() ensures copying report_data to
         // tdx_attest_rs::tdx_report_data_t cannot panic.
-        d: report_data.as_slice().try_into().unwrap(),
+        d: report_data.try_into().unwrap(),
     };
 
     match tdx_attest_rs::tdx_att_get_quote(Some(&tdx_report_data), None, None, 0) {
         (tdx_attest_rs::tdx_attest_error_t::TDX_ATTEST_SUCCESS, Some(q)) => Ok(q),
         (error_code, _) => Err(anyhow!(
-            "TDX getquote ioctl: failed with error code: {:?}",
+            "TDX DCAP get_quote: failed with error code: {:?}",
             error_code
         )),
     }
 }
 
-// Return true if the TD environment can extend runtime measurement,
-// else false. The best guess at the moment is that if "TSM reports"
-// is available, the TD runs Linux upstream kernel and is _currently_
-// not able to do it.
+// Return true if the TD environment can extend runtime measurement.
 fn runtime_measurement_extend_available() -> bool {
-    if Path::new("/sys/kernel/config/tsm/report").exists() {
-        return false;
-    }
+    Path::new(TDX_GUEST_IOCTL).exists() || Path::new(TDX_RTMR_PATH).exists()
+}
 
-    true
+fn extend_rtmr_via_sysfs(rtmr_index: u64, extend_data: &[u8; 48]) -> Result<()> {
+    std::fs::write(
+        Path::new(TDX_RTMR_PATH).join(format!("rtmr{rtmr_index}:sha384")),
+        extend_data,
+    )
+    .context("TDX Attester: failed to extend RTMR via sysfs")?;
+    log::debug!("TDX extend runtime measurement via sysfs succeeded.");
+    Ok(())
+}
+
+fn extend_rtmr_via_ioctl(rtmr_index: u64, extend_data: &[u8; 48]) -> Result<()> {
+    let event: Vec<u8> = rtmr::TdxRtmrEvent::default()
+        .with_extend_data(*extend_data)
+        .with_rtmr_index(rtmr_index)
+        .into();
+
+    match tdx_attest_rs::tdx_att_extend(&event) {
+        tdx_attest_rs::tdx_attest_error_t::TDX_ATTEST_SUCCESS => {
+            log::debug!("TDX extend runtime measurement via ioctl succeeded.");
+            Ok(())
+        }
+        error_code => bail!(
+            "TDX Attester: Failed to extend RTMR via ioctl. Error code: {:?}",
+            error_code
+        ),
+    }
 }
 
 pub const DEFAULT_EVENTLOG_PATH: &str = "/run/attestation-agent/eventlog";
@@ -78,20 +101,34 @@ struct TdxEvidence {
 #[derive(Debug, Default)]
 pub struct TdxAttester {}
 
+#[repr(C)]
+struct TdxReportReq {
+    report_data: [u8; 64],
+
+    d: [u8; 1024],
+}
+
+impl Default for TdxReportReq {
+    fn default() -> Self {
+        Self {
+            report_data: [0; 64],
+            d: [0; 1024],
+        }
+    }
+}
+
+const TDX: Group = Group::new(b'T');
+const TDX_CMD_GET_REPORT0: Ioctl<WriteRead, &TdxReportReq> = unsafe { TDX.write_read(0x1) };
+
 impl TdxAttester {
     fn get_report() -> Result<TdReport> {
-        let mut report = tdx_report_t { d: [0; 1024] };
-        match tdx_attest_rs::tdx_att_get_report(None, &mut report) {
-            tdx_attest_rs::tdx_attest_error_t::TDX_ATTEST_SUCCESS => {
-                log::debug!("Successfully got report")
-            }
-            error_code => {
-                bail!(
-                    "TDX Attester: Failed to get TD report. Error code: {:?}",
-                    error_code
-                );
-            }
-        };
+        let mut report = TdxReportReq::default();
+        let mut fd =
+            std::fs::File::open(TDX_GUEST_IOCTL).context("Open TD report ioctl() failed")?;
+
+        TDX_CMD_GET_REPORT0
+            .ioctl(&mut fd, &mut report)
+            .context("Get TD report ioctl() failed")?;
 
         let td_report = report
             .d
@@ -99,16 +136,6 @@ impl TdxAttester {
             .context("Parse TD report failed")?;
 
         Ok(td_report)
-    }
-
-    fn pcr_to_rtmr(register_index: u64) -> u64 {
-        // The match follows https://github.com/confidential-containers/td-shim/blob/main/doc/tdshim_spec.md#td-event-log
-        match register_index {
-            1 | 7 => 0,
-            2..=6 => 1,
-            8..=15 => 2,
-            _ => 3,
-        }
     }
 }
 
@@ -176,34 +203,36 @@ impl Attester for TdxAttester {
         serde_json::to_value(evidence).context("Serialize TDX evidence failed")
     }
 
+    // fn supports_runtime_measurement(&self) -> bool {
+    //     true
+    // }
+
     async fn extend_runtime_measurement(
         &self,
         event_digest: Vec<u8>,
         register_index: u64,
     ) -> Result<()> {
         if !runtime_measurement_extend_available() {
-            bail!("TDX Attester: Cannot extend runtime measurement on this system");
+            bail!("TDX Attester: runtime measurement extend is not available");
         }
 
-        let rtmr_index = Self::pcr_to_rtmr(register_index);
+        let ccmr_index = self.pcr_to_ccmr(register_index);
+        let rtmr_index = ccmr_index - 1;
 
         let extend_data: [u8; 48] = pad(&event_digest);
-        let event: Vec<u8> = TdxRtmrEvent::default()
-            .with_extend_data(extend_data)
-            .with_rtmr_index(rtmr_index)
-            .into();
 
-        match tdx_attest_rs::tdx_att_extend(&event) {
-            tdx_attest_rs::tdx_attest_error_t::TDX_ATTEST_SUCCESS => {
-                log::debug!("TDX extend runtime measurement succeeded.")
-            }
-            error_code => {
-                bail!(
-                    "TDX Attester: Failed to extend RTMR. Error code: {:?}",
-                    error_code
-                );
-            }
-        }
+        log::debug!(
+            "TDX Attester: extend RTMR{rtmr_index}: {}",
+            hex::encode(extend_data)
+        );
+
+        extend_rtmr_via_ioctl(rtmr_index, &extend_data).or_else(|e| {
+            log::warn!(
+                "TDX Attester: ioctl RTMR extend failed ({}), attempting sysfs fallback",
+                e
+            );
+            extend_rtmr_via_sysfs(rtmr_index, &extend_data)
+        })?;
 
         Ok(())
     }
@@ -220,9 +249,9 @@ impl Attester for TdxAttester {
 
     async fn get_runtime_measurement(&self, pcr_index: u64) -> Result<Vec<u8>> {
         let td_report = Self::get_report()?;
-        let rtmr_index = Self::pcr_to_rtmr(pcr_index) as usize;
+        let ccmr = self.pcr_to_ccmr(pcr_index) as usize;
 
-        Ok(td_report.get_rtmr(rtmr_index))
+        Ok(td_report.get_rtmr(ccmr - 1))
     }
 
     fn pcr_to_ccmr(&self, pcr_index: u64) -> u64 {
@@ -253,5 +282,10 @@ mod tests {
 
         let evidence = attester.get_evidence(report_data).await;
         assert!(evidence.is_ok());
+    }
+    #[ignore]
+    #[tokio::test]
+    async fn test_tdx_get_report() {
+        assert!(TdxAttester::get_report().is_ok());
     }
 }
