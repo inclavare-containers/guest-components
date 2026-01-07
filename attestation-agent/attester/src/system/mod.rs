@@ -13,6 +13,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::env;
 
+const TRUSTEE_API_KEY_ENV: &str = "TRUSTEE_API_KEY";
+
 // System attester is always supported
 pub fn detect_platform() -> bool {
     if let Result::Ok(system_attestation) = std::env::var("SYSTEM_ATTESTATION") {
@@ -51,6 +53,9 @@ impl Attester for SystemAttester {
         let mr_register = self.inner.read_mr_register();
         let mut environment: HashMap<String, String> = HashMap::new();
         for (env_name, env_value) in env::vars() {
+            if env_name == TRUSTEE_API_KEY_ENV {
+                continue;
+            }
             environment.insert(env_name, env_value);
         }
 
