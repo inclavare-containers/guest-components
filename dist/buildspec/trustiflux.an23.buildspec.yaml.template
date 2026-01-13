@@ -6,10 +6,10 @@ container:
 inputs:
   source:
     url: "https://github.com/inclavare-containers/guest-components/releases/download/${GITHUB_RELEASE}/reproducible-v${VERSION}.tar.gz"
-    targetDir: "/tmp/rpmbuild/SOURCES/"
+    targetPath: "/tmp/rpmbuild/SOURCES/reproducible-v${VERSION}.tar.gz"
   rustVendor:
     url: "https://github.com/inclavare-containers/guest-components/releases/download/${GITHUB_RELEASE}/reproducible-guest-components-v${VERSION}-vendor.tar.gz"
-    targetDir: "/tmp/rpmbuild/SOURCES/"
+    targetPath: "/tmp/rpmbuild/SOURCES/reproducible-guest-components-v${VERSION}-vendor.tar.gz"
 
 environment:
   systemPackages:

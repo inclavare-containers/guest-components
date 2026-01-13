@@ -114,7 +114,7 @@ jobs:
             ./dist/buildspec/trustiflux.an23.buildspec.yaml
 
       - name: Build AnolisOS23 RPM package
-        uses: 1570005763/GuanFu/.github/actions/guanfu-build@v1.0.0
+        uses: 1570005763/GuanFu@v1
         with:
           spec_path: dist/buildspec/trustiflux.an23.buildspec.yaml
 
