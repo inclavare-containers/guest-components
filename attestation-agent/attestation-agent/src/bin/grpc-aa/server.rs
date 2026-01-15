@@ -39,7 +39,7 @@ impl AttestationAgentService for AA {
 
         let token = self
             .inner
-            .get_token(&request.token_type)
+            .get_token(&request.token_type, request.additional_data.as_deref())
             .await
             .map_err(|e| {
                 error!("AA (grpc): get token failed:\n{e:?}");
