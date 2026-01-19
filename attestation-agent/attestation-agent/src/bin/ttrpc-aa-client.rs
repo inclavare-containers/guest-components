@@ -163,7 +163,7 @@ pub async fn main() {
         Operation::GetToken(get_token_args) => {
             let req = GetTokenRequest {
                 TokenType: get_token_args.token_type,
-                AdditionalData: get_token_args.additional_data,
+                AdditionalData: Some(get_token_args.additional_data),
                 ..Default::default()
             };
             let res = client
