@@ -3,7 +3,7 @@
 %global libdir /usr/lib
 
 Name:		trustiflux
-Version:	1.4.8
+Version:	1.4.9
 Release:	%{release}%{?dist}
 Summary:	A daemon service running inside TEE (Trusted Execution Environment) to confidential resource related APIs
 
@@ -23,20 +23,20 @@ A daemon service running inside TEE (Trusted Execution Environment) to confident
 
 %package -n attestation-agent
 Summary:	Attestation Agent is a daemon service running inside TEE (Trusted Execution Environment) to provide attestation related APIs.
-Requires: trustiflux-api-server = %{version}-%{release}
 
 %description -n attestation-agent
 Attestation Agent is a daemon service running inside TEE (Trusted Execution Environment) to provide attestation related APIs.
 
 %package -n trustiflux-api-server
 Summary:	REST API server exporting attestation and confidential data hub endpoints.
+Requires: attestation-agent = %{version}-%{release}
+Requires: confidential-data-hub = %{version}-%{release}
 
 %description -n trustiflux-api-server
 trustiflux-api-server exposes attestation-agent and confidential-data-hub ttRPC services over HTTP.
 
 %package -n confidential-data-hub
 Summary:	Confidential Data Hub is a daemon service running inside TEE (Trusted Execution Environment) to provide confidential resource related APIs.
-Requires: trustiflux-api-server = %{version}-%{release}
 
 %description -n confidential-data-hub
 Confidential Data Hub is a daemon service running inside TEE (Trusted Execution Environment) to provide confidential resource related APIs.
@@ -137,6 +137,12 @@ rm -rf %{buildroot}
 %{libdir}/dracut/modules.d/99confidential-data-hub/module-setup.sh
 
 %changelog
+* Mon Jan 19 2026 Jiale Zhang <zhangjiale@linux.alibaba.com> - 1.4.9-1
+- Attestation: system attester supports AAEL runtime measurements
+- Attestation agent: get_token supports additional_data (optional)
+- AA instance info: add EAS model id and instance id
+- Release: add GuanFu workflow for AnolisOS23 and update RPM packaging
+
 * Mon Dec 29 2025 Jiale Zhang <zhangjiale@linux.alibaba.com> - 1.4.8-1
 - kbs protocol: support carry attest token via Attestation header
 - Release CI: support push event to RVDS
