@@ -34,12 +34,12 @@ for rpm in "${rpms[@]}"; do
   popd >/dev/null
 
   # Additionally, generate a "name index hash" for the RPM package itself.
-  # Key name: "package-name"
-  # Key value: Hash("<package-basename>"), e.g. "attestation-agent-1.4.5-1.an23.x86_64.rpm".
+  # Key name: "package-name:<package-basename>", e.g. "package-name:attestation-agent-1.4.5-1.an23.x86_64.rpm".
+  # Key value: Hash("<package-basename>"), e.g. `Hash("attestation-agent-1.4.5-1.an23.x86_64.rpm")`.
   # We reuse sha256 here and compute it over the exact package basename string.
   pkg_name="${rpm##*/}"
   pkg_hash="$(printf "%s" "$pkg_name" | sha256sum | awk '{print $1}')"
-  echo "$pkg_hash  package-name" >> "$subjects_txt"
+  echo "$pkg_hash  package-name:${rpm##*/}" >> "$subjects_txt"
 
   if [ ! -s "$subjects_txt" ]; then
     echo "No files found inside $rpm, skipping." >&2
