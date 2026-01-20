@@ -1,5 +1,6 @@
 use anyhow::{bail, Result};
 
+pub mod aliyun_eas;
 pub mod aliyun_ecs;
 pub mod instance_heartbeat;
 
@@ -22,6 +23,10 @@ pub async fn get_instance_info(instance_type: &str) -> Result<String> {
         "aliyun_ecs" => {
             let aliyun_ecs = aliyun_ecs::AliyunEcsInfo {};
             aliyun_ecs.get_instance_info().await
+        }
+        "aliyun_eas" => {
+            let aliyun_eas = aliyun_eas::AliyunEasInfo {};
+            aliyun_eas.get_instance_info().await
         }
         _ => bail!("Unsupported instance type: {}", instance_type),
     }

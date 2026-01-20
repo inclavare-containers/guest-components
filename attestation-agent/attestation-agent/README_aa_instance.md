@@ -11,7 +11,7 @@
 ```toml
 [aa_instance]
 
-# AA实例类型（目前仅支持 "aliyun_ecs"）
+# AA实例类型（目前支持 "aliyun_ecs" / "aliyun_eas"）
 instance_type = "aliyun_ecs"
 
 [aa_instance.heartbeat]
@@ -30,6 +30,7 @@ interval_minutes = 3
 
 - `instance_type` (可选): 字符串，指定AA实例的类型。当前支持的值：
   - `"aliyun_ecs"`: 阿里云ECS实例
+  - `"aliyun_eas"`: 阿里云EAS实例
 
 #### heartbeat 子配置
 - `enabled` (可选): 布尔值，指定是否启用心跳功能。默认为 `false`。
@@ -66,6 +67,14 @@ interval_minutes = 3
 
 返回的信息以JSON格式存储在环境变量中。
 
+### aliyun_eas
+
+从环境变量读取EAS实例信息，包括：
+- 模型ID (eas_model_id) - 环境变量 `EAS_MODEL_ID`
+- 实例ID (eas_instance_id) - 环境变量 `EAS_INSTANCE_ID`
+
+如果环境变量未设置，则对应字段为空字符串。返回的信息以JSON格式存储在环境变量中。
+
 ## 使用示例
 
 ```toml
@@ -91,3 +100,5 @@ interval_minutes = 3
 
 - `AA_INSTANCE_INFO`: 包含实例信息的JSON字符串
 - `TRUSTEE_URL`: trustee gateway URL
+- `EAS_MODEL_ID`: EAS模型ID（aliyun_eas）
+- `EAS_INSTANCE_ID`: EAS实例ID（aliyun_eas）
