@@ -8,7 +8,7 @@ use log::{debug, warn};
 
 use crate::config::{Config, HeartbeatConfig};
 
-pub const AA_INSTANCE_INFO_PATH: &str = "/tmp/aa_instance_info";
+pub const AA_INSTANCE_INFO_PATH: &str = "/run/attestation-agent/instance_info/instance_info.json";
 
 /// Instance heartbeat handler for sending heartbeat to trustee server
 pub struct InstanceHeartbeat {
@@ -96,6 +96,12 @@ impl InstanceHeartbeat {
 mod tests {
     use super::*;
 
+    fn ensure_instance_info_dir() {
+        if let Some(parent) = std::path::Path::new(AA_INSTANCE_INFO_PATH).parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+    }
+
     #[tokio::test]
     #[serial_test::serial]
     async fn test_send_heartbeat_missing_trustee_url() {
@@ -123,6 +129,7 @@ mod tests {
     async fn test_send_heartbeat_with_mock_env() {
         // Set up environment variables for testing
         std::env::set_var("TRUSTEE_URL", "http://mock-trustee-server.com");
+        ensure_instance_info_dir();
         std::fs::write(AA_INSTANCE_INFO_PATH, r#"{"instance_id":"test-123"}"#).unwrap();
 
         let heartbeat = InstanceHeartbeat::new_from_config_path(None).unwrap();
@@ -147,6 +154,7 @@ mod tests {
         // Clear environment variable but use config file
         let original_trustee = std::env::var("TRUSTEE_URL").ok();
         std::env::remove_var("TRUSTEE_URL");
+        ensure_instance_info_dir();
         std::fs::write(AA_INSTANCE_INFO_PATH, r#"{"instance_id":"config-test"}"#).unwrap();
 
         let heartbeat =
@@ -174,6 +182,7 @@ mod tests {
     async fn test_send_heartbeat_env_priority_over_config() {
         // Set both environment variable and config file, env should take priority
         std::env::set_var("TRUSTEE_URL", "http://env-priority-server.com");
+        ensure_instance_info_dir();
         std::fs::write(AA_INSTANCE_INFO_PATH, r#"{"instance_id":"priority-test"}"#).unwrap();
 
         let heartbeat =

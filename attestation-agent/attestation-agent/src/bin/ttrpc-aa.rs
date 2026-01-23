@@ -135,6 +135,8 @@ pub async fn main() -> Result<()> {
     let _heartbeat_interval = config.aa_instance.heartbeat.interval_minutes.unwrap_or(5); // Default 5 minutes
     #[cfg(feature = "instance_info")]
     drop(config);
+    #[cfg(feature = "instance_info")]
+    std::fs::create_dir_all(std::path::Path::new("/run/attestation-agent/instance_info"))?;
 
     let att = start_ttrpc_service(aa)?;
 
