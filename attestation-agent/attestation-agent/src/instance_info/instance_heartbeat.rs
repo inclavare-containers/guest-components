@@ -8,6 +8,8 @@ use log::{debug, warn};
 
 use crate::config::{Config, HeartbeatConfig};
 
+pub const AA_INSTANCE_INFO_PATH: &str = "/tmp/aa_instance_info";
+
 /// Instance heartbeat handler for sending heartbeat to trustee server
 pub struct InstanceHeartbeat {
     pub heartbeat_config: HeartbeatConfig,
@@ -49,10 +51,11 @@ impl InstanceHeartbeat {
         );
 
         // Read AA instance info from environment variable
-        let aa_instance_info = std::env::var("AA_INSTANCE_INFO").unwrap_or_else(|_| {
-            warn!("AA_INSTANCE_INFO environment variable not set, using empty value");
-            String::new()
-        });
+        let aa_instance_info =
+            std::fs::read_to_string(AA_INSTANCE_INFO_PATH).unwrap_or_else(|_| {
+                warn!("AA instance info not found in {AA_INSTANCE_INFO_PATH}, using empty value");
+                String::new()
+            });
 
         // Create HTTP client
         let client = reqwest::Client::new();
@@ -98,10 +101,8 @@ mod tests {
     async fn test_send_heartbeat_missing_trustee_url() {
         // Clear environment variables and test in isolated scope
         let original_trustee = std::env::var("TRUSTEE_URL").ok();
-        let original_aa_info = std::env::var("AA_INSTANCE_INFO").ok();
 
         std::env::remove_var("TRUSTEE_URL");
-        std::env::remove_var("AA_INSTANCE_INFO");
 
         let heartbeat = InstanceHeartbeat::new_from_config_path(None).unwrap();
         let result = heartbeat.send_heartbeat().await;
@@ -115,9 +116,6 @@ mod tests {
         if let Some(val) = original_trustee {
             std::env::set_var("TRUSTEE_URL", val);
         }
-        if let Some(val) = original_aa_info {
-            std::env::set_var("AA_INSTANCE_INFO", val);
-        }
     }
 
     #[tokio::test]
@@ -125,7 +123,7 @@ mod tests {
     async fn test_send_heartbeat_with_mock_env() {
         // Set up environment variables for testing
         std::env::set_var("TRUSTEE_URL", "http://mock-trustee-server.com");
-        std::env::set_var("AA_INSTANCE_INFO", r#"{"instance_id":"test-123"}"#);
+        std::fs::write(AA_INSTANCE_INFO_PATH, r#"{"instance_id":"test-123"}"#).unwrap();
 
         let heartbeat = InstanceHeartbeat::new_from_config_path(None).unwrap();
 
@@ -140,7 +138,7 @@ mod tests {
 
         // Clean up
         std::env::remove_var("TRUSTEE_URL");
-        std::env::remove_var("AA_INSTANCE_INFO");
+        std::fs::remove_file(AA_INSTANCE_INFO_PATH).unwrap();
     }
 
     #[tokio::test]
@@ -149,7 +147,7 @@ mod tests {
         // Clear environment variable but use config file
         let original_trustee = std::env::var("TRUSTEE_URL").ok();
         std::env::remove_var("TRUSTEE_URL");
-        std::env::set_var("AA_INSTANCE_INFO", r#"{"instance_id":"config-test"}"#);
+        std::fs::write(AA_INSTANCE_INFO_PATH, r#"{"instance_id":"config-test"}"#).unwrap();
 
         let heartbeat =
             InstanceHeartbeat::new_from_config_path(Some("tests/aa_instance_info_test.toml"))
@@ -165,7 +163,7 @@ mod tests {
             .contains("https://test-trustee.example.com/aa-instance/heartbeat"));
 
         // Clean up
-        std::env::remove_var("AA_INSTANCE_INFO");
+        std::fs::remove_file(AA_INSTANCE_INFO_PATH).unwrap();
         if let Some(val) = original_trustee {
             std::env::set_var("TRUSTEE_URL", val);
         }
@@ -176,7 +174,7 @@ mod tests {
     async fn test_send_heartbeat_env_priority_over_config() {
         // Set both environment variable and config file, env should take priority
         std::env::set_var("TRUSTEE_URL", "http://env-priority-server.com");
-        std::env::set_var("AA_INSTANCE_INFO", r#"{"instance_id":"priority-test"}"#);
+        std::fs::write(AA_INSTANCE_INFO_PATH, r#"{"instance_id":"priority-test"}"#).unwrap();
 
         let heartbeat =
             InstanceHeartbeat::new_from_config_path(Some("tests/aa_instance_info_test.toml"))
@@ -193,6 +191,6 @@ mod tests {
 
         // Clean up
         std::env::remove_var("TRUSTEE_URL");
-        std::env::remove_var("AA_INSTANCE_INFO");
+        std::fs::remove_file(AA_INSTANCE_INFO_PATH).unwrap();
     }
 }

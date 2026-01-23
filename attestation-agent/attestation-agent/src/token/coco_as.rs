@@ -50,7 +50,10 @@ impl CoCoASTokenGetter {
         }
 
         // Add AAInstanceInfo header if the environment variable is set
-        if let Result::Ok(aa_instance_info) = std::env::var("AA_INSTANCE_INFO") {
+        #[cfg(feature = "instance_info")]
+        if let Result::Ok(aa_instance_info) =
+            std::fs::read_to_string(crate::instance_info::instance_heartbeat::AA_INSTANCE_INFO_PATH)
+        {
             request_builder = request_builder.header("AAInstanceInfo", aa_instance_info);
         }
 
