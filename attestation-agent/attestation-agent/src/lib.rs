@@ -103,6 +103,13 @@ impl AttestationAgent {
             match instance_info::get_instance_info(instance_type).await {
                 Ok(instance_info) => {
                     info!("AA instance info: {}", instance_info);
+                    if let Some(parent) = std::path::Path::new(
+                        instance_info::instance_heartbeat::AA_INSTANCE_INFO_PATH,
+                    )
+                    .parent()
+                    {
+                        std::fs::create_dir_all(parent)?;
+                    }
                     std::fs::write(
                         instance_info::instance_heartbeat::AA_INSTANCE_INFO_PATH,
                         instance_info,
