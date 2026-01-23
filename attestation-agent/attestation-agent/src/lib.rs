@@ -102,7 +102,11 @@ impl AttestationAgent {
         if let Some(ref instance_type) = config.aa_instance.instance_type {
             match instance_info::get_instance_info(instance_type).await {
                 Ok(instance_info) => {
-                    std::env::set_var("AA_INSTANCE_INFO", instance_info);
+                    info!("AA instance info: {}", instance_info);
+                    std::fs::write(
+                        instance_info::instance_heartbeat::AA_INSTANCE_INFO_PATH,
+                        instance_info,
+                    )?;
                     info!("AA instance info set for type: {}", instance_type);
                 }
                 Err(e) => {
@@ -305,9 +309,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_attestation_agent_with_aa_instance_config() {
-        // Clear any existing environment variable first
-        std::env::remove_var("AA_INSTANCE_INFO");
-
         let mut aa = AttestationAgent::new(Some("tests/aa_instance_info_test.toml")).unwrap();
         // Test that initialization doesn't fail even if AA instance info retrieval fails
         // (which is expected in test environment without actual cloud metadata)

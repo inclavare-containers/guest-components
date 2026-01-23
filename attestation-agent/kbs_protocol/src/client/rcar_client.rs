@@ -304,7 +304,7 @@ impl KbsClient<Box<dyn EvidenceProvider>> {
             .header("Content-Type", "application/json");
 
         // Add AAInstanceInfo header if the environment variable is set
-        if let Ok(aa_instance_info) = std::env::var("AA_INSTANCE_INFO") {
+        if let Ok(aa_instance_info) = std::fs::read_to_string("/tmp/aa_instance_info") {
             request_builder = request_builder.header("AAInstanceInfo", aa_instance_info);
         }
 
