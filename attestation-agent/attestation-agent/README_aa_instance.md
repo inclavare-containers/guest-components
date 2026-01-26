@@ -72,6 +72,7 @@ interval_minutes = 3
 从环境变量读取EAS实例信息，包括：
 - 模型ID (eas_model_id) - 环境变量 `EAS_MODEL_ID`
 - 实例ID (eas_instance_id) - 环境变量 `EAS_INSTANCE_ID`
+- Pod名称 (eas_pod_name) - 环境变量 `POD_NAME`
 
 如果环境变量未设置，则对应字段为空字符串。返回的信息以JSON格式存储在环境变量中。
 
@@ -102,3 +103,4 @@ interval_minutes = 3
 - `TRUSTEE_URL`: trustee gateway URL
 - `EAS_MODEL_ID`: EAS模型ID（aliyun_eas）
 - `EAS_INSTANCE_ID`: EAS实例ID（aliyun_eas）
+- `POD_NAME`: EAS Pod名称（aliyun_eas）
