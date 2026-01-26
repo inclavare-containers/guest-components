@@ -13,16 +13,19 @@ pub struct AliyunEasInfo {}
 pub struct EasInfo {
     pub eas_model_id: String,
     pub eas_instance_id: String,
+    pub eas_pod_name: String,
 }
 
 impl EasInfo {
     fn from_env() -> Self {
         let eas_model_id = std::env::var("EAS_MODEL_ID").unwrap_or_default();
         let eas_instance_id = std::env::var("EAS_INSTANCE_ID").unwrap_or_default();
+        let eas_pod_name = std::env::var("POD_NAME").unwrap_or_default();
 
         Self {
             eas_model_id,
             eas_instance_id,
+            eas_pod_name,
         }
     }
 }
