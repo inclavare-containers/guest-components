@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0, see LICENSE for details.
 # SPDX-License-Identifier: Apache-2.0
 
-ARG BASE_IMAGE=eci-nydus-registry.cn-hangzhou.cr.aliyuncs.com/docker/debian:stable-slim
+ARG BASE_IMAGE=debian:stable-slim
 
 FROM ${BASE_IMAGE} AS builder
 
@@ -10,26 +10,37 @@ ARG ALL_PROXY
 ARG NO_PROXY
 ENV ALL_PROXY=$ALL_PROXY
 ENV NO_PROXY=$NO_PROXY
+ENV AR=llvm-ar
+ENV RANLIB=llvm-ranlib
 
 ARG CARGO_JOBS
+# TARGETARCH is auto-set by BuildKit/buildx (no --platform needed when building for host arch)
+ARG TARGETARCH
 
 WORKDIR /usr/src/guest-components
 COPY . .
 
-RUN apt update -y && apt install -y clang protobuf-compiler git curl musl-tools libssl-dev make && \
+RUN apt update -y && apt install -y clang protobuf-compiler git curl musl-tools libssl-dev make llvm && \
     apt clean all && \
-    rm -rf /tmp/*
+    rm -rf /tmp/* && \
+    case "$TARGETARCH" in \
+    amd64) echo "x86_64-unknown-linux-musl" > /tmp/rust_target ;; \
+    arm64) echo "aarch64-unknown-linux-musl" > /tmp/rust_target ;; \
+    *) echo "Unsupported architecture: $TARGETARCH" && exit 1 ;; \
+    esac
 
 # Install Rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
 ENV PATH="/root/.cargo/bin:${PATH}"
 
-RUN rustup target add x86_64-unknown-linux-musl
+# Add Rust target for target architecture
+RUN RUST_TARGET=$(cat /tmp/rust_target) && \
+    rustup target add ${RUST_TARGET}
 
 RUN if [ -n "${CARGO_JOBS}" ]; then \
-      mkdir -p /root/.cargo; \
-      printf '[build]\njobs = %s\n' "${CARGO_JOBS}" > /root/.cargo/config.toml; \
+    mkdir -p /root/.cargo; \
+    printf '[build]\njobs = %s\n' "${CARGO_JOBS}" > /root/.cargo/config.toml; \
     fi
 
 # Cargo 1.79 uses libgit2 to download the git source,
@@ -38,18 +49,22 @@ RUN if [ -n "${CARGO_JOBS}" ]; then \
 # git command with awareness of proxy environment variables
 # to download the source.
 RUN if [ -n "${ALL_PROXY}" ]; then \
-      [ ! -d /root/.cargo ] && mkdir /root/.cargo; \
-      printf "[net]\ngit-fetch-with-cli = true" >> /root/.cargo/config.toml; \
+    [ ! -d /root/.cargo ] && mkdir /root/.cargo; \
+    printf "[net]\ngit-fetch-with-cli = true" >> /root/.cargo/config.toml; \
     fi
 
 # Build confidential-data-hub
-RUN cd confidential-data-hub/hub && \
-    cargo build --release --bin cdh-oneshot --no-default-features --features "bin,aliyun,kbs" --target x86_64-unknown-linux-musl
+RUN RUST_TARGET=$(cat /tmp/rust_target) && \
+    cd confidential-data-hub/hub && \
+    cargo build --release --bin cdh-oneshot --no-default-features --features "bin,aliyun,kbs" --target ${RUST_TARGET}
 
-RUN strip target/x86_64-unknown-linux-musl/release/cdh-oneshot
+RUN RUST_TARGET=$(cat /tmp/rust_target) && \
+    strip target/${RUST_TARGET}/release/cdh-oneshot && \
+    cp target/${RUST_TARGET}/release/cdh-oneshot /tmp/cdh-oneshot
+
 
 FROM ${BASE_IMAGE}
 
 # Copy binaries
-COPY --from=builder /usr/src/guest-components/target/x86_64-unknown-linux-musl/release/cdh-oneshot /usr/local/bin/confidential-data-hub
+COPY --from=builder /tmp/cdh-oneshot /usr/local/bin/confidential-data-hub
 COPY cdh-start.sh /usr/bin/start.sh
