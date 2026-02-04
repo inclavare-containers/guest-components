@@ -10,15 +10,30 @@ ENV ALL_PROXY=$ALL_PROXY
 ENV NO_PROXY=$NO_PROXY
 
 ARG CARGO_JOBS
+# TARGETARCH is auto-set by BuildKit/buildx (no --platform needed when building for host arch)
+ARG TARGETARCH
+
+# Map TARGETARCH to Rust target triple
+# TARGETARCH values: amd64, arm64, arm, s390x, ppc64le
+# Rust target format: {arch}-unknown-linux-gnu
+RUN case "$TARGETARCH" in \
+    amd64) echo "x86_64-unknown-linux-gnu" > /tmp/rust_target ;; \
+    arm64) echo "aarch64-unknown-linux-gnu" > /tmp/rust_target ;; \
+    *) echo "Unsupported architecture: $TARGETARCH" && exit 1 ;; \
+    esac
 
 WORKDIR /tmp
-RUN curl https://download.01.org/intel-sgx/sgx-dcap/1.21/linux/distro/Anolis86/sgx_rpm_local_repo.tgz --output sgx_rpm_local_repo.tgz && \
+RUN yum install -y perl wget curl clang openssl-devel protobuf-devel git libudev-devel perl-FindBin
+
+RUN if [ "$TARGETARCH" != "arm64" ]; then \
+    curl https://download.01.org/intel-sgx/sgx-dcap/1.21/linux/distro/Anolis86/sgx_rpm_local_repo.tgz --output sgx_rpm_local_repo.tgz && \
     tar zxvf sgx_rpm_local_repo.tgz && \
     find /etc/yum.repos.d/ -type f -exec sed -i 's/http:\/\/mirrors.openanolis.cn\/anolis/https:\/\/mirrors.aliyun.com\/anolis/g' {} + && \
     yum -y install yum-utils && yum-config-manager --add-repo file:///tmp/sgx_rpm_local_repo && \
-    yum install -y --setopt=install_weak_deps=False --nogpgcheck libtdx-attest-devel perl wget curl clang openssl-devel protobuf-devel git libudev-devel perl-FindBin && \
+    yum install -y --setopt=install_weak_deps=False --nogpgcheck libtdx-attest-devel && \
     yum clean all && \
-    rm -rf /tmp/*
+    rm -rf /tmp/sgx_rpm_local_repo*; \
+    fi
 
 WORKDIR /usr/src/guest-components
 COPY . .
@@ -28,11 +43,13 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
 ENV PATH="/root/.cargo/bin:${PATH}"
 
-RUN rustup toolchain install 1.79.0-x86_64-unknown-linux-gnu
+# Install Rust toolchain for target architecture
+RUN RUST_TARGET=$(cat /tmp/rust_target) && \
+    rustup toolchain install 1.79.0-${RUST_TARGET}
 
 RUN if [ -n "${CARGO_JOBS}" ]; then \
-      [ ! -d /root/.cargo ] && mkdir /root/.cargo; \
-      printf '[build]\njobs = %s\n' "${CARGO_JOBS}" >> /root/.cargo/config.toml; \
+    [ ! -d /root/.cargo ] && mkdir /root/.cargo; \
+    printf '[build]\njobs = %s\n' "${CARGO_JOBS}" >> /root/.cargo/config.toml; \
     fi
 
 # Cargo 1.79 uses libgit2 to download the git source,
@@ -41,26 +58,41 @@ RUN if [ -n "${CARGO_JOBS}" ]; then \
 # git command with awareness of proxy environment variables
 # to download the source.
 RUN if [ -n "${ALL_PROXY}" ]; then \
-      [ ! -d /root/.cargo ] && mkdir /root/.cargo; \
-      printf "[net]\ngit-fetch-with-cli = true" >> /root/.cargo/config.toml; \
+    [ ! -d /root/.cargo ] && mkdir /root/.cargo; \
+    printf "[net]\ngit-fetch-with-cli = true" >> /root/.cargo/config.toml; \
     fi
 
 # Build attestation-agent. Notice that libc version is not enough thus --release cannot pass
-RUN cargo +1.79.0 build -p attestation-agent --bin ttrpc-aa --no-default-features --features bin,ttrpc,rust-crypto,coco_as,kbs,tdx-attester,system-attester,csv-attester,hygon-dcu-attester,instance_info --target x86_64-unknown-linux-gnu
+RUN RUST_TARGET=$(cat /tmp/rust_target) && \
+    if [ "$TARGETARCH" != "arm64" ]; then \
+    cargo +1.79.0 build -p attestation-agent --bin ttrpc-aa --no-default-features \
+    --features bin,ttrpc,rust-crypto,coco_as,kbs,tdx-attester,system-attester,csv-attester,hygon-dcu-attester \
+    --target ${RUST_TARGET}; \
+    else \
+    cargo +1.79.0 build -p attestation-agent --bin ttrpc-aa --no-default-features \
+    --features bin,ttrpc,rust-crypto,coco_as,kbs,system-attester,csv-attester,hygon-dcu-attester \
+    --target ${RUST_TARGET}; \
+    fi
 
-RUN strip target/x86_64-unknown-linux-gnu/debug/ttrpc-aa
+RUN RUST_TARGET=$(cat /tmp/rust_target) && \
+    strip target/${RUST_TARGET}/debug/ttrpc-aa && \
+    cp target/${RUST_TARGET}/debug/ttrpc-aa /tmp/ttrpc-aa
 
 FROM registry.openanolis.cn/openanolis/anolisos:23.2
 
+ARG TARGETARCH
+
 WORKDIR /tmp
-RUN curl https://download.01.org/intel-sgx/sgx-dcap/1.21/linux/distro/Anolis86/sgx_rpm_local_repo.tgz --output sgx_rpm_local_repo.tgz && \
+RUN if [ "$TARGETARCH" != "arm64" ]; then \
+    curl https://download.01.org/intel-sgx/sgx-dcap/1.21/linux/distro/Anolis86/sgx_rpm_local_repo.tgz --output sgx_rpm_local_repo.tgz && \
     tar zxvf sgx_rpm_local_repo.tgz && \
     yum -y install yum-utils && yum-config-manager --add-repo file:///tmp/sgx_rpm_local_repo && \
     yum install -y --setopt=install_weak_deps=False --nogpgcheck libtdx-attest-devel && \
     yum clean all && \
-    rm -rf /tmp/*
+    rm -rf /tmp/*; \
+    fi
 
 # Copy binaries
-COPY --from=builder /usr/src/guest-components/target/x86_64-unknown-linux-gnu/debug/ttrpc-aa /usr/local/bin/attestation-agent
+COPY --from=builder /tmp/ttrpc-aa /usr/local/bin/attestation-agent
 COPY aa-start.sh /usr/bin/start.sh
 COPY tdx-attest.conf /etc/tdx-attest.conf
