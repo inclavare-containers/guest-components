@@ -1,7 +1,7 @@
 [Unit]
 Description=Trustiflux API Server (REST bridge for attestation-agent and confidential-data-hub)
-After=network-online.target
-Wants=network-online.target
+After=network-online.target attestation-agent.service confidential-data-hub-daemon.service
+Wants=network-online.target attestation-agent.service confidential-data-hub-daemon.service
 
 [Service]
 Type=simple
