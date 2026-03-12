@@ -54,6 +54,7 @@ kbs_protocol = { path = "../../attestation-agent/kbs_protocol", default-features
     "aa_ttrpc",
     "openssl",
 ], optional = true }
+kbs-types.workspace = true
 lazy_static.workspace = true
 log.workspace = true
 p12 = { version = "0.6.3", optional = true }

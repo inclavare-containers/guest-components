@@ -83,6 +83,16 @@ impl GetResourceServiceClient {
         let mut cres = super::api::GetResourceResponse::new();
         ::ttrpc::async_client_request!(self, ctx, req, "api.GetResourceService", "GetResource", cres);
     }
+
+    pub async fn prepare_resource_injection(&self, ctx: ttrpc::context::Context, req: &super::api::PrepareResourceInjectionRequest) -> ::ttrpc::Result<super::api::PrepareResourceInjectionResponse> {
+        let mut cres = super::api::PrepareResourceInjectionResponse::new();
+        ::ttrpc::async_client_request!(self, ctx, req, "api.GetResourceService", "PrepareResourceInjection", cres);
+    }
+
+    pub async fn commit_resource_injection(&self, ctx: ttrpc::context::Context, req: &super::api::CommitResourceInjectionRequest) -> ::ttrpc::Result<super::api::CommitResourceInjectionResponse> {
+        let mut cres = super::api::CommitResourceInjectionResponse::new();
+        ::ttrpc::async_client_request!(self, ctx, req, "api.GetResourceService", "CommitResourceInjection", cres);
+    }
 }
 
 struct GetResourceMethod {
@@ -96,10 +106,38 @@ impl ::ttrpc::r#async::MethodHandler for GetResourceMethod {
     }
 }
 
+struct PrepareResourceInjectionMethod {
+    service: Arc<dyn GetResourceService + Send + Sync>,
+}
+
+#[async_trait]
+impl ::ttrpc::r#async::MethodHandler for PrepareResourceInjectionMethod {
+    async fn handler(&self, ctx: ::ttrpc::r#async::TtrpcContext, req: ::ttrpc::Request) -> ::ttrpc::Result<::ttrpc::Response> {
+        ::ttrpc::async_request_handler!(self, ctx, req, api, PrepareResourceInjectionRequest, prepare_resource_injection);
+    }
+}
+
+struct CommitResourceInjectionMethod {
+    service: Arc<dyn GetResourceService + Send + Sync>,
+}
+
+#[async_trait]
+impl ::ttrpc::r#async::MethodHandler for CommitResourceInjectionMethod {
+    async fn handler(&self, ctx: ::ttrpc::r#async::TtrpcContext, req: ::ttrpc::Request) -> ::ttrpc::Result<::ttrpc::Response> {
+        ::ttrpc::async_request_handler!(self, ctx, req, api, CommitResourceInjectionRequest, commit_resource_injection);
+    }
+}
+
 #[async_trait]
 pub trait GetResourceService: Sync {
     async fn get_resource(&self, _ctx: &::ttrpc::r#async::TtrpcContext, _: super::api::GetResourceRequest) -> ::ttrpc::Result<super::api::GetResourceResponse> {
         Err(::ttrpc::Error::RpcStatus(::ttrpc::get_status(::ttrpc::Code::NOT_FOUND, "/api.GetResourceService/GetResource is not supported".to_string())))
+    }
+    async fn prepare_resource_injection(&self, _ctx: &::ttrpc::r#async::TtrpcContext, _: super::api::PrepareResourceInjectionRequest) -> ::ttrpc::Result<super::api::PrepareResourceInjectionResponse> {
+        Err(::ttrpc::Error::RpcStatus(::ttrpc::get_status(::ttrpc::Code::NOT_FOUND, "/api.GetResourceService/PrepareResourceInjection is not supported".to_string())))
+    }
+    async fn commit_resource_injection(&self, _ctx: &::ttrpc::r#async::TtrpcContext, _: super::api::CommitResourceInjectionRequest) -> ::ttrpc::Result<super::api::CommitResourceInjectionResponse> {
+        Err(::ttrpc::Error::RpcStatus(::ttrpc::get_status(::ttrpc::Code::NOT_FOUND, "/api.GetResourceService/CommitResourceInjection is not supported".to_string())))
     }
 }
 
@@ -110,6 +148,12 @@ pub fn create_get_resource_service(service: Arc<dyn GetResourceService + Send + 
 
     methods.insert("GetResource".to_string(),
                     Box::new(GetResourceMethod{service: service.clone()}) as Box<dyn ::ttrpc::r#async::MethodHandler + Send + Sync>);
+
+    methods.insert("PrepareResourceInjection".to_string(),
+                    Box::new(PrepareResourceInjectionMethod{service: service.clone()}) as Box<dyn ::ttrpc::r#async::MethodHandler + Send + Sync>);
+
+    methods.insert("CommitResourceInjection".to_string(),
+                    Box::new(CommitResourceInjectionMethod{service: service.clone()}) as Box<dyn ::ttrpc::r#async::MethodHandler + Send + Sync>);
 
     ret.insert("api.GetResourceService".to_string(), ::ttrpc::r#async::Service{ methods, streams });
     ret

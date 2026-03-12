@@ -22,6 +22,26 @@ message GetResourceResponse {
     bytes Resource = 1;
 }
 
+message PrepareResourceInjectionRequest {
+    string ResourcePath = 1;
+    string Nonce = 2;
+}
+
+message PrepareResourceInjectionResponse {
+    string SessionId = 1;
+    string Nonce = 2;
+    string TeePubKey = 3;
+    bytes Evidence = 4;
+}
+
+message CommitResourceInjectionRequest {
+    string SessionId = 1;
+    string ResourcePath = 2;
+    bytes EncryptedResource = 3;
+}
+
+message CommitResourceInjectionResponse {}
+
 message SecureMountRequest {
     string volume_type = 1;
     map<string, string> options = 2;
@@ -48,6 +68,8 @@ service SealedSecretService {
 
 service GetResourceService {
     rpc GetResource(GetResourceRequest) returns (GetResourceResponse) {};
+    rpc PrepareResourceInjection(PrepareResourceInjectionRequest) returns (PrepareResourceInjectionResponse) {};
+    rpc CommitResourceInjection(CommitResourceInjectionRequest) returns (CommitResourceInjectionResponse) {};
 }
 
 service SecureMountService {

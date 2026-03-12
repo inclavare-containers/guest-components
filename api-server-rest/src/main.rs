@@ -59,7 +59,10 @@ async fn main() -> Result<()> {
     if config.enable_cdh {
         router.register_route(
             CDH_ROOT,
-            Box::new(CDHClient::new(&config.cdh_socket, vec![Method::GET])?),
+            Box::new(CDHClient::new(
+                &config.cdh_socket,
+                vec![Method::GET, Method::POST],
+            )?),
         );
     }
 

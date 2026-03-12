@@ -19,8 +19,10 @@ use crate::{
     message::{KeyProviderInput, KeyUnwrapOutput, KeyUnwrapResults},
     protos::{
         api::{
-            GetResourceRequest, GetResourceResponse, ImagePullRequest, ImagePullResponse,
-            SecureMountRequest, SecureMountResponse, UnsealSecretInput, UnsealSecretOutput,
+            CommitResourceInjectionRequest, CommitResourceInjectionResponse, GetResourceRequest,
+            GetResourceResponse, ImagePullRequest, ImagePullResponse,
+            PrepareResourceInjectionRequest, PrepareResourceInjectionResponse, SecureMountRequest,
+            SecureMountResponse, UnsealSecretInput, UnsealSecretOutput,
         },
         api_ttrpc::{
             GetResourceService, ImagePullService, SealedSecretService, SecureMountService,
@@ -87,6 +89,56 @@ impl GetResourceService for Server {
         reply.Resource = resource;
         debug!("[ttRPC CDH] send back the resource");
         Ok(reply)
+    }
+
+    async fn prepare_resource_injection(
+        &self,
+        _ctx: &TtrpcContext,
+        req: PrepareResourceInjectionRequest,
+    ) -> ::ttrpc::Result<PrepareResourceInjectionResponse> {
+        debug!("[ttRPC CDH] get new PrepareResourceInjection request");
+        let result = self
+            .hub
+            .prepare_resource_injection(req.ResourcePath, req.Nonce)
+            .await
+            .map_err(|e| {
+                let detailed_error = format_error!(e);
+                error!("[ttRPC CDH] PrepareResourceInjection :\n{detailed_error}");
+                let mut status = Status::new();
+                status.set_code(Code::INTERNAL);
+                status.set_message("[CDH] [ERROR]: PrepareResourceInjection failed".into());
+                Error::RpcStatus(status)
+            })?;
+
+        let mut reply = PrepareResourceInjectionResponse::new();
+        reply.SessionId = result.session_id;
+        reply.Nonce = result.nonce;
+        reply.TeePubKey = result.tee_pubkey;
+        reply.Evidence = result.evidence;
+        debug!("[ttRPC CDH] prepare resource injection succeeded");
+        Ok(reply)
+    }
+
+    async fn commit_resource_injection(
+        &self,
+        _ctx: &TtrpcContext,
+        req: CommitResourceInjectionRequest,
+    ) -> ::ttrpc::Result<CommitResourceInjectionResponse> {
+        debug!("[ttRPC CDH] get new CommitResourceInjection request");
+        self.hub
+            .commit_resource_injection(req.SessionId, req.ResourcePath, req.EncryptedResource)
+            .await
+            .map_err(|e| {
+                let detailed_error = format_error!(e);
+                error!("[ttRPC CDH] CommitResourceInjection :\n{detailed_error}");
+                let mut status = Status::new();
+                status.set_code(Code::INTERNAL);
+                status.set_message("[CDH] [ERROR]: CommitResourceInjection failed".into());
+                Error::RpcStatus(status)
+            })?;
+
+        debug!("[ttRPC CDH] commit resource injection succeeded");
+        Ok(CommitResourceInjectionResponse::new())
     }
 }
 

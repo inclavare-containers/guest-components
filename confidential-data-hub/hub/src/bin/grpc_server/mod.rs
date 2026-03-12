@@ -23,9 +23,11 @@ use api::{
     key_provider_service_server::{KeyProviderService, KeyProviderServiceServer},
     sealed_secret_service_server::{SealedSecretService, SealedSecretServiceServer},
     secure_mount_service_server::{SecureMountService, SecureMountServiceServer},
-    GetResourceRequest, GetResourceResponse, ImagePullRequest, ImagePullResponse,
-    KeyProviderKeyWrapProtocolInput, KeyProviderKeyWrapProtocolOutput, SecureMountRequest,
-    SecureMountResponse, UnsealSecretInput, UnsealSecretOutput,
+    CommitResourceInjectionRequest, CommitResourceInjectionResponse, GetResourceRequest,
+    GetResourceResponse, ImagePullRequest, ImagePullResponse, KeyProviderKeyWrapProtocolInput,
+    KeyProviderKeyWrapProtocolOutput, PrepareResourceInjectionRequest,
+    PrepareResourceInjectionResponse, SecureMountRequest, SecureMountResponse, UnsealSecretInput,
+    UnsealSecretOutput,
 };
 
 mod api {
@@ -88,6 +90,64 @@ impl GetResourceService for Arc<Cdh> {
         let reply = GetResourceResponse { resource };
 
         Result::Ok(Response::new(reply))
+    }
+
+    async fn prepare_resource_injection(
+        &self,
+        request: Request<PrepareResourceInjectionRequest>,
+    ) -> Result<Response<PrepareResourceInjectionResponse>, Status> {
+        debug!("[gRPC CDH] get new PrepareResourceInjection request");
+        let request = request.into_inner();
+        let result = self
+            .inner
+            .prepare_resource_injection(request.resource_path, request.nonce)
+            .await
+            .map_err(|e| {
+                let detailed_error = format_error!(e);
+                error!(
+                    "[gRPC CDH] Call CDH to prepare resource injection failed:\n{detailed_error}"
+                );
+                Status::internal(format!(
+                    "[ERROR] CDH prepare resource injection failed: {}",
+                    e
+                ))
+            })?;
+
+        let reply = PrepareResourceInjectionResponse {
+            session_id: result.session_id,
+            nonce: result.nonce,
+            tee_pub_key: result.tee_pubkey,
+            evidence: result.evidence,
+        };
+
+        Result::Ok(Response::new(reply))
+    }
+
+    async fn commit_resource_injection(
+        &self,
+        request: Request<CommitResourceInjectionRequest>,
+    ) -> Result<Response<CommitResourceInjectionResponse>, Status> {
+        debug!("[gRPC CDH] get new CommitResourceInjection request");
+        let request = request.into_inner();
+        self.inner
+            .commit_resource_injection(
+                request.session_id,
+                request.resource_path,
+                request.encrypted_resource,
+            )
+            .await
+            .map_err(|e| {
+                let detailed_error = format_error!(e);
+                error!(
+                    "[gRPC CDH] Call CDH to commit resource injection failed:\n{detailed_error}"
+                );
+                Status::internal(format!(
+                    "[ERROR] CDH commit resource injection failed: {}",
+                    e
+                ))
+            })?;
+
+        Result::Ok(Response::new(CommitResourceInjectionResponse {}))
     }
 }
 
