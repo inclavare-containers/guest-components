@@ -61,6 +61,40 @@ fn _evidence() {}
 )]
 fn _resource() {}
 
+#[utoipa::path(
+    post,
+    path = "/cdh/resource-injection/prepare/{repository}/{type}/{tag}",
+    request_body = serde_json::Value,
+    responses(
+        (status = 200, description = "prepare injection response",
+                content_type = "application/json",
+                body = serde_json::Value,
+                example = json!({
+                    "session_id": "inject-session-id",
+                    "nonce": "nonce-from-verifier",
+                    "tee_pubkey": {"kty": "EC", "crv": "P-256", "alg": "ECDH-ES+A256KW", "x": "....", "y": "...."},
+                    "evidence": "base64-encoded-evidence"
+                })),
+        (status = 403, description = "forbid external access"),
+        (status = 404, description = "resource not found"),
+        (status = 405, description = "only POST method allowed")
+    )
+)]
+fn _resource_injection_prepare() {}
+
+#[utoipa::path(
+    post,
+    path = "/cdh/resource-injection/commit/{repository}/{type}/{tag}",
+    request_body = serde_json::Value,
+    responses(
+        (status = 200, description = "commit injection response"),
+        (status = 403, description = "forbid external access"),
+        (status = 404, description = "resource not found"),
+        (status = 405, description = "only POST method allowed")
+    )
+)]
+fn _resource_injection_commit() {}
+
 fn generate_openapi_document() -> std::io::Result<()> {
     #[derive(OpenApi)]
     #[openapi(
@@ -72,7 +106,13 @@ fn generate_openapi_document() -> std::io::Result<()> {
         (url = "http://127.0.0.1:8006", description = "CoCo Restful API")
      ),
 
-    paths(_token, _evidence, _resource)
+    paths(
+        _token,
+        _evidence,
+        _resource,
+        _resource_injection_prepare,
+        _resource_injection_commit
+    )
  )]
     struct ApiDoc;
     let mut file = File::create("openapi/api.json")?;

@@ -77,6 +77,15 @@ confidential-data-hub -c <path-to-config>
 
 Please see the example config file in [toml](./example.config.toml) or [json](./example.config.json) for more details.
 
+When using challenge-attestation based resource injection, CDH also supports configuring the
+attestation-agent socket:
+
+```toml
+aa_socket = "unix:///run/confidential-containers/attestation-agent/attestation-agent.sock"
+```
+
+If omitted, CDH uses the default value above for ttrpc deployments.
+
 However, if a file isn't passed with **-c** then it will search for configurations on the
 following locations (in order):
 

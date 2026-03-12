@@ -216,6 +216,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "base64 0.22.1",
  "clap 4.2.7",
  "config",
  "form_urlencoded",
@@ -1214,6 +1215,7 @@ dependencies = [
  "env_logger 0.11.6",
  "hex",
  "image-rs",
+ "kbs-types",
  "kbs_protocol",
  "lazy_static",
  "log",

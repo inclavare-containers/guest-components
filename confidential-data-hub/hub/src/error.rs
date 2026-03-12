@@ -39,4 +39,7 @@ pub enum Error {
         #[source]
         source: anyhow::Error,
     },
+
+    #[error("resource injection failed: {0}")]
+    ResourceInjection(String),
 }

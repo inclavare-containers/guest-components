@@ -268,12 +268,602 @@ impl ::protobuf::reflect::ProtobufValue for GetResourceResponse {
     type RuntimeType = ::protobuf::reflect::rt::RuntimeTypeMessage<Self>;
 }
 
+// @@protoc_insertion_point(message:api.PrepareResourceInjectionRequest)
+#[derive(PartialEq,Clone,Default,Debug)]
+pub struct PrepareResourceInjectionRequest {
+    // message fields
+    // @@protoc_insertion_point(field:api.PrepareResourceInjectionRequest.ResourcePath)
+    pub ResourcePath: ::std::string::String,
+    // @@protoc_insertion_point(field:api.PrepareResourceInjectionRequest.Nonce)
+    pub Nonce: ::std::string::String,
+    // special fields
+    // @@protoc_insertion_point(special_field:api.PrepareResourceInjectionRequest.special_fields)
+    pub special_fields: ::protobuf::SpecialFields,
+}
+
+impl<'a> ::std::default::Default for &'a PrepareResourceInjectionRequest {
+    fn default() -> &'a PrepareResourceInjectionRequest {
+        <PrepareResourceInjectionRequest as ::protobuf::Message>::default_instance()
+    }
+}
+
+impl PrepareResourceInjectionRequest {
+    pub fn new() -> PrepareResourceInjectionRequest {
+        ::std::default::Default::default()
+    }
+
+    fn generated_message_descriptor_data() -> ::protobuf::reflect::GeneratedMessageDescriptorData {
+        let mut fields = ::std::vec::Vec::with_capacity(2);
+        let mut oneofs = ::std::vec::Vec::with_capacity(0);
+        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
+            "ResourcePath",
+            |m: &PrepareResourceInjectionRequest| { &m.ResourcePath },
+            |m: &mut PrepareResourceInjectionRequest| { &mut m.ResourcePath },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
+            "Nonce",
+            |m: &PrepareResourceInjectionRequest| { &m.Nonce },
+            |m: &mut PrepareResourceInjectionRequest| { &mut m.Nonce },
+        ));
+        ::protobuf::reflect::GeneratedMessageDescriptorData::new_2::<PrepareResourceInjectionRequest>(
+            "PrepareResourceInjectionRequest",
+            fields,
+            oneofs,
+        )
+    }
+}
+
+impl ::protobuf::Message for PrepareResourceInjectionRequest {
+    const NAME: &'static str = "PrepareResourceInjectionRequest";
+
+    fn is_initialized(&self) -> bool {
+        true
+    }
+
+    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream<'_>) -> ::protobuf::Result<()> {
+        while let Some(tag) = is.read_raw_tag_or_eof()? {
+            match tag {
+                10 => {
+                    self.ResourcePath = is.read_string()?;
+                },
+                18 => {
+                    self.Nonce = is.read_string()?;
+                },
+                tag => {
+                    ::protobuf::rt::read_unknown_or_skip_group(tag, is, self.special_fields.mut_unknown_fields())?;
+                },
+            };
+        }
+        ::std::result::Result::Ok(())
+    }
+
+    // Compute sizes of nested messages
+    #[allow(unused_variables)]
+    fn compute_size(&self) -> u64 {
+        let mut my_size = 0;
+        if !self.ResourcePath.is_empty() {
+            my_size += ::protobuf::rt::string_size(1, &self.ResourcePath);
+        }
+        if !self.Nonce.is_empty() {
+            my_size += ::protobuf::rt::string_size(2, &self.Nonce);
+        }
+        my_size += ::protobuf::rt::unknown_fields_size(self.special_fields.unknown_fields());
+        self.special_fields.cached_size().set(my_size as u32);
+        my_size
+    }
+
+    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream<'_>) -> ::protobuf::Result<()> {
+        if !self.ResourcePath.is_empty() {
+            os.write_string(1, &self.ResourcePath)?;
+        }
+        if !self.Nonce.is_empty() {
+            os.write_string(2, &self.Nonce)?;
+        }
+        os.write_unknown_fields(self.special_fields.unknown_fields())?;
+        ::std::result::Result::Ok(())
+    }
+
+    fn special_fields(&self) -> &::protobuf::SpecialFields {
+        &self.special_fields
+    }
+
+    fn mut_special_fields(&mut self) -> &mut ::protobuf::SpecialFields {
+        &mut self.special_fields
+    }
+
+    fn new() -> PrepareResourceInjectionRequest {
+        PrepareResourceInjectionRequest::new()
+    }
+
+    fn clear(&mut self) {
+        self.ResourcePath.clear();
+        self.Nonce.clear();
+        self.special_fields.clear();
+    }
+
+    fn default_instance() -> &'static PrepareResourceInjectionRequest {
+        static instance: PrepareResourceInjectionRequest = PrepareResourceInjectionRequest {
+            ResourcePath: ::std::string::String::new(),
+            Nonce: ::std::string::String::new(),
+            special_fields: ::protobuf::SpecialFields::new(),
+        };
+        &instance
+    }
+}
+
+impl ::protobuf::MessageFull for PrepareResourceInjectionRequest {
+    fn descriptor() -> ::protobuf::reflect::MessageDescriptor {
+        static descriptor: ::protobuf::rt::Lazy<::protobuf::reflect::MessageDescriptor> = ::protobuf::rt::Lazy::new();
+        descriptor.get(|| file_descriptor().message_by_package_relative_name("PrepareResourceInjectionRequest").unwrap()).clone()
+    }
+}
+
+impl ::std::fmt::Display for PrepareResourceInjectionRequest {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        ::protobuf::text_format::fmt(self, f)
+    }
+}
+
+impl ::protobuf::reflect::ProtobufValue for PrepareResourceInjectionRequest {
+    type RuntimeType = ::protobuf::reflect::rt::RuntimeTypeMessage<Self>;
+}
+
+// @@protoc_insertion_point(message:api.PrepareResourceInjectionResponse)
+#[derive(PartialEq,Clone,Default,Debug)]
+pub struct PrepareResourceInjectionResponse {
+    // message fields
+    // @@protoc_insertion_point(field:api.PrepareResourceInjectionResponse.SessionId)
+    pub SessionId: ::std::string::String,
+    // @@protoc_insertion_point(field:api.PrepareResourceInjectionResponse.Nonce)
+    pub Nonce: ::std::string::String,
+    // @@protoc_insertion_point(field:api.PrepareResourceInjectionResponse.TeePubKey)
+    pub TeePubKey: ::std::string::String,
+    // @@protoc_insertion_point(field:api.PrepareResourceInjectionResponse.Evidence)
+    pub Evidence: ::std::vec::Vec<u8>,
+    // special fields
+    // @@protoc_insertion_point(special_field:api.PrepareResourceInjectionResponse.special_fields)
+    pub special_fields: ::protobuf::SpecialFields,
+}
+
+impl<'a> ::std::default::Default for &'a PrepareResourceInjectionResponse {
+    fn default() -> &'a PrepareResourceInjectionResponse {
+        <PrepareResourceInjectionResponse as ::protobuf::Message>::default_instance()
+    }
+}
+
+impl PrepareResourceInjectionResponse {
+    pub fn new() -> PrepareResourceInjectionResponse {
+        ::std::default::Default::default()
+    }
+
+    fn generated_message_descriptor_data() -> ::protobuf::reflect::GeneratedMessageDescriptorData {
+        let mut fields = ::std::vec::Vec::with_capacity(4);
+        let mut oneofs = ::std::vec::Vec::with_capacity(0);
+        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
+            "SessionId",
+            |m: &PrepareResourceInjectionResponse| { &m.SessionId },
+            |m: &mut PrepareResourceInjectionResponse| { &mut m.SessionId },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
+            "Nonce",
+            |m: &PrepareResourceInjectionResponse| { &m.Nonce },
+            |m: &mut PrepareResourceInjectionResponse| { &mut m.Nonce },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
+            "TeePubKey",
+            |m: &PrepareResourceInjectionResponse| { &m.TeePubKey },
+            |m: &mut PrepareResourceInjectionResponse| { &mut m.TeePubKey },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
+            "Evidence",
+            |m: &PrepareResourceInjectionResponse| { &m.Evidence },
+            |m: &mut PrepareResourceInjectionResponse| { &mut m.Evidence },
+        ));
+        ::protobuf::reflect::GeneratedMessageDescriptorData::new_2::<PrepareResourceInjectionResponse>(
+            "PrepareResourceInjectionResponse",
+            fields,
+            oneofs,
+        )
+    }
+}
+
+impl ::protobuf::Message for PrepareResourceInjectionResponse {
+    const NAME: &'static str = "PrepareResourceInjectionResponse";
+
+    fn is_initialized(&self) -> bool {
+        true
+    }
+
+    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream<'_>) -> ::protobuf::Result<()> {
+        while let Some(tag) = is.read_raw_tag_or_eof()? {
+            match tag {
+                10 => {
+                    self.SessionId = is.read_string()?;
+                },
+                18 => {
+                    self.Nonce = is.read_string()?;
+                },
+                26 => {
+                    self.TeePubKey = is.read_string()?;
+                },
+                34 => {
+                    self.Evidence = is.read_bytes()?;
+                },
+                tag => {
+                    ::protobuf::rt::read_unknown_or_skip_group(tag, is, self.special_fields.mut_unknown_fields())?;
+                },
+            };
+        }
+        ::std::result::Result::Ok(())
+    }
+
+    // Compute sizes of nested messages
+    #[allow(unused_variables)]
+    fn compute_size(&self) -> u64 {
+        let mut my_size = 0;
+        if !self.SessionId.is_empty() {
+            my_size += ::protobuf::rt::string_size(1, &self.SessionId);
+        }
+        if !self.Nonce.is_empty() {
+            my_size += ::protobuf::rt::string_size(2, &self.Nonce);
+        }
+        if !self.TeePubKey.is_empty() {
+            my_size += ::protobuf::rt::string_size(3, &self.TeePubKey);
+        }
+        if !self.Evidence.is_empty() {
+            my_size += ::protobuf::rt::bytes_size(4, &self.Evidence);
+        }
+        my_size += ::protobuf::rt::unknown_fields_size(self.special_fields.unknown_fields());
+        self.special_fields.cached_size().set(my_size as u32);
+        my_size
+    }
+
+    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream<'_>) -> ::protobuf::Result<()> {
+        if !self.SessionId.is_empty() {
+            os.write_string(1, &self.SessionId)?;
+        }
+        if !self.Nonce.is_empty() {
+            os.write_string(2, &self.Nonce)?;
+        }
+        if !self.TeePubKey.is_empty() {
+            os.write_string(3, &self.TeePubKey)?;
+        }
+        if !self.Evidence.is_empty() {
+            os.write_bytes(4, &self.Evidence)?;
+        }
+        os.write_unknown_fields(self.special_fields.unknown_fields())?;
+        ::std::result::Result::Ok(())
+    }
+
+    fn special_fields(&self) -> &::protobuf::SpecialFields {
+        &self.special_fields
+    }
+
+    fn mut_special_fields(&mut self) -> &mut ::protobuf::SpecialFields {
+        &mut self.special_fields
+    }
+
+    fn new() -> PrepareResourceInjectionResponse {
+        PrepareResourceInjectionResponse::new()
+    }
+
+    fn clear(&mut self) {
+        self.SessionId.clear();
+        self.Nonce.clear();
+        self.TeePubKey.clear();
+        self.Evidence.clear();
+        self.special_fields.clear();
+    }
+
+    fn default_instance() -> &'static PrepareResourceInjectionResponse {
+        static instance: PrepareResourceInjectionResponse = PrepareResourceInjectionResponse {
+            SessionId: ::std::string::String::new(),
+            Nonce: ::std::string::String::new(),
+            TeePubKey: ::std::string::String::new(),
+            Evidence: ::std::vec::Vec::new(),
+            special_fields: ::protobuf::SpecialFields::new(),
+        };
+        &instance
+    }
+}
+
+impl ::protobuf::MessageFull for PrepareResourceInjectionResponse {
+    fn descriptor() -> ::protobuf::reflect::MessageDescriptor {
+        static descriptor: ::protobuf::rt::Lazy<::protobuf::reflect::MessageDescriptor> = ::protobuf::rt::Lazy::new();
+        descriptor.get(|| file_descriptor().message_by_package_relative_name("PrepareResourceInjectionResponse").unwrap()).clone()
+    }
+}
+
+impl ::std::fmt::Display for PrepareResourceInjectionResponse {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        ::protobuf::text_format::fmt(self, f)
+    }
+}
+
+impl ::protobuf::reflect::ProtobufValue for PrepareResourceInjectionResponse {
+    type RuntimeType = ::protobuf::reflect::rt::RuntimeTypeMessage<Self>;
+}
+
+// @@protoc_insertion_point(message:api.CommitResourceInjectionRequest)
+#[derive(PartialEq,Clone,Default,Debug)]
+pub struct CommitResourceInjectionRequest {
+    // message fields
+    // @@protoc_insertion_point(field:api.CommitResourceInjectionRequest.SessionId)
+    pub SessionId: ::std::string::String,
+    // @@protoc_insertion_point(field:api.CommitResourceInjectionRequest.ResourcePath)
+    pub ResourcePath: ::std::string::String,
+    // @@protoc_insertion_point(field:api.CommitResourceInjectionRequest.EncryptedResource)
+    pub EncryptedResource: ::std::vec::Vec<u8>,
+    // special fields
+    // @@protoc_insertion_point(special_field:api.CommitResourceInjectionRequest.special_fields)
+    pub special_fields: ::protobuf::SpecialFields,
+}
+
+impl<'a> ::std::default::Default for &'a CommitResourceInjectionRequest {
+    fn default() -> &'a CommitResourceInjectionRequest {
+        <CommitResourceInjectionRequest as ::protobuf::Message>::default_instance()
+    }
+}
+
+impl CommitResourceInjectionRequest {
+    pub fn new() -> CommitResourceInjectionRequest {
+        ::std::default::Default::default()
+    }
+
+    fn generated_message_descriptor_data() -> ::protobuf::reflect::GeneratedMessageDescriptorData {
+        let mut fields = ::std::vec::Vec::with_capacity(3);
+        let mut oneofs = ::std::vec::Vec::with_capacity(0);
+        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
+            "SessionId",
+            |m: &CommitResourceInjectionRequest| { &m.SessionId },
+            |m: &mut CommitResourceInjectionRequest| { &mut m.SessionId },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
+            "ResourcePath",
+            |m: &CommitResourceInjectionRequest| { &m.ResourcePath },
+            |m: &mut CommitResourceInjectionRequest| { &mut m.ResourcePath },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
+            "EncryptedResource",
+            |m: &CommitResourceInjectionRequest| { &m.EncryptedResource },
+            |m: &mut CommitResourceInjectionRequest| { &mut m.EncryptedResource },
+        ));
+        ::protobuf::reflect::GeneratedMessageDescriptorData::new_2::<CommitResourceInjectionRequest>(
+            "CommitResourceInjectionRequest",
+            fields,
+            oneofs,
+        )
+    }
+}
+
+impl ::protobuf::Message for CommitResourceInjectionRequest {
+    const NAME: &'static str = "CommitResourceInjectionRequest";
+
+    fn is_initialized(&self) -> bool {
+        true
+    }
+
+    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream<'_>) -> ::protobuf::Result<()> {
+        while let Some(tag) = is.read_raw_tag_or_eof()? {
+            match tag {
+                10 => {
+                    self.SessionId = is.read_string()?;
+                },
+                18 => {
+                    self.ResourcePath = is.read_string()?;
+                },
+                26 => {
+                    self.EncryptedResource = is.read_bytes()?;
+                },
+                tag => {
+                    ::protobuf::rt::read_unknown_or_skip_group(tag, is, self.special_fields.mut_unknown_fields())?;
+                },
+            };
+        }
+        ::std::result::Result::Ok(())
+    }
+
+    // Compute sizes of nested messages
+    #[allow(unused_variables)]
+    fn compute_size(&self) -> u64 {
+        let mut my_size = 0;
+        if !self.SessionId.is_empty() {
+            my_size += ::protobuf::rt::string_size(1, &self.SessionId);
+        }
+        if !self.ResourcePath.is_empty() {
+            my_size += ::protobuf::rt::string_size(2, &self.ResourcePath);
+        }
+        if !self.EncryptedResource.is_empty() {
+            my_size += ::protobuf::rt::bytes_size(3, &self.EncryptedResource);
+        }
+        my_size += ::protobuf::rt::unknown_fields_size(self.special_fields.unknown_fields());
+        self.special_fields.cached_size().set(my_size as u32);
+        my_size
+    }
+
+    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream<'_>) -> ::protobuf::Result<()> {
+        if !self.SessionId.is_empty() {
+            os.write_string(1, &self.SessionId)?;
+        }
+        if !self.ResourcePath.is_empty() {
+            os.write_string(2, &self.ResourcePath)?;
+        }
+        if !self.EncryptedResource.is_empty() {
+            os.write_bytes(3, &self.EncryptedResource)?;
+        }
+        os.write_unknown_fields(self.special_fields.unknown_fields())?;
+        ::std::result::Result::Ok(())
+    }
+
+    fn special_fields(&self) -> &::protobuf::SpecialFields {
+        &self.special_fields
+    }
+
+    fn mut_special_fields(&mut self) -> &mut ::protobuf::SpecialFields {
+        &mut self.special_fields
+    }
+
+    fn new() -> CommitResourceInjectionRequest {
+        CommitResourceInjectionRequest::new()
+    }
+
+    fn clear(&mut self) {
+        self.SessionId.clear();
+        self.ResourcePath.clear();
+        self.EncryptedResource.clear();
+        self.special_fields.clear();
+    }
+
+    fn default_instance() -> &'static CommitResourceInjectionRequest {
+        static instance: CommitResourceInjectionRequest = CommitResourceInjectionRequest {
+            SessionId: ::std::string::String::new(),
+            ResourcePath: ::std::string::String::new(),
+            EncryptedResource: ::std::vec::Vec::new(),
+            special_fields: ::protobuf::SpecialFields::new(),
+        };
+        &instance
+    }
+}
+
+impl ::protobuf::MessageFull for CommitResourceInjectionRequest {
+    fn descriptor() -> ::protobuf::reflect::MessageDescriptor {
+        static descriptor: ::protobuf::rt::Lazy<::protobuf::reflect::MessageDescriptor> = ::protobuf::rt::Lazy::new();
+        descriptor.get(|| file_descriptor().message_by_package_relative_name("CommitResourceInjectionRequest").unwrap()).clone()
+    }
+}
+
+impl ::std::fmt::Display for CommitResourceInjectionRequest {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        ::protobuf::text_format::fmt(self, f)
+    }
+}
+
+impl ::protobuf::reflect::ProtobufValue for CommitResourceInjectionRequest {
+    type RuntimeType = ::protobuf::reflect::rt::RuntimeTypeMessage<Self>;
+}
+
+// @@protoc_insertion_point(message:api.CommitResourceInjectionResponse)
+#[derive(PartialEq,Clone,Default,Debug)]
+pub struct CommitResourceInjectionResponse {
+    // special fields
+    // @@protoc_insertion_point(special_field:api.CommitResourceInjectionResponse.special_fields)
+    pub special_fields: ::protobuf::SpecialFields,
+}
+
+impl<'a> ::std::default::Default for &'a CommitResourceInjectionResponse {
+    fn default() -> &'a CommitResourceInjectionResponse {
+        <CommitResourceInjectionResponse as ::protobuf::Message>::default_instance()
+    }
+}
+
+impl CommitResourceInjectionResponse {
+    pub fn new() -> CommitResourceInjectionResponse {
+        ::std::default::Default::default()
+    }
+
+    fn generated_message_descriptor_data() -> ::protobuf::reflect::GeneratedMessageDescriptorData {
+        let mut fields = ::std::vec::Vec::with_capacity(0);
+        let mut oneofs = ::std::vec::Vec::with_capacity(0);
+        ::protobuf::reflect::GeneratedMessageDescriptorData::new_2::<CommitResourceInjectionResponse>(
+            "CommitResourceInjectionResponse",
+            fields,
+            oneofs,
+        )
+    }
+}
+
+impl ::protobuf::Message for CommitResourceInjectionResponse {
+    const NAME: &'static str = "CommitResourceInjectionResponse";
+
+    fn is_initialized(&self) -> bool {
+        true
+    }
+
+    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream<'_>) -> ::protobuf::Result<()> {
+        while let Some(tag) = is.read_raw_tag_or_eof()? {
+            match tag {
+                tag => {
+                    ::protobuf::rt::read_unknown_or_skip_group(tag, is, self.special_fields.mut_unknown_fields())?;
+                },
+            };
+        }
+        ::std::result::Result::Ok(())
+    }
+
+    // Compute sizes of nested messages
+    #[allow(unused_variables)]
+    fn compute_size(&self) -> u64 {
+        let mut my_size = 0;
+        my_size += ::protobuf::rt::unknown_fields_size(self.special_fields.unknown_fields());
+        self.special_fields.cached_size().set(my_size as u32);
+        my_size
+    }
+
+    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream<'_>) -> ::protobuf::Result<()> {
+        os.write_unknown_fields(self.special_fields.unknown_fields())?;
+        ::std::result::Result::Ok(())
+    }
+
+    fn special_fields(&self) -> &::protobuf::SpecialFields {
+        &self.special_fields
+    }
+
+    fn mut_special_fields(&mut self) -> &mut ::protobuf::SpecialFields {
+        &mut self.special_fields
+    }
+
+    fn new() -> CommitResourceInjectionResponse {
+        CommitResourceInjectionResponse::new()
+    }
+
+    fn clear(&mut self) {
+        self.special_fields.clear();
+    }
+
+    fn default_instance() -> &'static CommitResourceInjectionResponse {
+        static instance: CommitResourceInjectionResponse = CommitResourceInjectionResponse {
+            special_fields: ::protobuf::SpecialFields::new(),
+        };
+        &instance
+    }
+}
+
+impl ::protobuf::MessageFull for CommitResourceInjectionResponse {
+    fn descriptor() -> ::protobuf::reflect::MessageDescriptor {
+        static descriptor: ::protobuf::rt::Lazy<::protobuf::reflect::MessageDescriptor> = ::protobuf::rt::Lazy::new();
+        descriptor.get(|| file_descriptor().message_by_package_relative_name("CommitResourceInjectionResponse").unwrap()).clone()
+    }
+}
+
+impl ::std::fmt::Display for CommitResourceInjectionResponse {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        ::protobuf::text_format::fmt(self, f)
+    }
+}
+
+impl ::protobuf::reflect::ProtobufValue for CommitResourceInjectionResponse {
+    type RuntimeType = ::protobuf::reflect::rt::RuntimeTypeMessage<Self>;
+}
+
 static file_descriptor_proto_data: &'static [u8] = b"\
     \n\x1bconfidential_data_hub.proto\x12\x03api\"8\n\x12GetResourceRequest\
     \x12\"\n\x0cResourcePath\x18\x01\x20\x01(\tR\x0cResourcePath\"1\n\x13Get\
     ResourceResponse\x12\x1a\n\x08Resource\x18\x01\x20\x01(\x0cR\x08Resource\
-    2V\n\x12GetResourceService\x12@\n\x0bGetResource\x12\x17.api.GetResource\
-    Request\x1a\x18.api.GetResourceResponseb\x06proto3\
+    \"[\n\x1fPrepareResourceInjectionRequest\x12\"\n\x0cResourcePath\x18\x01\
+    \x20\x01(\tR\x0cResourcePath\x12\x14\n\x05Nonce\x18\x02\x20\x01(\tR\x05N\
+    once\"\x90\x01\n\x20PrepareResourceInjectionResponse\x12\x1c\n\tSessionI\
+    d\x18\x01\x20\x01(\tR\tSessionId\x12\x14\n\x05Nonce\x18\x02\x20\x01(\tR\
+    \x05Nonce\x12\x1c\n\tTeePubKey\x18\x03\x20\x01(\tR\tTeePubKey\x12\x1a\n\
+    \x08Evidence\x18\x04\x20\x01(\x0cR\x08Evidence\"\x90\x01\n\x1eCommitReso\
+    urceInjectionRequest\x12\x1c\n\tSessionId\x18\x01\x20\x01(\tR\tSessionId\
+    \x12\"\n\x0cResourcePath\x18\x02\x20\x01(\tR\x0cResourcePath\x12,\n\x11E\
+    ncryptedResource\x18\x03\x20\x01(\x0cR\x11EncryptedResource\"!\n\x1fComm\
+    itResourceInjectionResponse2\xa5\x02\n\x12GetResourceService\x12@\n\x0bG\
+    etResource\x12\x17.api.GetResourceRequest\x1a\x18.api.GetResourceRespons\
+    e\x12g\n\x18PrepareResourceInjection\x12$.api.PrepareResourceInjectionRe\
+    quest\x1a%.api.PrepareResourceInjectionResponse\x12d\n\x17CommitResource\
+    Injection\x12#.api.CommitResourceInjectionRequest\x1a$.api.CommitResourc\
+    eInjectionResponseb\x06proto3\
 ";
 
 /// `FileDescriptorProto` object which was a source for this generated file
@@ -291,9 +881,13 @@ pub fn file_descriptor() -> &'static ::protobuf::reflect::FileDescriptor {
     file_descriptor.get(|| {
         let generated_file_descriptor = generated_file_descriptor_lazy.get(|| {
             let mut deps = ::std::vec::Vec::with_capacity(0);
-            let mut messages = ::std::vec::Vec::with_capacity(2);
+            let mut messages = ::std::vec::Vec::with_capacity(6);
             messages.push(GetResourceRequest::generated_message_descriptor_data());
             messages.push(GetResourceResponse::generated_message_descriptor_data());
+            messages.push(PrepareResourceInjectionRequest::generated_message_descriptor_data());
+            messages.push(PrepareResourceInjectionResponse::generated_message_descriptor_data());
+            messages.push(CommitResourceInjectionRequest::generated_message_descriptor_data());
+            messages.push(CommitResourceInjectionResponse::generated_message_descriptor_data());
             let mut enums = ::std::vec::Vec::with_capacity(0);
             ::protobuf::reflect::GeneratedFileDescriptor::new_generated(
                 file_descriptor_proto(),

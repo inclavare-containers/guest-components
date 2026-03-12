@@ -15,8 +15,10 @@ use serde::Deserialize;
 cfg_if::cfg_if! {
     if #[cfg(feature = "ttrpc")] {
         const DEFAULT_CDH_SOCKET_ADDR: &str = "unix:///run/confidential-containers/cdh.sock";
+        const DEFAULT_AA_SOCKET_ADDR: &str = "unix:///run/confidential-containers/attestation-agent/attestation-agent.sock";
     } else {
         const DEFAULT_CDH_SOCKET_ADDR: &str = "127.0.0.1:50000";
+        const DEFAULT_AA_SOCKET_ADDR: &str = "127.0.0.1:50004";
     }
 }
 
@@ -59,6 +61,8 @@ pub struct CdhConfig {
     pub image: ImageConfig,
 
     pub socket: String,
+
+    pub aa_socket: String,
 }
 
 impl CdhConfig {
@@ -86,6 +90,7 @@ impl CdhConfig {
                     kbc: KbsConfig::new()?,
                     credentials: Vec::new(),
                     socket: DEFAULT_CDH_SOCKET_ADDR.into(),
+                    aa_socket: DEFAULT_AA_SOCKET_ADDR.into(),
                     image: ImageConfig::default(),
                 }
             }
@@ -100,6 +105,7 @@ impl CdhConfig {
     fn from_file(config_path: &str) -> Result<Self> {
         let c = Config::builder()
             .set_default("socket", DEFAULT_CDH_SOCKET_ADDR)?
+            .set_default("aa_socket", DEFAULT_AA_SOCKET_ADDR)?
             .set_default("kbc.url", "")?
             .add_source(File::with_name(config_path))
             .build()?;
@@ -167,7 +173,10 @@ mod tests {
     use image_rs::config::ImageConfig;
     use rstest::rstest;
 
-    use crate::{config::DEFAULT_CDH_SOCKET_ADDR, CdhConfig, KbsConfig};
+    use crate::{
+        config::{DEFAULT_AA_SOCKET_ADDR, DEFAULT_CDH_SOCKET_ADDR},
+        CdhConfig, KbsConfig,
+    };
 
     #[rstest]
     #[case(
@@ -205,6 +214,7 @@ image_pull_proxy = "http://127.0.0.1:8080"
                 ..Default::default()
             },
             socket: "unix:///run/confidential-containers/cdh.sock".to_string(),
+            aa_socket: DEFAULT_AA_SOCKET_ADDR.to_string(),
         })
     )]
     #[case(
@@ -241,6 +251,7 @@ name = "offline_fs_kbc"
                 ..Default::default()
         },
         socket: DEFAULT_CDH_SOCKET_ADDR.to_string(),
+        aa_socket: DEFAULT_AA_SOCKET_ADDR.to_string(),
     })
     )]
     #[case(
@@ -267,6 +278,7 @@ some_undefined_field = "unknown value"
                 ..Default::default()
         },
         socket: DEFAULT_CDH_SOCKET_ADDR.to_string(),
+        aa_socket: DEFAULT_AA_SOCKET_ADDR.to_string(),
     })
     )]
     fn read_config(#[case] config: &str, #[case] expected: Option<CdhConfig>) {
@@ -297,6 +309,7 @@ some_undefined_field = "unknown value"
             },
             credentials: Vec::new(),
             socket: DEFAULT_CDH_SOCKET_ADDR.into(),
+            aa_socket: DEFAULT_AA_SOCKET_ADDR.into(),
             image: ImageConfig::default(),
         };
         assert_eq!(config, expected);

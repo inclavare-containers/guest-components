@@ -109,6 +109,79 @@
         }
       }
     },
+    "/cdh/resource-injection/commit/{repository}/{type}/{tag}": {
+      "post": {
+        "tags": [],
+        "operationId": "_resource_injection_commit",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "commit injection response"
+          },
+          "403": {
+            "description": "forbid external access"
+          },
+          "404": {
+            "description": "resource not found"
+          },
+          "405": {
+            "description": "only POST method allowed"
+          }
+        }
+      }
+    },
+    "/cdh/resource-injection/prepare/{repository}/{type}/{tag}": {
+      "post": {
+        "tags": [],
+        "operationId": "_resource_injection_prepare",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "prepare injection response",
+            "content": {
+              "application/json": {
+                "schema": {},
+                "example": {
+                  "evidence": "base64-encoded-evidence",
+                  "nonce": "nonce-from-verifier",
+                  "session_id": "inject-session-id",
+                  "tee_pubkey": {
+                    "alg": "ECDH-ES+A256KW",
+                    "crv": "P-256",
+                    "kty": "EC",
+                    "x": "....",
+                    "y": "...."
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "forbid external access"
+          },
+          "404": {
+            "description": "resource not found"
+          },
+          "405": {
+            "description": "only POST method allowed"
+          }
+        }
+      }
+    },
     "/cdh/resource/{repository}/{type}/{tag}": {
       "get": {
         "tags": [],

@@ -110,3 +110,69 @@ HUlOu8NWz8si11OZUzUJMnjiq/iZyHBJZMSD3BaqgMc=
 ```
 
 Notice on the output above that the service returned the raw key's value, i.e., it is already base64 decoded.
+
+## Challenge attestation based resource injection
+
+In addition to the existing pull model (`/cdh/resource/...`), CDH now supports a verifier-driven
+push model for confidential data injection. This is useful when a remote verifier wants to attest
+the guest first, then inject data into the TEE.
+
+### Security properties
+
+- **Freshness**: verifier sends a challenge nonce to CDH `prepare` API.
+- **Attestation binding**: CDH generates evidence with runtime_data:
+  `{"nonce":"...","tee-pubkey":{...}}`
+- **Confidential transport**: verifier encrypts payload with the TEE public key returned by CDH.
+- **One-time session**: each injection session (`session_id`) can be committed only once.
+
+### API workflow
+
+1. Prepare injection
+
+```bash
+curl -sS -X POST \
+  http://127.0.0.1:8006/cdh/resource-injection/prepare/default/key/1 \
+  -H 'content-type: application/json' \
+  -d '{"nonce":"<verifier-nonce>"}'
+```
+
+Response:
+
+```json
+{
+  "session_id": "....",
+  "nonce": "<verifier-nonce>",
+  "tee_pubkey": {
+    "kty": "EC",
+    "crv": "P-256",
+    "alg": "ECDH-ES+A256KW",
+    "x": "...",
+    "y": "..."
+  },
+  "evidence": "<base64-encoded-attestation-evidence>"
+}
+```
+
+2. Verifier validates `evidence` with the same `nonce` and `tee_pubkey` in runtime_data.
+3. Verifier encrypts plaintext resource to a KBS-compatible encrypted response JSON.
+4. Commit injection
+
+```bash
+curl -sS -X POST \
+  http://127.0.0.1:8006/cdh/resource-injection/commit/default/key/1 \
+  -H 'content-type: application/json' \
+  -d '{
+    "session_id":"<session-id>",
+    "encrypted_resource": {
+      "protected": {"alg":"ECDH-ES+A256KW","enc":"A256GCM","epk":{"kty":"EC","crv":"P-256","x":"...","y":"..."}},
+      "encrypted_key":"...",
+      "iv":"...",
+      "ciphertext":"...",
+      "tag":"..."
+    }
+  }'
+```
+
+After commit succeeds, CDH decrypts the payload inside the TEE and stores plaintext at:
+
+`/run/confidential-containers/cdh/<repository>/<type>/<tag>`

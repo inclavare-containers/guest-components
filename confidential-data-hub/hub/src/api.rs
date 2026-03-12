@@ -8,6 +8,13 @@ use async_trait::async_trait;
 use crate::storage::volume_type::Storage;
 use crate::Result;
 
+pub struct PrepareResourceInjectionResult {
+    pub session_id: String,
+    pub nonce: String,
+    pub tee_pubkey: String,
+    pub evidence: Vec<u8>,
+}
+
 /// The APIs of the DataHub. See
 /// <https://github.com/confidential-containers/documentation/issues/131> for
 /// more information.
@@ -27,6 +34,19 @@ pub trait DataHub {
     /// URI is defined in
     /// <https://github.com/confidential-containers/guest-components/blob/main/attestation-agent/docs/KBS_URI.md>
     async fn get_resource(&self, uri: String) -> Result<Vec<u8>>;
+
+    async fn prepare_resource_injection(
+        &self,
+        resource_path: String,
+        nonce: String,
+    ) -> Result<PrepareResourceInjectionResult>;
+
+    async fn commit_resource_injection(
+        &self,
+        session_id: String,
+        resource_path: String,
+        encrypted_resource: Vec<u8>,
+    ) -> Result<()>;
 
     async fn secure_mount(&self, storage: Storage) -> Result<String>;
 
