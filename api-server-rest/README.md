@@ -5,7 +5,7 @@ CoCo guest components 使用轻量级 ttRPC 进行内部通信。`trustiflux-api
 默认配置文件路径：`/etc/trustiflux/trustiflux-api-server.toml`，示例：
 
 ```
-bind = "0.0.0.0:8006"
+bind = "127.0.0.1:8006"
 enable_cdh = true
 cdh_socket = "unix:///run/confidential-containers/cdh.sock"
 allow_remote_resource_injection = false
@@ -25,8 +25,8 @@ allow_remote_get_evidence = false
 
 ```bash
 $ ./api-server-rest --config dist/rpm/trustiflux-api-server.toml
-Starting API server with config dist/rpm/trustiflux-api-server.toml (bind 0.0.0.0:8006)
-API Server listening on http://0.0.0.0:8006
+Starting API server with config dist/rpm/trustiflux-api-server.toml (bind 127.0.0.1:8006)
+API Server listening on http://127.0.0.1:8006
 
 $ curl http://127.0.0.1:8006/cdh/resource/default/key/1
 12345678901234567890123456xxxx
