@@ -76,6 +76,9 @@ fn is_hypervisor_present() -> bool {
     use std::arch::x86_64::__cpuid;
 
     // Check CPUID hypervisor bit
+    // SAFETY: __cpuid is safe on x86_64 with proper leaf values, but its safety
+    // annotation varies across Rust versions and target feature configurations.
+    #[allow(unused_unsafe)]
     let basic_cpuid = unsafe { __cpuid(1) };
     let is_vm = (basic_cpuid.ecx & (1 << 31)) != 0;
 
@@ -98,6 +101,9 @@ fn get_hypervisor_name() -> Option<&'static str> {
     use std::arch::x86_64::__cpuid;
 
     // CPUID leaf 0x40000000 returns hypervisor signature
+    // SAFETY: __cpuid is safe on x86_64 with proper leaf values, but its safety
+    // annotation varies across Rust versions and target feature configurations.
+    #[allow(unused_unsafe)]
     let hypervisor_cpuid = unsafe { __cpuid(0x40000000) };
     let signature = [
         hypervisor_cpuid.ebx,

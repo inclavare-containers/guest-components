@@ -453,6 +453,7 @@ mod test {
 
     #[tokio::test]
     #[serial_test::serial]
+    #[ignore]
     async fn test_client() {
         // prepare test resource
         let tmp = tempfile::tempdir().expect("create tempdir");

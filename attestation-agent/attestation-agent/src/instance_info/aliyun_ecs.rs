@@ -50,6 +50,7 @@ pub struct EcsInfo {
     pub instance_name: Option<String>,
     pub owner_account_id: Option<String>,
     pub image_id: Option<String>,
+    pub ip: Option<String>,
 }
 
 pub struct MetadataClient {
@@ -99,11 +100,18 @@ impl MetadataClient {
             .await?;
         let image_id = self.get_instance_metadata(&token, "image-id").await?;
 
+        // Prefer public IP (eipv4) over private IP (private-ipv4)
+        let ip = match self.get_instance_metadata(&token, "eipv4").await? {
+            Some(eip) if !eip.is_empty() => Some(eip),
+            _ => self.get_instance_metadata(&token, "private-ipv4").await?,
+        };
+
         Ok(Some(EcsInfo {
             instance_id,
             instance_name,
             owner_account_id,
             image_id,
+            ip,
         }))
     }
 
@@ -189,7 +197,15 @@ fn build_local_ecs_info() -> Option<EcsInfo> {
         }
     };
 
-    if instance_id.is_none() && instance_name.is_none() {
+    let ip = match get_local_ipv4() {
+        Some(addr) => Some(addr),
+        None => {
+            warn!("Unable to get local IPv4 address for ip fallback");
+            None
+        }
+    };
+
+    if instance_id.is_none() && instance_name.is_none() && ip.is_none() {
         None
     } else {
         Some(EcsInfo {
@@ -197,6 +213,7 @@ fn build_local_ecs_info() -> Option<EcsInfo> {
             instance_name,
             owner_account_id: None,
             image_id: None,
+            ip,
         })
     }
 }
@@ -259,6 +276,46 @@ fn run_hostname_command(args: &[&str]) -> Option<String> {
         Err(err) => {
             debug!("Failed to execute hostname command {:?}: {err}", args);
         }
+    }
+
+    None
+}
+
+/// Get local IPv4 address by running `hostname -I` and taking the first IP.
+/// Falls back to parsing network interfaces if hostname command fails.
+fn get_local_ipv4() -> Option<String> {
+    // Try `hostname -I` first, which returns all IP addresses
+    if let Some(ips) = run_hostname_command(&["-I"]) {
+        // hostname -I returns space-separated IPs, take the first one
+        if let Some(first_ip) = ips.split_whitespace().next() {
+            // Validate it looks like an IPv4 address
+            if first_ip.contains('.') && !first_ip.contains(':') {
+                return Some(first_ip.to_string());
+            }
+        }
+    }
+
+    // Fallback: try to read from /proc/net/fib_trie or use ip command
+    match Command::new("ip")
+        .args(["route", "get", "1.0.0.0"])
+        .output()
+    {
+        Ok(output) if output.status.success() => {
+            let output_str = String::from_utf8_lossy(&output.stdout);
+            // Parse output like: "1.0.0.0 via 192.168.1.1 dev eth0 src 192.168.1.100 uid 0"
+            // We want the "src" field
+            for (i, part) in output_str.split_whitespace().enumerate() {
+                if part == "src" {
+                    if let Some(ip) = output_str.split_whitespace().nth(i + 1) {
+                        if ip.contains('.') && !ip.contains(':') {
+                            return Some(ip.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        Ok(output) => debug!("ip route command failed with status {}", output.status),
+        Err(err) => debug!("Failed to execute ip route command: {err}"),
     }
 
     None
