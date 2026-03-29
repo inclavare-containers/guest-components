@@ -1,0 +1,32 @@
+[package]
+name = "initdata-processor"
+version = "0.1.0"
+authors = ["The Confidential Containers Authors"]
+publish = false
+edition = "2021"
+license = "Apache-2.0"
+description = "Discover initdata block devices, verify via TEE bind_init_data, extract [data] to disk"
+
+# Default build is sample-only (no platform attesters) so `cargo build` works without TDX/SNP native libs.
+# For confidential guests, build with: `cargo build -p initdata-processor --features all-attesters`
+[features]
+default = []
+all-attesters = ["attester/all-attesters"]
+tdx-attester = ["attester/tdx-attester"]
+
+[dependencies]
+anyhow.workspace = true
+attester = { path = "../attestation-agent/attester", default-features = false }
+env_logger.workspace = true
+flate2.workspace = true
+kbs-types.workspace = true
+log.workspace = true
+serde = { workspace = true, features = ["derive"] }
+sha2.workspace = true
+tokio = { workspace = true, features = [
+    "fs",
+    "io-util",
+    "macros",
+    "rt-multi-thread",
+] }
+toml.workspace = true
