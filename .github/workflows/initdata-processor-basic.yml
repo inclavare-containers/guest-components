@@ -1,0 +1,60 @@
+name: initdata-processor basic build and checks
+
+on:
+  push:
+    branches:
+      - "main"
+    paths:
+      - 'initdata-processor/**'
+      - '.github/workflows/initdata-processor-basic.yml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+  pull_request:
+    paths:
+      - 'initdata-processor/**'
+      - '.github/workflows/initdata-processor-basic.yml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+  create:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  basic_ci:
+    if: github.event_name != 'push'
+    name: Check
+    strategy:
+      fail-fast: false
+      matrix:
+        instance:
+          - ubuntu-24.04
+        rust:
+          - 1.76.0
+    runs-on: ${{ matrix.instance }}
+    steps:
+      - name: Code checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install Rust toolchain (${{ matrix.rust }})
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: ${{ matrix.rust }}
+          override: true
+          components: rustfmt, clippy
+
+      - name: Cargo build (default features)
+        run: cargo build -p initdata-processor
+
+      - name: Run cargo test
+        run: cargo test -p initdata-processor
+
+      - name: Run cargo fmt check
+        run: cargo fmt -p initdata-processor -- --check
+
+      - name: Run rust lint check
+        run: cargo clippy -p initdata-processor -- -D warnings
