@@ -8,28 +8,21 @@ on:
       - "v*.*.*"
   pull_request:
 
-permissions:
-  contents: write
-  actions: read
-  id-token: write
-
-env:
-  # RVDS endpoint for publishing release events, e.g. https://rvds.example.com
-  RVDS_ENDPOINT: ${{ secrets.RVDS_ENDPOINT || vars.RVDS_ENDPOINT || '' }}
-
 jobs:
-  build:
+  create-tarball:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-
+    outputs:
+      PRE_RELEASE: ${{ steps.check-pre-release.outputs.PRE_RELEASE }}
+      VERSION: ${{ steps.extract-version.outputs.VERSION }}
+      RELEASE: ${{ steps.extract-version.outputs.RELEASE }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: 'true'
 
       - name: Check pre-release
+        id: check-pre-release
         run: |
           tag="${GITHUB_REF#refs/*/}"
           echo "tag=$tag"
@@ -40,139 +33,170 @@ jobs:
               prerelease=false
           fi
           echo "prerelease=$prerelease"
-          echo "PRE_RELEASE=$prerelease" >> $GITHUB_ENV
+          echo "PRE_RELEASE=$prerelease" >> $GITHUB_OUTPUT
+
+      - name: Extract version info
+        id: extract-version
+        run: |
+          VERSION=$(grep -m1 '^Version:' trustiflux.spec | awk '{print $2}')
+          RELEASE=$(grep -m1 '^%define release' trustiflux.spec | awk '{print $3}')
+          echo "Using VERSION: $VERSION"
+          echo "Using RELEASE: $RELEASE"
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "RELEASE=$RELEASE" >> $GITHUB_OUTPUT
 
       - uses: dtolnay/rust-toolchain@1.75.0
 
-      - name: Build RPM package
-        run: |
-          make create-tarball
-          make rpm-build-in-al3-docker
-          make rpm-build-in-an23-docker
-          mkdir -p $GITHUB_WORKSPACE/rpmbuild
-          cp -r ~/rpmbuild/SRPMS/ $GITHUB_WORKSPACE/rpmbuild/
-          cp -r ~/rpmbuild/RPMS/ $GITHUB_WORKSPACE/rpmbuild/
-          mkdir -p $GITHUB_WORKSPACE/rpmbuild/SOURCES/
-          cp -r /tmp/guest-components-*.tar.gz $GITHUB_WORKSPACE/rpmbuild/SOURCES/
+      - name: Create tarball
+        run: make create-tarball
 
-      - name: Upload artifact
+      - name: Upload tarball
         uses: actions/upload-artifact@v4
         with:
-          name: rpm-packages
+          name: source-tarball
           if-no-files-found: error
           path: |
-            ./rpmbuild/SOURCES/guest-components-*.tar.gz
-            ./rpmbuild/SRPMS/*.src.rpm
-            ./rpmbuild/RPMS/*/*.rpm
-    
-  guanfu-build:
-    if: startsWith(github.ref, 'refs/tags/')
-    runs-on: ubuntu-latest
+            /tmp/v*.tar.gz
+            /tmp/guest-components-*-vendor.tar.gz
+
+  build:
     strategy:
       fail-fast: false
-
+      matrix:
+        arch: [x86_64]
+        distro: [an23, al8]
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+          - distro: an23
+            buildspec_template: dist/buildspec/trustiflux.an23.buildspec.yaml.template
+            dist_suffix: an23
+          - distro: al8
+            buildspec_template: dist/buildspec/trustiflux.al8.buildspec.yaml.template
+            dist_suffix: al8
+    runs-on: ${{ matrix.runner }}
+    needs: create-tarball
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: 'true'
 
-      - uses: dtolnay/rust-toolchain@1.75.0
+      - name: Download tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: source-tarball
+          path: ./
 
-      - name: Create buildspec from template for AnolisOS23
+      - name: Prepare buildspec and export version info
+        id: prepare-buildspec
         run: |
-          GITHUB_RELEASE="${GITHUB_REF#refs/tags/}"
-          VERSION=$(grep -m1 '^Version:' trustiflux.spec | awk '{print $2}')
-          RELEASE=$(grep -m1 '^%define release' trustiflux.spec | awk '{print $3}')
-          
+          GITHUB_RELEASE="${{ github.ref_name || 'no_tag' }}"
+          GITHUB_REPO_URL="${{ github.server_url }}/${{ github.repository }}"
+          VERSION="${{ needs.create-tarball.outputs.VERSION }}"
+          RELEASE="${{ needs.create-tarball.outputs.RELEASE }}"
+          DIST_SUFFIX="${{ matrix.dist_suffix }}"
+
           echo "Using GITHUB_RELEASE: $GITHUB_RELEASE"
           echo "Using VERSION: $VERSION"
           echo "Using RELEASE: $RELEASE"
+          echo "Using DIST_SUFFIX: $DIST_SUFFIX"
 
-          export GITHUB_RELEASE VERSION RELEASE
-          envsubst '$GITHUB_RELEASE $VERSION $RELEASE' \
-            < dist/buildspec/trustiflux.an23.buildspec.yaml.template \
-            > dist/buildspec/trustiflux.an23.buildspec.yaml
+          # Create buildspec for release
+          export GITHUB_RELEASE GITHUB_REPO_URL VERSION RELEASE
+          envsubst '$GITHUB_RELEASE $GITHUB_REPO_URL $VERSION $RELEASE' \
+            < ${{ matrix.buildspec_template }} \
+            > ./trustiflux-${VERSION}-${RELEASE}.${DIST_SUFFIX}.${{ matrix.arch }}.buildspec.yaml
 
-      - name: Create build manifest
-        run: |
-          make create-tarball
-          for pattern in '/tmp/v*.tar.gz' '/tmp/guest-components-*.tar.gz'; do
-            for f in $pattern; do
-              mv "$f" "/tmp/reproducible-$(basename "$f")"
-            done
-          done
-      
-      - name: Release build manifest
-        uses: softprops/action-gh-release@v2
-        with:
-          fail_on_unmatched_files: true
-          prerelease: ${{ env.PRE_RELEASE }}
-          files: |
-            /tmp/reproducible-v*.tar.gz
-            /tmp/reproducible-guest-components-v*-vendor.tar.gz
-            ./dist/buildspec/trustiflux.an23.buildspec.yaml
+          # Copy buildspec for local build
+          # Install yq
+          YQ_ARCH=${{ matrix.arch == 'aarch64' && 'arm64' || 'amd64' }}
+          YQ_VERSION="v4.45.1"
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_${YQ_ARCH}
+          sudo chmod +x /usr/local/bin/yq
 
-      - name: Build AnolisOS23 RPM package
-        uses: 1570005763/GuanFu@v1
-        with:
-          spec_path: dist/buildspec/trustiflux.an23.buildspec.yaml
+          LOCAL_BUILDSPEC="dist/buildspec/trustiflux.${DIST_SUFFIX}.buildspec.yaml"
+          cp ./trustiflux-${VERSION}-${RELEASE}.${DIST_SUFFIX}.${{ matrix.arch }}.buildspec.yaml "${LOCAL_BUILDSPEC}"
 
-      - name: Place AnolisOS23 RPM packages
-        run: |
-          for f in /tmp/rpmbuild/RPMS/*/*.rpm /tmp/rpmbuild/SRPMS/*.src.rpm; do
-            dir=${f%/*}
-            base=${f##*/}
-            mv "$f" "$dir/reproducible-$base"
-          done
-      
-      - name: Upload artifact
+          # Replace URL with local path for local build
+          yq -i ".inputs.source.url = \"file://${GITHUB_WORKSPACE}/v${VERSION}.tar.gz\"" "${LOCAL_BUILDSPEC}"
+          yq -i ".inputs.rustVendor.url = \"file://${GITHUB_WORKSPACE}/guest-components-v${VERSION}-vendor.tar.gz\"" "${LOCAL_BUILDSPEC}"
+
+      - name: Upload build input artifact
         uses: actions/upload-artifact@v4
         with:
-          name: reproducible-rpm-packages
+          name: build-input-${{ matrix.distro }}-${{ matrix.arch }}
           if-no-files-found: error
           path: |
-            /tmp/rpmbuild/SRPMS/*.src.rpm
-            /tmp/rpmbuild/RPMS/*/*.rpm
+            ./v*.tar.gz
+            ./guest-components-*-vendor.tar.gz
+            ./trustiflux-*.${{ matrix.dist_suffix }}.${{ matrix.arch }}.buildspec.yaml
+
+      - name: Build RPM package
+        uses: 1570005763/GuanFu@v1
+        with:
+          spec_path: dist/buildspec/trustiflux.${{ matrix.dist_suffix }}.buildspec.yaml
+
+      - name: Upload build output artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output-${{ matrix.distro }}-${{ matrix.arch }}
+          if-no-files-found: error
+          path: |
+            /tmp/rpmbuild/SRPMS/trustiflux-*.${{ matrix.dist_suffix }}.src.rpm
+            /tmp/rpmbuild/RPMS/${{ matrix.arch }}/attestation-agent-*.${{ matrix.dist_suffix }}.${{ matrix.arch }}.rpm
+            /tmp/rpmbuild/RPMS/${{ matrix.arch }}/confidential-data-hub-*.${{ matrix.dist_suffix }}.${{ matrix.arch }}.rpm
+            /tmp/rpmbuild/RPMS/${{ matrix.arch }}/trustiflux-api-server-*.${{ matrix.dist_suffix }}.${{ matrix.arch }}.rpm
 
   test:
     strategy:
       fail-fast: false
       matrix:
-        distro: ["alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/alinux3:latest", "registry.openanolis.cn/openanolis/anolisos:23"]
-    runs-on: ubuntu-latest
+        include:
+          - distro: an23
+            distro_image: "registry.openanolis.cn/openanolis/anolisos:23"
+            arch: x86_64
+            runner: ubuntu-latest
+            extra_repos: "yum install -y anolis-epao-release"
+          - distro: al8
+            distro_image: "alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/alinux3:latest"
+            arch: x86_64
+            runner: ubuntu-latest
+            extra_repos: ""
+    runs-on: ${{ matrix.runner }}
     defaults:
       run:
         shell: bash
-    needs:
-      - build
+    needs: build
     container:
-      image: ${{ matrix.distro }}
+      image: ${{ matrix.distro_image }}
       volumes:
         - /run/udev/control:/run/udev/control
         - /dev:/dev
       options: --privileged --ipc=host
     steps:
-      - name: Update yum mirror
+      - name: Install dependencies
         run: |
           set -e
           set -x
 
-          # replace the mirror
+          # Speed up package installation
           sed -i -E 's|https?://mirrors.openanolis.cn/anolis/|https://mirrors.aliyun.com/anolis/|g' /etc/yum.repos.d/*.repo
           sed -i -E 's|https?://mirrors.cloud.aliyuncs.com/|https://mirrors.aliyun.com/|g' /etc/yum.repos.d/*.repo
+          sed -i 's/^max_parallel_downloads=.*/max_parallel_downloads=20/' /etc/yum.conf
+          if ! grep -q "^max_parallel_downloads=" /etc/yum.conf; then
+            sed -i '/^\[main\]$/a max_parallel_downloads=20' /etc/yum.conf
+          fi
 
-          # install rpmdevtools
-          yum install -y git yum-utils
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@1.75.0
+          # update packages
+          yum update -y
+          ${{ matrix.extra_repos }}
 
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          path: ./
-          merge-multiple: false
+          name: build-output-${{ matrix.distro }}-${{ matrix.arch }}
+          path: ./rpm-packages/
 
       - name: Install RPM packages
         run: |
@@ -180,37 +204,49 @@ jobs:
           set -x
 
           # test rpm package install
-          cat /etc/os-release | grep "Anolis OS 23" && yum install -y anolis-epao-release && yum install -y $(find ./rpm-packages/RPMS -maxdepth 2 -name '*an23*.rpm' | grep -v '/reproducible[^/]*an23.*\.rpm$')
-          cat /etc/os-release | grep "Alibaba Cloud Linux 3" && yum install -y ./rpm-packages/RPMS/*/*al8*.rpm
+          yum install -y $(find ./rpm-packages/RPMS -maxdepth 2 -name '*.rpm' | grep -v '\.src\.rpm$')
           attestation-agent --version
           confidential-data-hub --version
-
-  provenance:
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: 
-      - build
-    permissions:
-      contents: write
-      actions: read
-      id-token: write
-    uses: ./.github/workflows/rpm_provenance_slsa3.yml
-    with:
-      rpm-root: ./rpm-packages
-      private-repository: false
-      rekor-intoto-upload: true
-      # 如需自建 Rekor 实例，可在此覆盖默认值
-      # rekor-url: "https://your.rekor.instance"
+          trustiflux-api-server --version
 
   release:
     if: startsWith(github.ref, 'refs/tags/')
+    needs:
+      - create-tarball
+      - build
+      - test
+    strategy:
+      # Serialize to avoid GitHub Release race conditions
+      max-parallel: 1
+      matrix:
+        include:
+          - distro: an23
+            arch: x86_64
+          - distro: al8
+            arch: x86_64
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+    uses: 1570005763/GuanFu/.github/workflows/release.yml@v1
+    with:
+      input_artifact: build-input-${{ matrix.distro }}-${{ matrix.arch }}
+      output_artifact: build-output-${{ matrix.distro }}-${{ matrix.arch }}
+      release_slsa_provenance: true
+      provenance_name: "trustiflux-${{ needs.create-tarball.outputs.VERSION }}-${{ needs.create-tarball.outputs.RELEASE }}.${{ matrix.distro }}.${{ matrix.arch }}.intoto.jsonl"
+      rpm_detail_provenance: true
+      upload_provenance_to_rekor: true
+      release_tag_name: "${{ github.ref_name }}"
+      prerelease: ${{ needs.create-tarball.outputs.PRE_RELEASE == 'true' }}
+
+  notify-rvds:
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     needs:
-      - test
-      - provenance
-      - guanfu-build
+      - release
     steps:
-      - name: Checkout repository (scripts only)
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v6
         with:
           fetch-depth: 1
 
@@ -218,20 +254,6 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: ./
-          merge-multiple: false
-
-      - name: Release
-        uses: softprops/action-gh-release@v2
-        with:
-          fail_on_unmatched_files: true
-          prerelease: ${{ env.PRE_RELEASE }}
-          files: |
-            ./rpm-packages/SOURCES/guest-components-*.tar.gz
-            ./rpm-packages/SRPMS/*.src.rpm
-            ./rpm-packages/RPMS/*/*.rpm
-            ./reproducible-rpm-packages/SRPMS/*.src.rpm
-            ./reproducible-rpm-packages/RPMS/*/*.rpm
-            ./rpm-provenance/*.intoto.jsonl
 
       - name: Notify RVDS of release
         if: env.RVDS_ENDPOINT != ''

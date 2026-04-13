@@ -2,13 +2,23 @@
 set -euo pipefail
 shopt -s nullglob
 
-rpm_files=(rpm-packages/RPMS/*/*.rpm rpm-packages/SRPMS/*.src.rpm)
+rpm_files=()
+for dir in build-output-*/RPMS/*/*.rpm build-output-*/SRPMS/*.src.rpm; do
+  rpm_files+=("$dir")
+done
 if [ ${#rpm_files[@]} -eq 0 ]; then
   echo "No RPM artifacts found, skip notifying RVDS."
   exit 0
 fi
 
-if ! compgen -G "rpm-provenance/*.intoto.jsonl" > /dev/null; then
+prov_found=false
+for p in build-output-*/*.intoto.jsonl *.intoto.jsonl; do
+  if compgen -G "$p" > /dev/null 2>&1; then
+    prov_found=true
+    break
+  fi
+done
+if [ "$prov_found" = false ]; then
   echo "No provenance bundles found, cannot notify RVDS."
   exit 1
 fi
@@ -21,11 +31,12 @@ for f in "${rpm_files[@]}"; do
 done
 urls_json="[${urls[*]}]"
 
-prov_files=(rpm-provenance/*.intoto.jsonl)
-if [ ${#prov_files[@]} -eq 0 ]; then
-  echo "No provenance bundles found, cannot notify RVDS."
-  exit 1
-fi
+prov_files=()
+for p in build-output-*/*.intoto.jsonl *.intoto.jsonl; do
+  if [ -f "$p" ]; then
+    prov_files+=("$p")
+  fi
+done
 
 slsa_entries=()
 for pf in "${prov_files[@]}"; do
