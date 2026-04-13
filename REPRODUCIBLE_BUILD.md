@@ -8,19 +8,22 @@ The build specifications define the exact environment and dependencies needed to
 
 ## Reproducible Builds
 
-The reproducible builds are implemented using [GuanFu](https://github.com/1570005763/GuanFu/tree/v1.0.0), which provides a framework for containerized, verifiable builds.
+The reproducible builds are implemented using [GuanFu](https://github.com/1570005763/GuanFu/tree/v1), which provides a framework for containerized, verifiable builds. GuanFu also handles SLSA provenance generation and Rekor transparency log uploads.
 
-For now, only rpms from AnolisOS 23 are supported.
+Currently supported distros:
+- AnolisOS 23 (an23)
+- Alibaba Cloud Linux 3 (al8)
 
 ## Local Rebuild Guide
 
 This guide explains how to perform local reproducible builds using GuanFu based on the specified buildspec.yaml file.
 
-For complete documentation on the local rebuild process, please refer to the [GuanFu Local Rebuild Guide](https://github.com/1570005763/GuanFu/blob/v1.0.0/docs/local_rebuild_guide.md).
+For complete documentation on the local rebuild process, please refer to the [GuanFu Local Rebuild Guide](https://github.com/1570005763/GuanFu/blob/v1/docs/local_rebuild_guide.md).
 
 ### Build Specification Files
 
-- `trustiflux.an23.buildspec.yaml`: Build specification files for building on AnolisOS 23
+- `trustiflux-<VERSION>-<RELEASE>.an23.x86_64.buildspec.yaml`: Build specification for AnolisOS 23 x86_64
+- `trustiflux-<VERSION>-<RELEASE>.al8.x86_64.buildspec.yaml`: Build specification for Alibaba Cloud Linux 3 x86_64
 
 ### Prerequisites
 
@@ -35,22 +38,25 @@ Before starting the local reproducible build, ensure you have met the following 
 Follow these steps to perform a local reproducible build:
 
 1. **Prepare the buildspec.yaml file**:
-   Download the buildspec file for your target version from the release:
+   Download the buildspec file for your target version and distro from the release:
    ```bash
-   # Example for version v1.0.0 - replace with your target version
-   wget https://github.com/inclavare-containers/guest-components/releases/download/v1.0.0/trustiflux.an23.buildspec.yaml
+   # Example for version v1.5.0, release 1, AnolisOS 23 - replace with your target
+   wget https://github.com/inclavare-containers/guest-components/releases/download/v1.5.0/trustiflux-1.5.0-1.an23.x86_64.buildspec.yaml
+
+   # Or for Alibaba Cloud Linux 3
+   wget https://github.com/inclavare-containers/guest-components/releases/download/v1.5.0/trustiflux-1.5.0-1.al8.x86_64.buildspec.yaml
    ```
 
 2. **Clone the GuanFu repository**:
    ```bash
-   git clone --branch v1.0.0 --depth 1 https://github.com/1570005763/GuanFu.git
+   git clone --branch v1 --depth 1 https://github.com/1570005763/GuanFu.git
    cd GuanFu
    ```
 
 3. **Execute the build**:
    ```bash
    # Run in the GuanFu project root directory
-   ./scripts/build-runner.sh path/to/your/buildspec.yaml
+   ./src/build-runner.sh path/to/your/buildspec.yaml
    ```
 
 4. **Verify the build results**:
