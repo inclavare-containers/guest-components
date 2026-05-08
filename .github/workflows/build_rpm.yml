@@ -234,7 +234,8 @@ jobs:
       input_artifact: build-input-${{ matrix.distro }}-${{ matrix.arch }}
       output_artifact: build-output-${{ matrix.distro }}-${{ matrix.arch }}
       release_slsa_provenance: true
-      provenance_name: "trustiflux-${{ needs.create-tarball.outputs.VERSION }}-${{ needs.create-tarball.outputs.RELEASE }}.${{ matrix.distro }}.${{ matrix.arch }}.rv-release-manifest.bundle.json"
+      provenance_name: "trustiflux-${{ needs.create-tarball.outputs.VERSION }}-${{ needs.create-tarball.outputs.RELEASE }}.${{ matrix.distro }}.${{ matrix.arch }}.intoto.jsonl"
+      rv_release_manifest_name: "trustiflux-${{ needs.create-tarball.outputs.VERSION }}-${{ needs.create-tarball.outputs.RELEASE }}.${{ matrix.distro }}.${{ matrix.arch }}.rv-release-manifest.bundle.json"
       rpm_detail_provenance: true
       upload_provenance_to_rekor: true
       release_tag_name: "${{ github.ref_name }}"
