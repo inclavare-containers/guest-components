@@ -11,15 +11,15 @@ if [ ${#rpm_files[@]} -eq 0 ]; then
   exit 0
 fi
 
-prov_found=false
-for p in build-output-*/*.intoto.jsonl *.intoto.jsonl; do
+manifest_found=false
+for p in rv-release-manifest/*.release-manifest.bundle.json build-output-*/*.release-manifest.bundle.json *.release-manifest.bundle.json; do
   if compgen -G "$p" > /dev/null 2>&1; then
-    prov_found=true
+    manifest_found=true
     break
   fi
 done
-if [ "$prov_found" = false ]; then
-  echo "No provenance bundles found, cannot notify RVDS."
+if [ "$manifest_found" = false ]; then
+  echo "No RV release manifest bundles found, cannot notify RVDS."
   exit 1
 fi
 
@@ -31,23 +31,23 @@ for f in "${rpm_files[@]}"; do
 done
 urls_json="[${urls[*]}]"
 
-prov_files=()
-for p in build-output-*/*.intoto.jsonl *.intoto.jsonl; do
+manifest_files=()
+for p in rv-release-manifest/*.release-manifest.bundle.json build-output-*/*.release-manifest.bundle.json *.release-manifest.bundle.json; do
   if [ -f "$p" ]; then
-    prov_files+=("$p")
+    manifest_files+=("$p")
   fi
 done
 
-slsa_entries=()
-for pf in "${prov_files[@]}"; do
+manifest_entries=()
+for pf in "${manifest_files[@]}"; do
   encoded="$(base64 -w0 "$pf")"
-  slsa_entries+=("\"${encoded}\"")
+  manifest_entries+=("\"${encoded}\"")
 done
-slsa_json="[${slsa_entries[*]}]"
+manifest_json="[${manifest_entries[*]}]"
 
 # Use jq to safely create the JSON payload file, preventing any formatting or escaping issues
-echo '{}' | jq --arg slsa "${slsa_json}" --arg urls "${urls_json}" \
-  '.artifact_type = "rpm" | .slsa_provenance = ($slsa | fromjson) | .artifacts_download_url = ($urls | fromjson)' > rvds_payload.json
+echo '{}' | jq --arg manifests "${manifest_json}" --arg urls "${urls_json}" \
+  '.artifact_type = "rpm" | .rv_release_manifest_bundles = ($manifests | fromjson) | .artifacts_download_url = ($urls | fromjson)' > rvds_payload.json
 
 echo "Sending release event to RVDS at ${RVDS_ENDPOINT}"
 curl --fail --show-error --silent \
