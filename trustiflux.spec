@@ -3,7 +3,7 @@
 %global libdir /usr/lib
 
 Name:		trustiflux
-Version:	1.5.0
+Version:	1.5.1
 Release:	%{release}%{?dist}
 Summary:	A daemon service running inside TEE (Trusted Execution Environment) to confidential resource related APIs
 
@@ -137,6 +137,13 @@ rm -rf %{buildroot}
 %{libdir}/dracut/modules.d/99confidential-data-hub/module-setup.sh
 
 %changelog
+* Mon May 18 2026 Jiale Zhang <xinjian.zjl@alibaba-inc.com> - 1.5.1-1
+- Attester: add Hygon TPM tee type with sm2/sm3 keylime support
+- Test: gate live image verification cases behind opt-in env
+- Release: use RV release manifest bundles in RPM releases
+- Release: keep SLSA provenance in RPM release workflow
+- CI: refactor RPM build workflow and remove SLSA3 provenance
+
 * Thu Apr 9 2026 Jiale Zhang <zhangjiale@linux.alibaba.com> - 1.5.0-1
 - feat(attestation-agent): add IP to instance info from ECS metadata
 - feat(cdh,api-server-rest): add challenge-attestation resource injection APIs
