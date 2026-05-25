@@ -17,15 +17,13 @@ use std::path::Path;
 use std::str::FromStr;
 use tss_esapi::abstraction::{
     ak::{create_ak, load_ak},
-    ek::{create_ek_object, retrieve_ek_pubcert},
+    ek::{create_ek_object_2, retrieve_ek_pubcert},
     pcr, AsymmetricAlgorithmSelection, DefaultKey,
 };
 use tss_esapi::attributes::SessionAttributesBuilder;
 use tss_esapi::constants::SessionType;
 use tss_esapi::handles::{KeyHandle, PcrHandle};
-use tss_esapi::interface_types::algorithm::{
-    AsymmetricAlgorithm, HashingAlgorithm, SignatureSchemeAlgorithm,
-};
+use tss_esapi::interface_types::algorithm::{HashingAlgorithm, SignatureSchemeAlgorithm};
 use tss_esapi::interface_types::ecc::EccCurve;
 use tss_esapi::structures::digest_values::DigestValues;
 use tss_esapi::structures::{
@@ -225,7 +223,11 @@ fn dump_pcrs(algorithm: &str) -> Result<Vec<String>> {
 
 fn generate_sm2_ak() -> Result<AttestationKey> {
     let mut context = create_ctx_without_session()?;
-    let ek_handle = create_ek_object(&mut context, AsymmetricAlgorithm::Ecc, DefaultKey)?;
+    let ek_handle = create_ek_object_2(
+        &mut context,
+        AsymmetricAlgorithmSelection::Ecc(EccCurve::Sm2P256),
+        DefaultKey,
+    )?;
 
     let ak = create_ak(
         &mut context,
@@ -243,14 +245,22 @@ fn generate_sm2_ak() -> Result<AttestationKey> {
 }
 
 fn import_ak_handle(ctx: &mut TssContext, ak: AttestationKey) -> Result<KeyHandle> {
-    let ek_handle = create_ek_object(ctx, AsymmetricAlgorithm::Ecc, DefaultKey)?;
+    let ek_handle = create_ek_object_2(
+        ctx,
+        AsymmetricAlgorithmSelection::Ecc(EccCurve::Sm2P256),
+        DefaultKey,
+    )?;
     let ak_handle = load_ak(ctx, ek_handle, None, ak.ak_private, ak.ak_public)?;
     Ok(ak_handle)
 }
 
 fn get_ak_pub(ak: AttestationKey) -> Result<HygonSm2PublicKey> {
     let mut context = create_ctx_without_session()?;
-    let ek_handle = create_ek_object(&mut context, AsymmetricAlgorithm::Ecc, DefaultKey)?;
+    let ek_handle = create_ek_object_2(
+        &mut context,
+        AsymmetricAlgorithmSelection::Ecc(EccCurve::Sm2P256),
+        DefaultKey,
+    )?;
     let key_handle = load_ak(
         &mut context,
         ek_handle,
