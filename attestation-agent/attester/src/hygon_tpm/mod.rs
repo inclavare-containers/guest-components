@@ -143,10 +143,19 @@ pub fn detect_platform() -> bool {
 }
 
 fn create_tcti() -> Result<TctiNameConf> {
-    match std::env::var("TEST_TCTI") {
-        Result::Err(_) => Ok(TctiNameConf::Device(DeviceConfig::default())),
-        Result::Ok(tctistr) => Ok(TctiNameConf::from_str(&tctistr)?),
+    if let Result::Ok(tctistr) = std::env::var("TEST_TCTI") {
+        return Ok(TctiNameConf::from_str(&tctistr)?);
     }
+
+    // Prefer the kernel TPM resource manager (/dev/tpmrm0) over the direct
+    // device (/dev/tpm0) so AA can coexist with other TPM consumers such as
+    // keylime-agent. /dev/tpm0 only allows a single exclusive opener; the
+    // resource manager multiplexes access.
+    let tpmrm_path = "/dev/tpmrm0";
+    if Path::new(tpmrm_path).exists() {
+        return Ok(TctiNameConf::Device(DeviceConfig::from_str(tpmrm_path)?));
+    }
+    Ok(TctiNameConf::Device(DeviceConfig::default()))
 }
 
 fn create_ctx_without_session() -> Result<TssContext> {
@@ -157,7 +166,11 @@ fn create_ctx_without_session() -> Result<TssContext> {
 
 fn create_ctx_with_session() -> Result<TssContext> {
     let mut ctx = create_ctx_without_session()?;
+    start_encrypted_hmac_session(&mut ctx)?;
+    Ok(ctx)
+}
 
+fn start_encrypted_hmac_session(ctx: &mut TssContext) -> Result<()> {
     let session = ctx.start_auth_session(
         None,
         None,
@@ -177,7 +190,7 @@ fn create_ctx_with_session() -> Result<TssContext> {
     ctx.tr_sess_set_attributes(valid_session, session_attributes, session_attributes_mask)?;
     ctx.set_sessions((session, None, None));
 
-    Ok(ctx)
+    Ok(())
 }
 
 fn create_pcr_selection_list(algorithm: &str) -> Result<PcrSelectionList> {
@@ -281,8 +294,13 @@ fn get_ak_pub(ak: AttestationKey) -> Result<HygonSm2PublicKey> {
 }
 
 fn get_quote(ak: AttestationKey, report_data: &[u8], pcr_algorithm: &str) -> Result<HygonTpmQuote> {
-    let mut context = create_ctx_with_session()?;
+    // EK/AK loading must run without an encrypt+decrypt session active, because
+    // the SM2 EK template's policy uses TPM2_PolicyOR which rejects those
+    // session attributes ("inconsistent attributes"). Start the HMAC session
+    // only after EK/AK are loaded, just for the quote call.
+    let mut context = create_ctx_without_session()?;
     let ak_handle = import_ak_handle(&mut context, ak)?;
+    start_encrypted_hmac_session(&mut context)?;
     let selection_list = create_pcr_selection_list(pcr_algorithm)?;
 
     let (attest, signature) = context
