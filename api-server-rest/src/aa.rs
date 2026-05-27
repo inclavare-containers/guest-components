@@ -7,6 +7,7 @@ use crate::router::ApiHandler;
 use crate::TTRPC_TIMEOUT;
 use anyhow::*;
 use async_trait::async_trait;
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use hyper::{body, Body, Method, Request, Response};
 use protos::ttrpc::aa::attestation_agent::{
     ExtendRuntimeMeasurementRequest, GetAdditionalTeesRequest, GetEvidenceRequest,
@@ -102,12 +103,25 @@ impl ApiHandler for AAClient {
                 if req.method() != Method::GET {
                     return self.not_allowed();
                 }
-                if params.len() != 1 {
-                    return self.not_allowed();
+                if params.get("runtime_data").is_none() {
+                    return self.bad_request();
                 }
+                if params
+                    .keys()
+                    .any(|key| key != "runtime_data" && key != "encoding")
+                {
+                    return self.bad_request();
+                }
+
                 match params.get("runtime_data") {
                     Some(runtime_data) => {
-                        match self.get_evidence(&runtime_data.clone().into_bytes()).await {
+                        let encoding = params.get("encoding").map(String::as_str);
+                        let runtime_data =
+                            match parse_evidence_runtime_data(runtime_data, encoding) {
+                                std::result::Result::Ok(runtime_data) => runtime_data,
+                                std::result::Result::Err(_) => return self.bad_request(),
+                            };
+                        match self.get_evidence(&runtime_data).await {
                             std::result::Result::Ok(results) => {
                                 return self.octet_stream_response(results)
                             }
@@ -251,6 +265,16 @@ fn is_aa_request_allowed(
     matches!(url_path, AA_EVIDENCE_URL) && allow_remote_get_evidence
 }
 
+fn parse_evidence_runtime_data(runtime_data: &str, encoding: Option<&str>) -> Result<Vec<u8>> {
+    match encoding {
+        None => Ok(runtime_data.as_bytes().to_vec()),
+        Some("base64") => URL_SAFE_NO_PAD
+            .decode(runtime_data)
+            .context("Failed to decode runtime_data as base64 URL-safe no padding"),
+        Some(other) => bail!("Unsupported encoding: {other}"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -284,5 +308,28 @@ mod tests {
     fn remote_non_evidence_aa_apis_remain_forbidden() {
         assert!(!is_aa_request_allowed(remote_addr(), AA_TOKEN_URL, true));
         assert!(!is_aa_request_allowed(remote_addr(), AA_AAEL_URL, true));
+    }
+
+    #[test]
+    fn evidence_runtime_data_defaults_to_raw_bytes() {
+        let runtime_data = parse_evidence_runtime_data("xxxx", None).unwrap();
+        assert_eq!(runtime_data, b"xxxx");
+    }
+
+    #[test]
+    fn evidence_runtime_data_supports_base64_url_safe_no_pad() {
+        let runtime_data =
+            parse_evidence_runtime_data("eHh4eA", Some("base64")).unwrap();
+        assert_eq!(runtime_data, b"xxxx");
+    }
+
+    #[test]
+    fn evidence_runtime_data_rejects_unknown_encoding() {
+        assert!(parse_evidence_runtime_data("xxxx", Some("hex")).is_err());
+    }
+
+    #[test]
+    fn evidence_runtime_data_rejects_invalid_base64() {
+        assert!(parse_evidence_runtime_data("not-base64!", Some("base64")).is_err());
     }
 }

@@ -30,7 +30,8 @@ fn _token() {}
     get,
     path = "/aa/evidence",
     params(
-        ("runtime_data" = String, Query, description = "Runtime Data")
+        ("runtime_data" = String, Query, description = "Runtime Data"),
+        ("encoding" = Option<String>, Query, description = "Optional runtime_data encoding, e.g. \"base64\" for URL-safe no padding base64")
     ),
     responses(
         (status = 200, description = "success response",

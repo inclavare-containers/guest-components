@@ -32,6 +32,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "encoding",
+            "in": "query",
+            "description": "Optional runtime_data encoding, e.g. \"base64\" for URL-safe no padding base64",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {

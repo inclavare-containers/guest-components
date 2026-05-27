@@ -34,6 +34,9 @@ $ curl http://127.0.0.1:8006/cdh/resource/default/key/1
 $ curl "http://127.0.0.1:8006/aa/evidence?runtime_data=xxxx"
 {"svn":"1","report_data":"eHh4eA=="}
 
+$ curl "http://127.0.0.1:8006/aa/evidence?runtime_data=eHh4eA&encoding=base64"
+{"svn":"1","report_data":"eHh4eA=="}
+
 $ curl "http://127.0.0.1:8006/aa/token?token_type=kbs"
 {"token":"eyJhbGciOiJFi...","tee_keypair":"-----BEGIN... "}
 
