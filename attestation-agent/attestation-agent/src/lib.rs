@@ -81,6 +81,8 @@ pub trait AttestationAPIs {
     async fn bind_init_data(&self, init_data: &[u8]) -> Result<InitDataResult>;
 
     fn get_tee_type(&self) -> Tee;
+
+    fn get_additional_tees(&self) -> Vec<Tee>;
 }
 
 /// Attestation agent to provide attestation service.
@@ -293,6 +295,10 @@ impl AttestationAPIs for AttestationAgent {
     /// `Sample` will be returned.
     fn get_tee_type(&self) -> Tee {
         self.primary_tee
+    }
+
+    fn get_additional_tees(&self) -> Vec<Tee> {
+        self.additional_attesters.keys().cloned().collect()
     }
 }
 
