@@ -67,6 +67,13 @@ pub struct GetTeeTypeResponse {
     #[prost(string, tag = "1")]
     pub tee: ::prost::alloc::string::String,
 }
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct GetAdditionalTeesRequest {}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetAdditionalTeesResponse {
+    #[prost(string, repeated, tag = "1")]
+    pub additional_tees: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
 /// Generated client implementations.
 pub mod attestation_agent_service_client {
     #![allow(
@@ -334,6 +341,35 @@ pub mod attestation_agent_service_client {
                 );
             self.inner.unary(req, path, codec).await
         }
+        pub async fn get_additional_tees(
+            &mut self,
+            request: impl tonic::IntoRequest<super::GetAdditionalTeesRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::GetAdditionalTeesResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/attestation_agent.AttestationAgentService/GetAdditionalTees",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new(
+                        "attestation_agent.AttestationAgentService",
+                        "GetAdditionalTees",
+                    ),
+                );
+            self.inner.unary(req, path, codec).await
+        }
     }
 }
 /// Generated server implementations.
@@ -389,6 +425,13 @@ pub mod attestation_agent_service_server {
             request: tonic::Request<super::GetTeeTypeRequest>,
         ) -> std::result::Result<
             tonic::Response<super::GetTeeTypeResponse>,
+            tonic::Status,
+        >;
+        async fn get_additional_tees(
+            &self,
+            request: tonic::Request<super::GetAdditionalTeesRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::GetAdditionalTeesResponse>,
             tonic::Status,
         >;
     }
@@ -751,6 +794,55 @@ pub mod attestation_agent_service_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = GetTeeTypeSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/attestation_agent.AttestationAgentService/GetAdditionalTees" => {
+                    #[allow(non_camel_case_types)]
+                    struct GetAdditionalTeesSvc<T: AttestationAgentService>(pub Arc<T>);
+                    impl<
+                        T: AttestationAgentService,
+                    > tonic::server::UnaryService<super::GetAdditionalTeesRequest>
+                    for GetAdditionalTeesSvc<T> {
+                        type Response = super::GetAdditionalTeesResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::GetAdditionalTeesRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as AttestationAgentService>::get_additional_tees(
+                                        &inner,
+                                        request,
+                                    )
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = GetAdditionalTeesSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
