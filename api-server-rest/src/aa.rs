@@ -9,12 +9,14 @@ use anyhow::*;
 use async_trait::async_trait;
 use hyper::{body, Body, Method, Request, Response};
 use protos::ttrpc::aa::attestation_agent::{
-    ExtendRuntimeMeasurementRequest, GetEvidenceRequest, GetTokenRequest,
+    ExtendRuntimeMeasurementRequest, GetAdditionalTeesRequest, GetEvidenceRequest,
+    GetTeeTypeRequest, GetTokenRequest,
 };
 use protos::ttrpc::aa::attestation_agent_ttrpc::AttestationAgentServiceClient;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 /// ROOT path for Confidential Data Hub API
 pub const AA_ROOT: &str = "/aa";
@@ -37,6 +39,20 @@ pub struct AAClient {
     client: AttestationAgentServiceClient,
     accepted_method: Vec<Method>,
     allow_remote_get_evidence: bool,
+}
+
+#[async_trait]
+impl ApiHandler for Arc<AAClient> {
+    async fn handle_request(
+        &self,
+        remote_addr: SocketAddr,
+        url_path: &str,
+        req: Request<Body>,
+    ) -> Result<Response<Body>> {
+        self.as_ref()
+            .handle_request(remote_addr, url_path, req)
+            .await
+    }
 }
 
 #[async_trait]
@@ -164,6 +180,28 @@ impl AAClient {
             .get_token(ttrpc::context::with_timeout(TTRPC_TIMEOUT), &req)
             .await?;
         Ok(res.Token)
+    }
+
+    pub async fn get_tee_type(&self) -> Result<String> {
+        let req = GetTeeTypeRequest {
+            ..Default::default()
+        };
+        let res = self
+            .client
+            .get_tee_type(ttrpc::context::with_timeout(TTRPC_TIMEOUT), &req)
+            .await?;
+        Ok(res.tee)
+    }
+
+    pub async fn get_additional_tees(&self) -> Result<Vec<String>> {
+        let req = GetAdditionalTeesRequest {
+            ..Default::default()
+        };
+        let res = self
+            .client
+            .get_additional_tees(ttrpc::context::with_timeout(TTRPC_TIMEOUT), &req)
+            .await?;
+        Ok(res.additional_tees)
     }
 
     pub async fn get_evidence(&self, runtime_data: &[u8]) -> Result<Vec<u8>> {

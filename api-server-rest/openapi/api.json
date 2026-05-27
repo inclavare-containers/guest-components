@@ -211,7 +211,63 @@
           }
         }
       }
+    },
+    "/info": {
+      "get": {
+        "tags": [],
+        "operationId": "_version",
+        "responses": {
+          "200": {
+            "description": "success response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionInfo"
+                },
+                "example": {
+                  "additional_tees": [],
+                  "tee": "tdx",
+                  "version": "v1.0.0"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "only Get method allowed"
+          }
+        }
+      }
     }
   },
-  "components": {}
+  "components": {
+    "schemas": {
+      "VersionInfo": {
+        "type": "object",
+        "required": [
+          "version",
+          "additional_tees"
+        ],
+        "properties": {
+          "additional_tees": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Additional TEE types"
+          },
+          "tee": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "TEE type (optional)"
+          },
+          "version": {
+            "type": "string",
+            "description": "Guest Components version string from `git describe --tags --dirty --always`"
+          }
+        }
+      }
+    }
+  }
 }
