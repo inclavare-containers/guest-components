@@ -94,6 +94,29 @@ fn _resource_injection_prepare() {}
 )]
 fn _resource_injection_commit() {}
 
+#[derive(utoipa::ToSchema)]
+pub struct VersionInfo {
+    /// Guest Components version string from `git describe --tags --dirty --always`
+    pub version: String,
+    /// TEE type (optional)
+    pub tee: Option<String>,
+    /// Additional TEE types
+    pub additional_tees: Vec<String>,
+}
+
+#[utoipa::path(
+    get,
+    path = "/info",
+    responses(
+        (status = 200, description = "success response",
+                content_type = "application/json",
+                body = VersionInfo,
+                example = json!({"version": "v1.0.0", "tee": "tdx", "additional_tees": []})),
+        (status = 405, description = "only Get method allowed")
+    )
+)]
+fn _version() {}
+
 fn generate_openapi_document() -> std::io::Result<()> {
     #[derive(OpenApi)]
     #[openapi(
@@ -110,7 +133,8 @@ fn generate_openapi_document() -> std::io::Result<()> {
         _evidence,
         _resource,
         _resource_injection_prepare,
-        _resource_injection_commit
+        _resource_injection_commit,
+        _version
     )
  )]
     struct ApiDoc;
@@ -120,8 +144,31 @@ fn generate_openapi_document() -> std::io::Result<()> {
     file.write_all(json.as_bytes())
 }
 
+fn generate_version_file() -> std::io::Result<()> {
+    use std::env;
+    use std::path::Path;
+    use std::process::Command;
+
+    let out_dir = env::var("OUT_DIR").unwrap();
+    let dest_path = Path::new(&out_dir).join("guest_components_version");
+    let mut f = File::create(dest_path)?;
+
+    let git_version = Command::new("git")
+        .args(["describe", "--tags", "--dirty", "--always"])
+        .output()
+        .unwrap()
+        .stdout;
+
+    let git_version = String::from_utf8(git_version).unwrap();
+    let git_version = git_version.trim_end();
+
+    writeln!(f, "{git_version}")?;
+    Ok(())
+}
+
 fn main() -> std::io::Result<()> {
     generate_openapi_document().expect("Generate restful OpenAPI yaml failed.");
+    generate_version_file().expect("Generate version file failed.");
 
     Ok(())
 }

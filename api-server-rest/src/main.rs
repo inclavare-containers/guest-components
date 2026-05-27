@@ -26,9 +26,12 @@ type Result<T> = std::result::Result<T, GenericError>;
 
 pub const TTRPC_TIMEOUT: i64 = 50 * 1000 * 1000 * 1000;
 
+pub(crate) const VERSION: &str =
+    include_str!(concat!(env!("OUT_DIR"), "/guest_components_version"));
+
 /// API Server arguments info.
 #[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
+#[command(author, version = VERSION, about, long_about = None)]
 struct Args {
     /// Config file path for API Server
     #[arg(default_value_t = DEFAULT_CONFIG_PATH.to_string(), short, long = "config")]
@@ -53,7 +56,7 @@ async fn main() -> Result<()> {
 
     let address: SocketAddr = config.bind.parse().expect("Failed to parse the address");
 
-    let mut router = Router::new();
+    let mut router = Router::new(VERSION.trim_end());
 
     if config.enable_cdh {
         router.register_route(
@@ -67,14 +70,13 @@ async fn main() -> Result<()> {
     }
 
     if config.enable_aa {
-        router.register_route(
-            AA_ROOT,
-            Box::new(AAClient::new(
-                &config.aa_socket,
-                vec![Method::GET, Method::POST],
-                config.allow_remote_get_evidence,
-            )?),
-        );
+        let aa_client = Arc::new(AAClient::new(
+            &config.aa_socket,
+            vec![Method::GET, Method::POST],
+            config.allow_remote_get_evidence,
+        )?);
+        router.set_aa_client(aa_client.clone());
+        router.register_route(AA_ROOT, Box::new(aa_client));
     }
 
     let router = Arc::new(tokio::sync::Mutex::new(router));
