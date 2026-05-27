@@ -10,8 +10,8 @@ use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use hyper::{body, Body, Method, Request, Response};
 use protos::ttrpc::aa::attestation_agent::{
-    ExtendRuntimeMeasurementRequest, GetAdditionalTeesRequest, GetEvidenceRequest,
-    GetTeeTypeRequest, GetTokenRequest,
+    ExtendRuntimeMeasurementRequest, GetAdditionalEvidenceRequest, GetAdditionalTeesRequest,
+    GetEvidenceRequest, GetTeeTypeRequest, GetTokenRequest,
 };
 use protos::ttrpc::aa::attestation_agent_ttrpc::AttestationAgentServiceClient;
 use serde::Deserialize;
@@ -25,6 +25,7 @@ pub const AA_ROOT: &str = "/aa";
 /// URL for querying CDH get resource API
 const AA_TOKEN_URL: &str = "/token";
 const AA_EVIDENCE_URL: &str = "/evidence";
+const AA_ADDITIONAL_EVIDENCE_URL: &str = "/additional-evidence";
 const AA_AAEL_URL: &str = "/aael";
 
 #[derive(Debug, Deserialize)]
@@ -96,39 +97,28 @@ impl ApiHandler for AAClient {
                     None => return self.bad_request(),
                 }
             }
-            AA_EVIDENCE_URL => {
+            AA_EVIDENCE_URL | AA_ADDITIONAL_EVIDENCE_URL => {
                 if !is_aa_request_allowed(remote_addr, url_path, self.allow_remote_get_evidence) {
                     return self.forbidden();
                 }
                 if req.method() != Method::GET {
                     return self.not_allowed();
                 }
-                if params.get("runtime_data").is_none() {
-                    return self.bad_request();
-                }
-                if params
-                    .keys()
-                    .any(|key| key != "runtime_data" && key != "encoding")
-                {
-                    return self.bad_request();
-                }
 
-                match params.get("runtime_data") {
-                    Some(runtime_data) => {
-                        let encoding = params.get("encoding").map(String::as_str);
-                        let runtime_data =
-                            match parse_evidence_runtime_data(runtime_data, encoding) {
-                                std::result::Result::Ok(runtime_data) => runtime_data,
-                                std::result::Result::Err(_) => return self.bad_request(),
-                            };
-                        match self.get_evidence(&runtime_data).await {
-                            std::result::Result::Ok(results) => {
-                                return self.octet_stream_response(results)
-                            }
-                            Err(e) => return self.internal_error(e.to_string()),
-                        }
-                    }
-                    None => return self.bad_request(),
+                let runtime_data = match parse_runtime_data_params(&params) {
+                    std::result::Result::Ok(runtime_data) => runtime_data,
+                    std::result::Result::Err(_) => return self.bad_request(),
+                };
+
+                let result = if url_path == AA_EVIDENCE_URL {
+                    self.get_evidence(&runtime_data).await
+                } else {
+                    self.get_additional_evidence(&runtime_data).await
+                };
+
+                match result {
+                    std::result::Result::Ok(results) => self.octet_stream_response(results),
+                    Err(e) => self.internal_error(e.to_string()),
                 }
             }
             AA_AAEL_URL => {
@@ -230,6 +220,18 @@ impl AAClient {
         Ok(res.Evidence)
     }
 
+    pub async fn get_additional_evidence(&self, runtime_data: &[u8]) -> Result<Vec<u8>> {
+        let req = GetAdditionalEvidenceRequest {
+            RuntimeData: runtime_data.to_vec(),
+            ..Default::default()
+        };
+        let res = self
+            .client
+            .get_additional_evidence(ttrpc::context::with_timeout(TTRPC_TIMEOUT), &req)
+            .await?;
+        Ok(res.Evidence)
+    }
+
     pub async fn extend_runtime_measurement(
         &self,
         register_index: Option<u64>,
@@ -262,7 +264,23 @@ fn is_aa_request_allowed(
         return true;
     }
 
-    matches!(url_path, AA_EVIDENCE_URL) && allow_remote_get_evidence
+    matches!(url_path, AA_EVIDENCE_URL | AA_ADDITIONAL_EVIDENCE_URL) && allow_remote_get_evidence
+}
+
+fn parse_runtime_data_params(params: &HashMap<String, String>) -> Result<Vec<u8>> {
+    if params.get("runtime_data").is_none() {
+        bail!("missing runtime_data");
+    }
+    if params
+        .keys()
+        .any(|key| key != "runtime_data" && key != "encoding")
+    {
+        bail!("invalid query parameters");
+    }
+
+    let runtime_data = params.get("runtime_data").unwrap();
+    let encoding = params.get("encoding").map(String::as_str);
+    parse_evidence_runtime_data(runtime_data, encoding)
 }
 
 fn parse_evidence_runtime_data(runtime_data: &str, encoding: Option<&str>) -> Result<Vec<u8>> {
@@ -291,6 +309,11 @@ mod tests {
     fn local_requests_are_always_allowed() {
         assert!(is_aa_request_allowed(local_addr(), AA_TOKEN_URL, false));
         assert!(is_aa_request_allowed(local_addr(), AA_EVIDENCE_URL, false));
+        assert!(is_aa_request_allowed(
+            local_addr(),
+            AA_ADDITIONAL_EVIDENCE_URL,
+            false
+        ));
         assert!(is_aa_request_allowed(local_addr(), AA_AAEL_URL, false));
     }
 
@@ -301,7 +324,17 @@ mod tests {
             AA_EVIDENCE_URL,
             false
         ));
+        assert!(!is_aa_request_allowed(
+            remote_addr(),
+            AA_ADDITIONAL_EVIDENCE_URL,
+            false
+        ));
         assert!(is_aa_request_allowed(remote_addr(), AA_EVIDENCE_URL, true));
+        assert!(is_aa_request_allowed(
+            remote_addr(),
+            AA_ADDITIONAL_EVIDENCE_URL,
+            true
+        ));
     }
 
     #[test]
@@ -318,8 +351,7 @@ mod tests {
 
     #[test]
     fn evidence_runtime_data_supports_base64_url_safe_no_pad() {
-        let runtime_data =
-            parse_evidence_runtime_data("eHh4eA", Some("base64")).unwrap();
+        let runtime_data = parse_evidence_runtime_data("eHh4eA", Some("base64")).unwrap();
         assert_eq!(runtime_data, b"xxxx");
     }
 
@@ -331,5 +363,20 @@ mod tests {
     #[test]
     fn evidence_runtime_data_rejects_invalid_base64() {
         assert!(parse_evidence_runtime_data("not-base64!", Some("base64")).is_err());
+    }
+
+    #[test]
+    fn runtime_data_params_require_runtime_data() {
+        let params = HashMap::from([("encoding".to_string(), "base64".to_string())]);
+        assert!(parse_runtime_data_params(&params).is_err());
+    }
+
+    #[test]
+    fn runtime_data_params_reject_unknown_query_keys() {
+        let params = HashMap::from([
+            ("runtime_data".to_string(), "xxxx".to_string()),
+            ("foo".to_string(), "bar".to_string()),
+        ]);
+        assert!(parse_runtime_data_params(&params).is_err());
     }
 }

@@ -16,7 +16,7 @@ allow_remote_get_evidence = false
 
 访问控制说明：
 
-- `allow_remote_get_evidence = true` 时，允许远程访问 `GET /aa/evidence`
+- `allow_remote_get_evidence = true` 时，允许远程访问 `GET /aa/evidence` 和 `GET /aa/additional-evidence`
 - `allow_remote_resource_injection = true` 时，允许远程访问 `POST /cdh/resource-injection/...`
 - `GET /cdh/resource/...` 始终只允许本地回环地址访问，不会被上述配置放开
 - 其他 `aa` 接口，例如 `GET /aa/token` 和 `POST /aa/aael`，仍然只允许本地访问
@@ -36,6 +36,12 @@ $ curl "http://127.0.0.1:8006/aa/evidence?runtime_data=xxxx"
 
 $ curl "http://127.0.0.1:8006/aa/evidence?runtime_data=eHh4eA&encoding=base64"
 {"svn":"1","report_data":"eHh4eA=="}
+
+$ curl "http://127.0.0.1:8006/aa/additional-evidence?runtime_data=xxxx"
+{"tdx":"{\"svn\":\"1\",\"report_data\":\"eHh4eA==\"}"}
+
+$ curl "http://127.0.0.1:8006/aa/additional-evidence?runtime_data=eHh4eA&encoding=base64"
+{"tdx":"{\"svn\":\"1\",\"report_data\":\"eHh4eA==\"}"}
 
 $ curl "http://127.0.0.1:8006/aa/token?token_type=kbs"
 {"token":"eyJhbGciOiJFi...","tee_keypair":"-----BEGIN... "}

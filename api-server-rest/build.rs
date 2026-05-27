@@ -48,6 +48,26 @@ fn _evidence() {}
 
 #[utoipa::path(
     get,
+    path = "/aa/additional-evidence",
+    params(
+        ("runtime_data" = String, Query, description = "Runtime Data"),
+        ("encoding" = Option<String>, Query, description = "Optional runtime_data encoding, e.g. \"base64\" for URL-safe no padding base64")
+    ),
+    responses(
+        (status = 200, description = "success response",
+                content_type = "application/octet-stream",
+                body = String,
+                example = json!({"tdx":"{\"svn\":\"1\",\"report_data\":\"eHh4eA==\"}"})),
+        (status = 400, description = "bad request for invalid query param"),
+        (status = 403, description = "forbid external access"),
+        (status = 404, description = "resource not found"),
+        (status = 405, description = "only Get method allowed")
+    )
+)]
+fn _additional_evidence() {}
+
+#[utoipa::path(
+    get,
     path = "/cdh/resource/{repository}/{type}/{tag}",
     responses(
         (status = 200, description = "success response",
@@ -132,6 +152,7 @@ fn generate_openapi_document() -> std::io::Result<()> {
     paths(
         _token,
         _evidence,
+        _additional_evidence,
         _resource,
         _resource_injection_prepare,
         _resource_injection_commit,
