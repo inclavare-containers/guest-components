@@ -80,7 +80,10 @@ impl GetResourceService for Server {
             error!("[ttRPC CDH] GetResource :\n{detailed_error}");
             let mut status = Status::new();
             status.set_code(Code::INTERNAL);
-            status.set_message("[CDH] [ERROR]: Get Resource failed".into());
+            // Note that this error message will be delivered to infra-owner.
+            status.set_message(format!(
+                "[CDH] [ERROR]: Get Resource failed: {detailed_error}"
+            ));
             Error::RpcStatus(status)
         })?;
 
