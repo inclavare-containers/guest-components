@@ -99,3 +99,4 @@ jobs:
       - name: Run rust lint check
         run: |
           sudo -E PATH=$PATH -s make lint
+          sudo -E PATH=$PATH -s cargo clippy -p attestation-agent --bin initdata-processor --features bin,initdata-processor

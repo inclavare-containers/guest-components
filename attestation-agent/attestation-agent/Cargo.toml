@@ -17,6 +17,10 @@ required-features = ["bin", "ttrpc"]
 name = "ttrpc-aa-client"
 required-features = ["bin", "ttrpc", "eventlog"]
 
+[[bin]]
+name = "initdata-processor"
+required-features = ["bin", "initdata-processor"]
+
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
@@ -29,6 +33,7 @@ const_format.workspace = true
 env_logger = { workspace = true, optional = true }
 eventlog = { git = "https://github.com/openanolis/trustee.git", rev = "23fd9b6", optional = true }
 eventlog-rs = "0.1.8"
+flate2 = { workspace = true, optional = true }
 hex.workspace = true
 kbs_protocol = { path = "../kbs_protocol", default-features = false, optional = true }
 kbs-types.workspace = true
@@ -67,6 +72,9 @@ coco_as = ["reqwest", "token"]
 
 # AA Instance Info support
 instance_info = ["reqwest"]
+
+# initdata processor
+initdata-processor = ["flate2", "tokio/macros"]
 
 all-attesters = [
     "tdx-attester",

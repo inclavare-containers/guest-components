@@ -364,6 +364,7 @@ dependencies = [
  "env_logger 0.11.6",
  "eventlog",
  "eventlog-rs",
+ "flate2",
  "hex",
  "kbs-types",
  "kbs_protocol",
@@ -3354,22 +3355,6 @@ dependencies = [
  "equivalent",
  "hashbrown 0.14.3",
  "serde",
-]
-
-[[package]]
-name = "initdata-processor"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "attester",
- "env_logger 0.11.6",
- "flate2",
- "kbs-types",
- "log",
- "serde",
- "sha2 0.10.8",
- "tokio",
- "toml 0.8.19",
 ]
 
 [[package]]
