@@ -5,6 +5,10 @@
 mod initdata_spec;
 
 use anyhow::{bail, Context, Result};
+use attestation_agent::{
+    config::DEFAULT_PCR_INDEX,
+    eventlog::{Event, EventLog},
+};
 use attester::{detect_tee_type, BoxedAttester, InitDataResult};
 use initdata_spec::InitData;
 use log::{info, warn};
@@ -16,6 +20,8 @@ use std::path::{Path, PathBuf};
 
 const INITDATA_MAGIC: &[u8] = b"initdata";
 const INITDATA_OUT_DIR: &str = "/run/confidential-containers/initdata";
+const EVENTLOG_DOMAIN: &str = "alibabacloud.com";
+const EVENTLOG_OPERATION: &str = "kangaroo/initdata";
 
 fn digest_raw_content(algorithm: &str, content: &[u8]) -> Result<Vec<u8>> {
     Ok(match algorithm {
@@ -137,8 +143,19 @@ async fn main() -> Result<()> {
         tokio::fs::write(&out, value.as_bytes())
             .await
             .with_context(|| format!("write {}", out.display()))?;
-        info!("wrote {}", out.display());
+
+        info!("wrote {}, and extend the eventlog", out.display());
     }
+
+    // It's safe to continue do eventlog things.
+    // If the eventlog thing fails, the initdata-processor will fail to start, thus the whole
+    // boot process will fail. So we do not need to care much about the atomic issue
+
+    // also, let's use the default PCR index for now
+    let mut eventlog = EventLog::new(attester.into(), DEFAULT_PCR_INDEX).await?;
+    let context = serde_json::to_string(&initdata)?;
+    let log_entry = Event::new(EVENTLOG_DOMAIN, EVENTLOG_OPERATION, &context)?;
+    eventlog.extend_entry(log_entry, DEFAULT_PCR_INDEX).await?;
 
     Ok(())
 }
