@@ -13,7 +13,7 @@ use tokio::sync::{Mutex, RwLock};
 pub use attester::InitDataResult;
 
 pub mod config;
-mod eventlog;
+pub mod eventlog;
 
 pub mod initdata;
 #[cfg(feature = "instance_info")]
