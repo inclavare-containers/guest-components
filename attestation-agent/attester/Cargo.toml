@@ -104,4 +104,4 @@ se-attester = ["pv"]
 system-attester = ["nix/feature", "pnet", "udev"]
 tpm-attester = ["openssl", "rsa", "num-traits", "tss-esapi"]
 
-bin = ["tokio/rt", "tokio/macros", "clap"]
+bin = ["tokio/rt", "tokio/rt-multi-thread", "tokio/macros", "clap"]
