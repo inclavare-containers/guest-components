@@ -1271,6 +1271,7 @@ dependencies = [
  "reqwest 0.12.9",
  "resource_uri",
  "ring",
+ "rsa",
  "rstest",
  "serde",
  "serde_json",
