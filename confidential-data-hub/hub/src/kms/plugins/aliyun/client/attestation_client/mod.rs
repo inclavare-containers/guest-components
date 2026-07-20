@@ -22,7 +22,7 @@
 //!    evidence and returns `CiphertextForRecipient` = RSA-OAEP(SHA-256)(secret)
 //! 4. decrypt `CiphertextForRecipient` with the ephemeral private key
 
-use std::{collections::BTreeMap, env, fmt::Write as _};
+use std::{collections::BTreeMap, env, fmt, fmt::Write as _};
 
 use anyhow::{anyhow, bail, Context};
 use base64::{
@@ -68,13 +68,20 @@ pub struct AliAttestationProviderSettings {
     /// KMS instance id, e.g. `kst-xxxxxx`.
     pub kms_instance_id: String,
 
-    /// Region of the KMS instance, e.g. `cn-hangzhou`. Used to fetch the ECS RAM
-    /// role session credential from IMDS.
-    pub region_id: String,
+    /// ECS RAM role bound to the instance. When configured, its temporary STS
+    /// credential is fetched from IMDS to sign the KMS requests.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ecs_ram_role_name: Option<String>,
 
-    /// ECS RAM role bound to the instance; its temporary STS credential (fetched
-    /// from IMDS) signs the KMS requests. This keeps no long-term secret in the TEE.
-    pub ecs_ram_role_name: String,
+    /// STS credential in `AK:SK:STS` format. This is an alternative to
+    /// `ecs_ram_role_name`; exactly one credential source must be configured.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sts_token: Option<String>,
+
+    /// PEM-encoded private CA certificate of the KMS instance. When omitted, the
+    /// certificate is read from the in-guest credential directory.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kms_ca_cert: Option<String>,
 
     /// TEE type reported in the attestation document, e.g. `tdx`. Defaults to `tdx`.
     #[serde(default = "default_tee")]
@@ -85,19 +92,47 @@ fn default_tee() -> String {
     "tdx".to_string()
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct AttestationClient {
     kms_instance_id: String,
     endpoint: String,
-    region_id: String,
-    ecs_ram_role_name: String,
+    credential_source: CredentialSource,
+    kms_ca_cert: Option<String>,
     tee: String,
     aa_socket: String,
     http_client: reqwest::Client,
 }
 
+#[derive(Clone)]
+enum CredentialSource {
+    EcsRamRole(String),
+    StsToken(StsCredential),
+}
+
+impl fmt::Debug for AttestationClient {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let credential_source = match &self.credential_source {
+            CredentialSource::EcsRamRole(_) => "ecs_ram_role",
+            CredentialSource::StsToken(_) => "sts_token",
+        };
+        f.debug_struct("AttestationClient")
+            .field("kms_instance_id", &self.kms_instance_id)
+            .field("endpoint", &self.endpoint)
+            .field("credential_source", &credential_source)
+            .field(
+                "kms_ca_cert",
+                &self.kms_ca_cert.as_ref().map(|_| "<redacted>"),
+            )
+            .field("tee", &self.tee)
+            .field("aa_socket", &self.aa_socket)
+            .field("http_client", &self.http_client)
+            .finish()
+    }
+}
+
 impl AttestationClient {
     pub fn new(settings: AliAttestationProviderSettings, cert_pem: &str) -> Result<Self> {
+        let credential_source = credential_source(&settings)?;
         let endpoint = format!(
             "{}.cryptoservice.kms.aliyuncs.com",
             settings.kms_instance_id
@@ -117,8 +152,8 @@ impl AttestationClient {
         Ok(Self {
             kms_instance_id: settings.kms_instance_id,
             endpoint,
-            region_id: settings.region_id,
-            ecs_ram_role_name: settings.ecs_ram_role_name,
+            credential_source,
+            kms_ca_cert: settings.kms_ca_cert,
             tee: settings.tee,
             aa_socket,
             http_client,
@@ -134,16 +169,7 @@ impl AttestationClient {
                 Error::AliyunKmsError(format!("parse attestation provider setting failed: {e:?}"))
             })?;
 
-        let key_path = env::var("ALIYUN_IN_GUEST_KEY_PATH")
-            .unwrap_or_else(|_| ALIYUN_IN_GUEST_DEFAULT_KEY_PATH.to_owned());
-        info!("ALIYUN_IN_GUEST_KEY_PATH = {}", key_path);
-
-        let cert_path = format!("{}/PrivateKmsCA_{}.pem", key_path, settings.kms_instance_id);
-        let cert_pem = fs::read_to_string(&cert_path).await.map_err(|e| {
-            Error::AliyunKmsError(format!(
-                "read kms instance pem cert from {cert_path} failed: {e:?}"
-            ))
-        })?;
+        let cert_pem = load_kms_ca_cert(&settings).await?;
 
         Self::new(settings, &cert_pem)
     }
@@ -152,8 +178,18 @@ impl AttestationClient {
     pub fn export_provider_settings(&self) -> Result<ProviderSettings> {
         let settings = AliAttestationProviderSettings {
             kms_instance_id: self.kms_instance_id.clone(),
-            region_id: self.region_id.clone(),
-            ecs_ram_role_name: self.ecs_ram_role_name.clone(),
+            ecs_ram_role_name: match &self.credential_source {
+                CredentialSource::EcsRamRole(name) => Some(name.clone()),
+                CredentialSource::StsToken(_) => None,
+            },
+            sts_token: match &self.credential_source {
+                CredentialSource::EcsRamRole(_) => None,
+                CredentialSource::StsToken(credential) => Some(format!(
+                    "{}:{}:{}",
+                    credential.ak, credential.sk, credential.sts
+                )),
+            },
+            kms_ca_cert: self.kms_ca_cert.clone(),
             tee: self.tee.clone(),
         };
         let provider_settings = serde_json::to_value(settings)
@@ -184,10 +220,7 @@ impl AttestationClient {
         name: &str,
         secret_settings: &AliSecretAnnotations,
     ) -> anyhow::Result<Vec<u8>> {
-        let credential = self
-            .get_session_credential()
-            .await
-            .context("get STS session credential from IMDS")?;
+        let credential = self.get_session_credential().await?;
 
         let challenge = self
             .get_challenge(&credential)
@@ -318,20 +351,25 @@ impl AttestationClient {
     }
 
     async fn get_session_credential(&self) -> anyhow::Result<StsCredential> {
-        let request_url = format!(
-            "http://100.100.100.200/latest/meta-data/ram/security-credentials/{}",
-            self.ecs_ram_role_name
-        );
-        let response = reqwest::get(&request_url).await?;
-        if !response.status().is_success() {
-            bail!(
-                "request session credential from IMDS failed with status: {}",
-                response.status()
-            );
+        match &self.credential_source {
+            CredentialSource::StsToken(credential) => Ok(credential.clone()),
+            CredentialSource::EcsRamRole(role_name) => {
+                let request_url = format!(
+                    "http://100.100.100.200/latest/meta-data/ram/security-credentials/{role_name}"
+                );
+                let response = reqwest::get(&request_url)
+                    .await
+                    .context("request STS session credential from IMDS")?;
+                if !response.status().is_success() {
+                    bail!(
+                        "request session credential from IMDS failed with status: {}",
+                        response.status()
+                    );
+                }
+                let body = response.text().await?;
+                serde_json::from_str(&body).context("parse IMDS STS credential")
+            }
         }
-        let body = response.text().await?;
-        let credential = serde_json::from_str(&body).context("parse IMDS STS credential")?;
-        Ok(credential)
     }
 
     const API_VERSION: &'static str = "2016-01-20";
@@ -436,6 +474,66 @@ struct Challenge {
     challenge_token: String,
 }
 
+fn credential_source(settings: &AliAttestationProviderSettings) -> Result<CredentialSource> {
+    match (
+        settings
+            .ecs_ram_role_name
+            .as_deref()
+            .filter(|name| !name.trim().is_empty()),
+        settings
+            .sts_token
+            .as_deref()
+            .filter(|token| !token.trim().is_empty()),
+    ) {
+        (Some(role_name), None) => Ok(CredentialSource::EcsRamRole(role_name.to_owned())),
+        (None, Some(token)) => parse_sts_token(token).map(CredentialSource::StsToken),
+        (Some(_), Some(_)) => Err(Error::AliyunKmsError(
+            "only one of ecs_ram_role_name and sts_token can be configured".to_string(),
+        )),
+        (None, None) => Err(Error::AliyunKmsError(
+            "one of ecs_ram_role_name and sts_token must be configured".to_string(),
+        )),
+    }
+}
+
+fn parse_sts_token(token: &str) -> Result<StsCredential> {
+    let mut sections = token.splitn(3, ':');
+    let ak = sections.next().unwrap_or_default();
+    let sk = sections.next().unwrap_or_default();
+    let sts = sections.next().unwrap_or_default();
+    if ak.is_empty() || sk.is_empty() || sts.is_empty() {
+        return Err(Error::AliyunKmsError(
+            "invalid sts_token format, expected AK:SK:STS".to_string(),
+        ));
+    }
+    Ok(StsCredential {
+        ak: ak.to_owned(),
+        sk: sk.to_owned(),
+        sts: sts.to_owned(),
+    })
+}
+
+async fn load_kms_ca_cert(settings: &AliAttestationProviderSettings) -> Result<String> {
+    if let Some(cert) = settings
+        .kms_ca_cert
+        .as_deref()
+        .filter(|cert| !cert.trim().is_empty())
+    {
+        return Ok(cert.to_owned());
+    }
+
+    let key_path = env::var("ALIYUN_IN_GUEST_KEY_PATH")
+        .unwrap_or_else(|_| ALIYUN_IN_GUEST_DEFAULT_KEY_PATH.to_owned());
+    info!("ALIYUN_IN_GUEST_KEY_PATH = {}", key_path);
+
+    let cert_path = format!("{}/PrivateKmsCA_{}.pem", key_path, settings.kms_instance_id);
+    fs::read_to_string(&cert_path).await.map_err(|e| {
+        Error::AliyunKmsError(format!(
+            "read kms instance pem cert from {cert_path} failed: {e:?}"
+        ))
+    })
+}
+
 /// Serialize `value` with the same canonical JSON rules the AS uses (recursively
 /// key-sorted, compact) and return its SHA-384 digest.
 fn sha384_canonical(value: &Value) -> anyhow::Result<Vec<u8>> {
@@ -493,5 +591,52 @@ mod tests {
     fn tee_pubkey_exponent_is_aqab() {
         let keypair = RsaPrivateKey::new(&mut OsRng, RSA_KEY_BITS).unwrap();
         assert_eq!(URL_SAFE_NO_PAD.encode(keypair.e().to_bytes_be()), "AQAB");
+    }
+
+    #[test]
+    fn parse_direct_sts_token() {
+        let credential = parse_sts_token("ak:sk:sts:with:colons").unwrap();
+        assert_eq!(credential.ak, "ak");
+        assert_eq!(credential.sk, "sk");
+        assert_eq!(credential.sts, "sts:with:colons");
+    }
+
+    #[test]
+    fn credential_source_must_be_unambiguous() {
+        let settings = AliAttestationProviderSettings {
+            kms_instance_id: "kst-test".to_string(),
+            ecs_ram_role_name: Some("test-role".to_string()),
+            sts_token: Some("ak:sk:sts".to_string()),
+            kms_ca_cert: None,
+            tee: default_tee(),
+        };
+        assert!(credential_source(&settings).is_err());
+    }
+
+    #[tokio::test]
+    async fn embedded_ca_cert_takes_precedence_over_file() {
+        let settings = AliAttestationProviderSettings {
+            kms_instance_id: "kst-test".to_string(),
+            ecs_ram_role_name: Some("test-role".to_string()),
+            sts_token: None,
+            kms_ca_cert: Some("-----BEGIN CERTIFICATE-----\ninline\n".to_string()),
+            tee: default_tee(),
+        };
+        assert_eq!(
+            load_kms_ca_cert(&settings).await.unwrap(),
+            "-----BEGIN CERTIFICATE-----\ninline\n"
+        );
+    }
+
+    #[test]
+    fn legacy_region_id_is_ignored() {
+        let settings: AliAttestationProviderSettings = serde_json::from_value(json!({
+            "kms_instance_id": "kst-test",
+            "region_id": "cn-hangzhou",
+            "ecs_ram_role_name": "test-role"
+        }))
+        .unwrap();
+        assert_eq!(settings.kms_instance_id, "kst-test");
+        assert_eq!(settings.ecs_ram_role_name.as_deref(), Some("test-role"));
     }
 }
