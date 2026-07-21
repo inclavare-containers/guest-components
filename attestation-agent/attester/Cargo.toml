@@ -102,6 +102,6 @@ hygon = ["csv-rs"]
 cca-attester = ["tsm-report"]
 se-attester = ["pv"]
 system-attester = ["nix/feature", "pnet", "udev"]
-tpm-attester = ["openssl", "rsa", "num-traits", "tss-esapi"]
+tpm-attester = ["openssl", "rsa", "num-traits", "tss-esapi", "uuid"]
 
 bin = ["tokio/rt", "tokio/rt-multi-thread", "tokio/macros", "clap"]

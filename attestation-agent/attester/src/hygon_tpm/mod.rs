@@ -16,7 +16,7 @@ use std::fs::File;
 use std::path::Path;
 use std::str::FromStr;
 use tss_esapi::abstraction::{
-    ak::{create_ak, load_ak},
+    ak::{create_ak_2, load_ak},
     ek::{create_ek_object_2, retrieve_ek_pubcert},
     pcr, AsymmetricAlgorithmSelection, DefaultKey,
 };
@@ -33,6 +33,7 @@ use tss_esapi::structures::{
 use tss_esapi::tcti_ldr::{DeviceConfig, TctiNameConf};
 use tss_esapi::traits::{Marshall, UnMarshall};
 use tss_esapi::Context as TssContext;
+use uuid::Uuid;
 
 const TPM_EVENTLOG_FILE_PATH: &str = "/sys/kernel/security/tpm0/binary_bios_measurements";
 const TPM_REPORT_DATA_SIZE: usize = 32;
@@ -107,11 +108,27 @@ struct AgentDataFile {
     ek_hash: Vec<u8>,
 }
 
-fn try_get_keylime_uuid() -> Option<String> {
-    match env::var(KEYLIME_AGENT_UUID_ENV) {
-        Result::Ok(v) if !v.is_empty() => Some(v),
-        _ => None,
+fn normalize_keylime_uuid(value: &str) -> Option<String> {
+    if value.is_empty() {
+        return None;
     }
+
+    // Rust Keylime canonicalizes configured UUIDs before registrar
+    // registration. Do the same before carrying the UUID in evidence so the
+    // verifier queries the exact registrar record that owns this AK.
+    match Uuid::parse_str(value) {
+        Ok(uuid) => Some(uuid.to_string()),
+        Err(e) => {
+            log::warn!("Invalid {KEYLIME_AGENT_UUID_ENV}: {e}");
+            None
+        }
+    }
+}
+
+fn try_get_keylime_uuid() -> Option<String> {
+    env::var(KEYLIME_AGENT_UUID_ENV)
+        .ok()
+        .and_then(|value| normalize_keylime_uuid(&value))
 }
 
 fn is_sm3_algorithm(name: &str) -> bool {
@@ -242,10 +259,11 @@ fn generate_sm2_ak() -> Result<AttestationKey> {
         DefaultKey,
     )?;
 
-    let ak = create_ak(
+    let ak = create_ak_2(
         &mut context,
         ek_handle,
         HashingAlgorithm::Sm3_256,
+        AsymmetricAlgorithmSelection::Ecc(EccCurve::Sm2P256),
         SignatureSchemeAlgorithm::Sm2,
         None,
         DefaultKey,
@@ -463,5 +481,29 @@ impl Attester for HygonTpmAttester {
 
     fn ccel_hash_algorithm(&self) -> HashAlgorithm {
         HashAlgorithm::Sm3
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_keylime_uuid;
+
+    #[test]
+    fn normalize_keylime_uuid_uses_canonical_case() {
+        let canonical = "d432fbb3-d2f1-4a97-9ef7-75bd81c00000";
+        assert_eq!(
+            normalize_keylime_uuid("D432FBB3-D2F1-4A97-9EF7-75BD81C00000").as_deref(),
+            Some(canonical)
+        );
+        assert_eq!(
+            normalize_keylime_uuid(canonical).as_deref(),
+            Some(canonical)
+        );
+    }
+
+    #[test]
+    fn normalize_keylime_uuid_rejects_empty_or_invalid_values() {
+        assert_eq!(normalize_keylime_uuid(""), None);
+        assert_eq!(normalize_keylime_uuid("not-a-uuid"), None);
     }
 }
