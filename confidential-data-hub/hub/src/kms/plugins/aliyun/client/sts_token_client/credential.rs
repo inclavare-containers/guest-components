@@ -11,7 +11,7 @@ use ring::hmac::{self, Key, HMAC_SHA1_FOR_LEGACY_USE_ONLY};
 use serde::Deserialize;
 use url::form_urlencoded::byte_serialize;
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct StsCredential {
     #[serde(rename = "AccessKeyId")]
     pub ak: String,

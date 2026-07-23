@@ -67,6 +67,7 @@ rand.workspace = true
 reqwest = { workspace = true, optional = true }
 resource_uri.path = "../../attestation-agent/deps/resource_uri"
 ring = "0.17"
+rsa = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 serde_json.workspace = true
 sev = { path = "../../attestation-agent/deps/sev", optional = true }
@@ -110,16 +111,20 @@ default = ["aliyun", "kbs", "resource_injection", "bin", "ttrpc", "grpc", "cli"]
 # support aliyun stacks (KMS, ..)
 aliyun = [
     "chrono",
+    "dep:canon-json",
+    "dep:ttrpc",
     "hex",
     "p12",
     "prost",
     "reqwest/rustls-tls",
+    "dep:rsa",
     "sha2",
     "tempfile",
     "tonic",
     "url",
     "yasna",
     "protos/grpc",
+    "protos/ttrpc",
 ]
 
 # support coco-KBS to provide confidential resources

@@ -53,6 +53,45 @@ Else if `client_type` is set to 'sts_token', provider_settings shall be as follo
 | `token_path`       | STS Token path inside the pod. The format of STS token is `AK:SK:STS`|
 | `region_id`        | KMS instance region ID                                               |
 
+Else if `client_type` is set to 'attestation', provider_settings shall be as following:
+
+| Name                | Required | Usage |
+| ------------------- | -------- | ----- |
+| `client_type`       | Yes      | Set to `attestation` |
+| `kms_instance_id`   | Yes      | The KMS instance ID to connect to |
+| `tee`               | No       | TEE type in the attestation document. Defaults to `tdx` |
+| `kms_ca_cert`       | No       | PEM-encoded KMS instance CA certificate. If omitted, CDH reads `PrivateKmsCA_<kms_instance_id>.pem` from the in-guest credential directory |
+| `ecs_ram_role_name` | Choice   | ECS RAM role whose temporary STS credential is fetched from IMDS |
+| `sts_token`         | Choice   | STS credential in `AK:SK:STS` format, used directly without accessing IMDS |
+
+Exactly one of `ecs_ram_role_name` and `sts_token` must be configured.
+
+For example, use an embedded CA certificate and an ECS RAM role:
+
+```json
+{
+    "client_type": "attestation",
+    "kms_instance_id": "kst-xxxxxx",
+    "ecs_ram_role_name": "kms-access-role",
+    "kms_ca_cert": "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n"
+}
+```
+
+Or use an embedded CA certificate and a directly configured STS credential:
+
+```json
+{
+    "client_type": "attestation",
+    "kms_instance_id": "kst-xxxxxx",
+    "sts_token": "<AccessKeyId>:<AccessKeySecret>:<SecurityToken>",
+    "kms_ca_cert": "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n"
+}
+```
+
+The direct STS credential is stored in the sealed secret's `provider_settings`.
+Use only short-lived STS credentials and protect the sealed secret from
+unauthorized access.
+
 ### Credential files
 
 To connect to a KMS instance with `client_type` set to 'client_key', a client key is needed. A client key is actually

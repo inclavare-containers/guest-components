@@ -174,10 +174,11 @@ async fn unseal_secret(unseal_args: &UnsealArgs) {
     };
 
     match secret_provider.as_str() {
-        "aliyun" => env::set_var(
-            "ALIYUN_IN_GUEST_KEY_PATH",
-            unseal_args.key_path.as_ref().expect("Key Path Required"),
-        ),
+        "aliyun" => {
+            if let Some(key_path) = unseal_args.key_path.as_ref() {
+                env::set_var("ALIYUN_IN_GUEST_KEY_PATH", key_path);
+            }
+        }
         "ehsm" => env::set_var(
             "EHSM_IN_GUEST_KEY_PATH",
             unseal_args.key_path.as_ref().expect("Key Path Required"),

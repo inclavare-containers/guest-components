@@ -9,6 +9,7 @@ use oidc_with_ram::OidcRamClient;
 use serde_json::json;
 use sts_token_client::StsTokenClient;
 
+mod attestation_client;
 mod client_key_client;
 mod ecs_ram_role_client;
 pub mod oidc_with_ram;
@@ -18,6 +19,7 @@ use crate::kms::plugins::_IN_GUEST_DEFAULT_KEY_PATH;
 use crate::kms::{Annotations, Decrypter, Encrypter, Getter, ProviderSettings};
 use crate::kms::{Error, Result};
 
+use attestation_client::AttestationClient;
 use client_key_client::ClientKeyClient;
 use ecs_ram_role_client::EcsRamRoleClient;
 
@@ -34,6 +36,11 @@ pub enum AliyunKmsClient {
     },
     OidcRam {
         client: OidcRamClient,
+    },
+    /// Fetch confidential resources from a KMS instance with the Trustee
+    /// Attestation Service integrated, authorized by TEE remote attestation.
+    Attestation {
+        client: AttestationClient,
     },
 }
 
@@ -121,6 +128,15 @@ impl AliyunKmsClient {
                     ))
                 })?,
             },
+            "attestation" => AliyunKmsClient::Attestation {
+                client: AttestationClient::from_provider_settings(provider_settings)
+                    .await
+                    .map_err(|e| {
+                        Error::AliyunKmsError(format!(
+                            "build AttestationClient with `from_provider_settings()` failed: {e}"
+                        ))
+                    })?,
+            },
             _ => return Err(Error::AliyunKmsError("client type invalid.".to_string())),
         };
 
@@ -170,6 +186,17 @@ impl AliyunKmsClient {
 
                 Ok(provider_settings)
             }
+            AliyunKmsClient::Attestation { client } => {
+                let mut provider_settings = client.export_provider_settings().map_err(|e| {
+                    Error::AliyunKmsError(format!(
+                        "AttestationClient `export_provider_settings()` failed: {e}"
+                    ))
+                })?;
+
+                provider_settings.insert(String::from("client_type"), json!("attestation"));
+
+                Ok(provider_settings)
+            }
         }
     }
 }
@@ -187,6 +214,9 @@ impl Encrypter for AliyunKmsClient {
             )),
             AliyunKmsClient::OidcRam { .. } => Err(Error::AliyunKmsError(
                 "Encrypter does not support accessing through Aliyun OidcRam".to_string(),
+            )),
+            AliyunKmsClient::Attestation { .. } => Err(Error::AliyunKmsError(
+                "Encrypter does not support accessing through Aliyun Attestation".to_string(),
             )),
         }
     }
@@ -213,6 +243,9 @@ impl Decrypter for AliyunKmsClient {
             AliyunKmsClient::OidcRam { .. } => Err(Error::AliyunKmsError(
                 "Decrypter does not support accessing through Aliyun OidcRam".to_string(),
             )),
+            AliyunKmsClient::Attestation { .. } => Err(Error::AliyunKmsError(
+                "Decrypter does not support accessing through Aliyun Attestation".to_string(),
+            )),
         }
     }
 }
@@ -230,6 +263,9 @@ impl Getter for AliyunKmsClient {
                 .get_secret(name, annotations)
                 .await
                 .map_err(|e| Error::AliyunKmsError(format!("failed to get secret: {e:#?}"))),
+            AliyunKmsClient::Attestation { ref client } => {
+                client.get_secret(name, annotations).await
+            }
         }
     }
 }
