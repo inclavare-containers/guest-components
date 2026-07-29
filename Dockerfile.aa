@@ -23,14 +23,16 @@ RUN case "$TARGETARCH" in \
     esac
 
 WORKDIR /tmp
-RUN yum install -y perl wget curl clang openssl-devel protobuf-devel git libudev-devel perl-FindBin
+# The AnolisOS 23 kernel-6 repository was retired from the mirrors. This image
+# does not consume kernel packages, so disable the stale repository explicitly.
+RUN yum install -y --disablerepo=kernel-6 ca-certificates perl wget curl clang openssl-devel protobuf-devel git libudev-devel perl-FindBin
 
 RUN if [ "$TARGETARCH" != "arm64" ]; then \
     curl https://download.01.org/intel-sgx/sgx-dcap/1.21/linux/distro/Anolis86/sgx_rpm_local_repo.tgz --output sgx_rpm_local_repo.tgz && \
     tar zxvf sgx_rpm_local_repo.tgz && \
     find /etc/yum.repos.d/ -type f -exec sed -i 's/http:\/\/mirrors.openanolis.cn\/anolis/https:\/\/mirrors.aliyun.com\/anolis/g' {} + && \
-    yum -y install yum-utils && yum-config-manager --add-repo file:///tmp/sgx_rpm_local_repo && \
-    yum install -y --setopt=install_weak_deps=False --nogpgcheck libtdx-attest-devel && \
+    yum install -y --disablerepo=kernel-6 yum-utils && yum-config-manager --add-repo file:///tmp/sgx_rpm_local_repo && \
+    yum install -y --disablerepo=kernel-6 --setopt=install_weak_deps=False --nogpgcheck libtdx-attest-devel && \
     yum clean all && \
     rm -rf /tmp/sgx_rpm_local_repo*; \
     fi
@@ -84,10 +86,11 @@ ARG TARGETARCH
 
 WORKDIR /tmp
 RUN if [ "$TARGETARCH" != "arm64" ]; then \
+    yum install -y --disablerepo=kernel-6 ca-certificates && \
     curl https://download.01.org/intel-sgx/sgx-dcap/1.21/linux/distro/Anolis86/sgx_rpm_local_repo.tgz --output sgx_rpm_local_repo.tgz && \
     tar zxvf sgx_rpm_local_repo.tgz && \
-    yum -y install yum-utils && yum-config-manager --add-repo file:///tmp/sgx_rpm_local_repo && \
-    yum install -y --setopt=install_weak_deps=False --nogpgcheck libtdx-attest-devel && \
+    yum install -y --disablerepo=kernel-6 yum-utils && yum-config-manager --add-repo file:///tmp/sgx_rpm_local_repo && \
+    yum install -y --disablerepo=kernel-6 --setopt=install_weak_deps=False --nogpgcheck libtdx-attest-devel && \
     yum clean all && \
     rm -rf /tmp/*; \
     fi

@@ -10,9 +10,12 @@ ENV NO_PROXY=$NO_PROXY
 WORKDIR /usr/src/guest-components
 COPY . .
 
-RUN yum -y install yum-utils && \
-    yum install -y --setopt=install_weak_deps=False --nogpgcheck \
+# The AnolisOS 23 kernel-6 repository was retired from the mirrors. This image
+# does not consume kernel packages, so disable the stale repository explicitly.
+RUN yum install -y --disablerepo=kernel-6 yum-utils && \
+    yum install -y --disablerepo=kernel-6 --setopt=install_weak_deps=False --nogpgcheck \
         clang \
+        ca-certificates \
         protobuf-devel \
         git \
         curl \
@@ -43,7 +46,7 @@ RUN if [ -n "${ALL_PROXY}" ]; then \
 RUN cargo +1.79.0 build -p api-server-rest --release --locked
 
 FROM registry.openanolis.cn/openanolis/anolisos:23.2
-RUN yum install -y --setopt=install_weak_deps=False --nogpgcheck ca-certificates && \
+RUN yum install -y --disablerepo=kernel-6 --setopt=install_weak_deps=False --nogpgcheck ca-certificates && \
     yum clean all && \
     rm -rf /tmp/*
 
@@ -54,4 +57,3 @@ COPY dist/rpm/trustiflux-api-server.toml /etc/trustiflux/trustiflux-api-server.t
 EXPOSE 8006
 ENTRYPOINT ["/usr/local/bin/trustiflux-api-server"]
 CMD ["--config", "/etc/trustiflux/trustiflux-api-server.toml"]
-

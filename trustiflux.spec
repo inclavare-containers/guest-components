@@ -145,6 +145,7 @@ rm -rf %{buildroot}
 - Image pull: add benchmarks and kernel command-line configuration
 - Hygon TPM: align SM2 AK parameters and canonicalize Keylime UUIDs
 - Build: fix minimal attester feature combinations
+- Containers: handle the retired AnolisOS kernel-6 repository and refresh CA certificates
 
 * Mon May 18 2026 Jiale Zhang <xinjian.zjl@alibaba-inc.com> - 1.5.1-1
 - Attester: add Hygon TPM tee type with sm2/sm3 keylime support
