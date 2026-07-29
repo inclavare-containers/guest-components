@@ -3,7 +3,7 @@
 %global libdir /usr/lib
 
 Name:		trustiflux
-Version:	1.5.1
+Version:	1.5.2
 Release:	%{release}%{?dist}
 Summary:	A daemon service running inside TEE (Trusted Execution Environment) to confidential resource related APIs
 
@@ -137,6 +137,16 @@ rm -rf %{buildroot}
 %{libdir}/dracut/modules.d/99confidential-data-hub/module-setup.sh
 
 %changelog
+* Wed Jul 29 2026 Jiale Zhang <zhangjiale@linux.alibaba.com> - 1.5.2-1
+- Attestation: add pure-Go attester and attestation-agent libraries
+- CDH: add Aliyun KMS remote-attestation client and configuration improvements
+- KBS protocol: align end-to-end tests with the current KBS configuration
+- Initdata processor: add AAEL support and move under attestation-agent
+- Image pull: add benchmarks and kernel command-line configuration
+- Hygon TPM: align SM2 AK parameters and canonicalize Keylime UUIDs
+- Build: fix minimal attester feature combinations
+- Containers: handle the retired AnolisOS kernel-6 repository and refresh CA certificates
+
 * Mon May 18 2026 Jiale Zhang <xinjian.zjl@alibaba-inc.com> - 1.5.1-1
 - Attester: add Hygon TPM tee type with sm2/sm3 keylime support
 - Test: gate live image verification cases behind opt-in env
