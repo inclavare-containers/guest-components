@@ -9,6 +9,9 @@ use std::collections::HashMap;
 /// TPM Evidence
 #[derive(Serialize, Deserialize)]
 pub struct TpmEvidence {
+    // Base64-encoded TPMT_PUBLIC for the endorsement key. For an SVSM vTPM
+    // this is compared with the manifest bound into the VMPL0 SNP report.
+    pub ek_pubkey: String,
     // PEM format of EK certificate
     pub ek_cert: Option<String>,
     // PEM format of AK public key

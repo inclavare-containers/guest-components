@@ -104,6 +104,13 @@ pub trait Attester {
     /// evidence to avoid reply attack.
     async fn get_evidence(&self, report_data: Vec<u8>) -> Result<TeeEvidence>;
 
+    /// Whether this attester can extend and read a runtime measurement
+    /// register. Callers use this to select a measurement backend without
+    /// assuming that the primary TEE implements one.
+    fn supports_runtime_measurement(&self) -> bool {
+        false
+    }
+
     /// Extend TEE specific dynamic measurement register
     /// to enable dynamic measurement capabilities for input data at runtime.
     async fn extend_runtime_measurement(
@@ -228,6 +235,20 @@ pub fn detect_attestable_devices() -> Vec<Tee> {
     #[cfg(feature = "hygon-dcu-attester")]
     if hygon_dcu::detect_platform() {
         additional_devices.push(Tee::HygonDcu);
+    }
+
+    // In an SNP guest, only accept a TPM exposed by the in-guest SVSM driver.
+    // A generic or host-provided vTPM is not cryptographically rooted in the
+    // VMPL0 SNP report and must not silently become additional evidence.
+    #[cfg(all(feature = "snp-attester", feature = "tpm-attester"))]
+    if detect_tee_type() == Tee::Snp && tpm::detect_platform() {
+        if tpm::is_svsm_vtpm() {
+            additional_devices.push(Tee::Tpm);
+        } else {
+            log::warn!(
+                "A TPM was detected in the SNP guest, but its driver is not tpm-svsm; ignoring unbound TPM evidence"
+            );
+        }
     }
 
     additional_devices

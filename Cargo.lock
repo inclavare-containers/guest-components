@@ -394,6 +394,7 @@ dependencies = [
  "az-snp-vtpm",
  "az-tdx-vtpm",
  "base64 0.22.1",
+ "bincode",
  "chrono",
  "clap 4.2.7",
  "codicon",

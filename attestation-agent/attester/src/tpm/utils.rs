@@ -18,7 +18,7 @@ use tss_esapi::abstraction::{
     AsymmetricAlgorithmSelection, DefaultKey,
 };
 use tss_esapi::attributes::SessionAttributesBuilder;
-use tss_esapi::constants::SessionType;
+use tss_esapi::constants::{CapabilityType, SessionType};
 use tss_esapi::handles::{KeyHandle, PcrHandle};
 use tss_esapi::interface_types::algorithm::{
     AsymmetricAlgorithm, HashingAlgorithm, SignatureSchemeAlgorithm,
@@ -26,8 +26,8 @@ use tss_esapi::interface_types::algorithm::{
 use tss_esapi::interface_types::key_bits::RsaKeyBits;
 use tss_esapi::structures::digest_values::DigestValues;
 use tss_esapi::structures::{
-    pcr_selection_list::PcrSelectionListBuilder, pcr_slot::PcrSlot, AttestInfo, PcrSelectionList,
-    Private, Public, Signature, SignatureScheme, SymmetricDefinition,
+    pcr_selection_list::PcrSelectionListBuilder, pcr_slot::PcrSlot, AttestInfo, CapabilityData,
+    PcrSelectionList, Private, Public, Signature, SignatureScheme, SymmetricDefinition,
 };
 use tss_esapi::tcti_ldr::{DeviceConfig, TctiNameConf};
 use tss_esapi::traits::Marshall;
@@ -112,6 +112,46 @@ pub fn create_pcr_selection_list(algorithm: &str) -> Result<PcrSelectionList> {
     }
 }
 
+/// Return the PCR banks that this attester can quote and serialize.
+///
+/// Some TPM 2.0 implementations advertise an empty SHA-1 bank. Asking
+/// `pcr::read_all` to read such a bank can loop forever because the TPM keeps
+/// returning an empty selection. Query the assigned-PCR capability first and
+/// only quote banks with at least one allocated PCR.
+pub fn supported_quote_algorithms() -> Result<Vec<&'static str>> {
+    let mut context = create_ctx_without_session()?;
+    let (capability, _) = context.get_capability(
+        CapabilityType::AssignedPcr,
+        0,
+        PcrSelectionList::MAX_SIZE as u32,
+    )?;
+    let CapabilityData::AssignedPcr(selections) = capability else {
+        bail!("TPM returned unexpected data for assigned PCR capability");
+    };
+
+    let mut algorithms = Vec::new();
+    for selection in selections.get_selections() {
+        if selection.selected().is_empty() {
+            continue;
+        }
+        let algorithm = match selection.hashing_algorithm() {
+            HashingAlgorithm::Sha1 => Some("SHA1"),
+            HashingAlgorithm::Sha256 => Some("SHA256"),
+            _ => None,
+        };
+        if let Some(algorithm) = algorithm {
+            if !algorithms.contains(&algorithm) {
+                algorithms.push(algorithm);
+            }
+        }
+    }
+
+    if algorithms.is_empty() {
+        bail!("TPM has no supported allocated PCR bank (SHA1 or SHA256)");
+    }
+    Ok(algorithms)
+}
+
 pub fn pcr_extend(digest: Vec<u8>, index: u64) -> Result<()> {
     let mut ctx = create_ctx_with_session()?;
 
@@ -150,6 +190,17 @@ pub fn dump_ek_cert_pem() -> Result<String> {
     let ek_cert = String::from_utf8(ek_cert_pem_bytes)?;
 
     Ok(ek_cert)
+}
+
+/// Return the marshalled TPMT_PUBLIC of the RSA endorsement key.
+///
+/// Coconut-SVSM manifest version 0 uses the same representation, allowing a
+/// verifier to bind the TPM evidence to the vTPM attested by the VMPL0 report.
+pub fn dump_ek_pub() -> Result<Vec<u8>> {
+    let mut context = create_ctx_without_session()?;
+    let ek_handle = create_ek_object(&mut context, AsymmetricAlgorithm::Rsa, DefaultKey)?;
+    let (public, _, _) = context.read_public(ek_handle)?;
+    public.marshall().context("Marshal EK TPMT_PUBLIC")
 }
 
 pub fn dump_pcrs(algorithm: &str) -> Result<Vec<String>> {
