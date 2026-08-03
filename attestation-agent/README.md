@@ -120,6 +120,20 @@ AA supports different kinds of hardware TEE attesters, now
 | cca-attester        | Arm Confidential Compute Architecture (CCA)  |
 | se-attester         | IBM Secure Execution (SE)   |
 
+#### SEV-SNP with an SVSM vTPM
+
+On a guest with the Linux `tpm_svsm` driver and the TSM SVSM attestation ABI,
+the SNP attester automatically collects a VMPL0 SNP report and the Coconut
+vTPM service manifest. The TPM is added as device evidence, and AA runtime
+events are extended into its PCRs even though SNP remains the primary
+attester. The composite KBS evidence binds the TPM quote to the SNP challenge;
+the verifier can additionally bind the vTPM EK to the manifest covered by the
+VMPL0 report.
+
+`KEYLIME_AGENT_UUID` remains optional. Set it only when the generated AK has
+already been activated and registered with Keylime and registrar-side AK/EK
+binding verification is required.
+
 To build AA with all available attesters and install, use
 ```shell
 make ATTESTER=all-attesters && make install

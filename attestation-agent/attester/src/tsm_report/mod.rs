@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
+use std::cell::Cell;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use strum::EnumString;
@@ -25,10 +26,12 @@ pub enum TsmReportError {
     MissingProvider(TsmReportProvider, TsmReportProvider),
     #[error("Failed to open TSM Report path: unknown provider ({0})")]
     UnknownProvider(#[from] strum::ParseError),
-    #[error("Failed to generate TSM Report: inblob write conflict (generation={0}, expected 1)")]
-    InblobConflict(u32),
     #[error("Failed to generate TSM Report: missing inblob (len=0)")]
     InblobLen,
+    #[error(
+        "Failed to generate TSM Report: concurrent attribute write (generation={0}, expected {1})"
+    )]
+    GenerationConflict(u32, u32),
 }
 
 #[derive(PartialEq, Debug, EnumString)]
@@ -45,6 +48,13 @@ pub enum TsmReportData {
     Cca(Vec<u8>),
     Tdx(Vec<u8>),
     Sev(u8, Vec<u8>),
+    /// Request a VMPL0 report from an SVSM and bind the selected service
+    /// manifest into REPORT_DATA.
+    SevSvsm {
+        inblob: Vec<u8>,
+        service_guid: String,
+        manifest_version: u32,
+    },
 }
 
 /// TsmReportPath instance represents a unique path on ConfigFS
@@ -53,6 +63,7 @@ pub enum TsmReportData {
 /// automatically removed when the instance goes out of scope.
 pub struct TsmReportPath {
     path: PathBuf,
+    expected_generation: Cell<u32>,
 }
 
 impl Drop for TsmReportPath {
@@ -75,12 +86,35 @@ impl TsmReportPath {
         // path (rmdir way) when TsmReportPath instance goes out of scope.
         let path = p.into_path();
 
-        if check_tsm_report_provider(path.as_path(), wanted).is_err() {
+        if let Err(e) = check_tsm_report_provider(path.as_path(), wanted) {
             let _ = std::fs::remove_dir(path.as_path());
+            return Err(e);
         }
 
-        Ok(Self { path })
+        Ok(Self {
+            path,
+            expected_generation: Cell::new(0),
+        })
     }
+
+    fn write_attribute(
+        &self,
+        name: &'static str,
+        value: impl AsRef<[u8]>,
+    ) -> Result<(), TsmReportError> {
+        std::fs::write(self.path.join(name), value).map_err(|e| TsmReportError::Access(name, e))?;
+        self.expected_generation
+            .set(self.expected_generation.get() + 1);
+        Ok(())
+    }
+
+    /// Whether this TSM provider exposes the SVSM service attestation ABI.
+    pub fn supports_svsm_attestation(&self) -> bool {
+        self.path.join("service_provider").exists()
+            && self.path.join("service_guid").exists()
+            && self.path.join("manifestblob").exists()
+    }
+
     pub fn attestation_report(
         &self,
         provider_data: TsmReportData,
@@ -92,8 +126,17 @@ impl TsmReportPath {
             TsmReportData::Tdx(inblob) => inblob,
             TsmReportData::Sev(privlevel, inblob) => {
                 // TODO: untested
-                std::fs::write(report_path.join("privlevel"), vec![privlevel])
-                    .map_err(|e| TsmReportError::Access("privlevel", e))?;
+                self.write_attribute("privlevel", privlevel.to_string())?;
+                inblob
+            }
+            TsmReportData::SevSvsm {
+                inblob,
+                service_guid,
+                manifest_version,
+            } => {
+                self.write_attribute("service_provider", "svsm")?;
+                self.write_attribute("service_guid", service_guid)?;
+                self.write_attribute("service_manifest_version", manifest_version.to_string())?;
                 inblob
             }
         };
@@ -102,13 +145,12 @@ impl TsmReportPath {
             return Err(TsmReportError::InblobLen);
         }
 
-        std::fs::write(report_path.join("inblob"), report_data)
-            .map_err(|e| TsmReportError::Access("inblob", e))?;
+        self.write_attribute("inblob", report_data)?;
 
         let q = std::fs::read(report_path.join("outblob"))
             .map_err(|e| TsmReportError::Access("outblob", e))?;
 
-        check_inblob_write_race(report_path)?;
+        check_inblob_write_race(report_path, self.expected_generation.get())?;
 
         Ok(q)
     }
@@ -118,9 +160,19 @@ impl TsmReportPath {
         let aux = std::fs::read(report_path.join("auxblob"))
             .map_err(|e| TsmReportError::Access("auxblob", e))?;
 
-        check_inblob_write_race(report_path)?;
+        check_inblob_write_race(report_path, self.expected_generation.get())?;
 
         Ok(aux)
+    }
+
+    pub fn manifest_data(&self) -> Result<Vec<u8>, TsmReportError> {
+        let report_path = self.path.as_path();
+        let manifest = std::fs::read(report_path.join("manifestblob"))
+            .map_err(|e| TsmReportError::Access("manifestblob", e))?;
+
+        check_inblob_write_race(report_path, self.expected_generation.get())?;
+
+        Ok(manifest)
     }
 }
 
@@ -129,7 +181,10 @@ impl TsmReportPath {
 /// inblob was written by the TsmReportPath instance. It prevents
 /// the race condition that someone else could use the same temporary
 /// directory to generate a quote.
-fn check_inblob_write_race(report_path: &Path) -> Result<(), TsmReportError> {
+fn check_inblob_write_race(
+    report_path: &Path,
+    expected_generation: u32,
+) -> Result<(), TsmReportError> {
     let g = std::fs::read_to_string(report_path.join("generation"))
         .map_err(|e| TsmReportError::Access("generation", e))?;
 
@@ -139,8 +194,11 @@ fn check_inblob_write_race(report_path: &Path) -> Result<(), TsmReportError> {
         .parse::<u32>()
         .map_err(TsmReportError::Parse)?;
 
-    if generation > 1 {
-        return Err(TsmReportError::InblobConflict(generation));
+    if generation != expected_generation {
+        return Err(TsmReportError::GenerationConflict(
+            generation,
+            expected_generation,
+        ));
     }
 
     Ok(())
@@ -191,7 +249,7 @@ mod tests {
             ),
             "generation" => assert_eq!(
                 expect_error,
-                check_inblob_write_race(tsm_dir.path()).is_err(),
+                check_inblob_write_race(tsm_dir.path(), 1).is_err(),
             ),
             _ => unimplemented!(),
         }

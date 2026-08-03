@@ -92,7 +92,7 @@ pub struct AttestationAgent {
     eventlog: Option<Mutex<EventLog>>,
     initdata: Option<String>,
     primary_attester: Arc<BoxedAttester>,
-    additional_attesters: HashMap<Tee, BoxedAttester>,
+    additional_attesters: HashMap<Tee, Arc<BoxedAttester>>,
 }
 
 impl AttestationAgent {
@@ -128,11 +128,20 @@ impl AttestationAgent {
         }
 
         if config.eventlog_config.enable_eventlog {
-            let eventlog = EventLog::new(
-                self.primary_attester.clone(),
-                config.eventlog_config.init_pcr,
-            )
-            .await?;
+            let rtmr_extender = if self.primary_attester.supports_runtime_measurement() {
+                self.primary_attester.clone()
+            } else {
+                self.additional_attesters
+                    .values()
+                    .find(|attester| attester.supports_runtime_measurement())
+                    .cloned()
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "Runtime eventlog is enabled, but neither the primary nor an additional attester supports runtime measurement"
+                        )
+                    })?
+            };
+            let eventlog = EventLog::new(rtmr_extender, config.eventlog_config.init_pcr).await?;
 
             self.eventlog = Some(Mutex::new(eventlog));
         }
@@ -159,7 +168,7 @@ impl AttestationAgent {
 
         let mut additional_attesters = HashMap::new();
         for tee in additional_tees {
-            additional_attesters.insert(tee, tee.try_into()?);
+            additional_attesters.insert(tee, Arc::new(tee.try_into()?));
         }
 
         Ok(AttestationAgent {

@@ -4,7 +4,7 @@
 //
 use crate::tpm::utils::*;
 use crate::types::TpmEvidence;
-use crate::utils::read_eventlog;
+use crate::utils::read_aa_eventlog;
 use crate::{Attester, TeeEvidence};
 use anyhow::*;
 use base64::Engine;
@@ -21,6 +21,7 @@ use tss_esapi::traits::UnMarshall;
 mod utils;
 
 const TPM_EVENTLOG_FILE_PATH: &str = "/sys/kernel/security/tpm0/binary_bios_measurements";
+const TPM_SYSFS_DEVICE_PATH: &str = "/sys/class/tpm/tpm0/device";
 const TPM_REPORT_DATA_SIZE: usize = 32;
 
 const KEYLIME_AGENT_UUID_ENV: &str = "KEYLIME_AGENT_UUID";
@@ -44,7 +45,28 @@ fn try_get_keylime_uuid() -> Option<String> {
 }
 
 pub fn detect_platform() -> bool {
-    Path::new("/dev/tpm0").exists()
+    Path::new("/dev/tpm0").exists() || Path::new("/dev/tpmrm0").exists()
+}
+
+fn is_svsm_vtpm_device(device_path: &Path) -> bool {
+    if std::fs::read_to_string(device_path.join("modalias"))
+        .map(|v| v.trim() == "platform:tpm-svsm")
+        .unwrap_or(false)
+    {
+        return true;
+    }
+
+    std::fs::read_link(device_path.join("driver"))
+        .ok()
+        .and_then(|p| p.file_name().map(|n| n == "tpm-svsm"))
+        .unwrap_or(false)
+}
+
+/// Return true only for the TPM device exported by the Linux `tpm_svsm`
+/// driver. This excludes host-injected swtpm devices from SNP composite
+/// evidence.
+pub fn is_svsm_vtpm() -> bool {
+    is_svsm_vtpm_device(Path::new(TPM_SYSFS_DEVICE_PATH))
 }
 
 #[derive(Debug, Default)]
@@ -62,6 +84,13 @@ impl Attester for TpmAttester {
             report_data.truncate(TPM_REPORT_DATA_SIZE);
         }
         report_data.resize(TPM_REPORT_DATA_SIZE, 0);
+
+        // Read the deterministic EK before creating and quoting with an AK.
+        // Coconut's vTPM can otherwise keep returning TPM2_RC_RETRY when a new
+        // EK primary is created immediately after the quote contexts close.
+        let engine = base64::engine::general_purpose::STANDARD;
+        let ek_pubkey = engine.encode(dump_ek_pub()?);
+        let quote_algorithms = supported_quote_algorithms()?;
 
         let mut keylime_uuid: Option<String> = None;
         let mut quote = HashMap::new();
@@ -93,14 +122,12 @@ impl Attester for TpmAttester {
                                 ak_private: private,
                                 ak_public: public,
                             };
-                            quote.insert(
-                                "SHA1".to_string(),
-                                get_quote(ak.clone(), &report_data, "SHA1")?,
-                            );
-                            quote.insert(
-                                "SHA256".to_string(),
-                                get_quote(ak.clone(), &report_data, "SHA256")?,
-                            );
+                            for algorithm in &quote_algorithms {
+                                quote.insert(
+                                    (*algorithm).to_string(),
+                                    get_quote(ak.clone(), &report_data, algorithm)?,
+                                );
+                            }
                             ak_pubkey_pem = Some(
                                 get_ak_pub(ak)?
                                     .to_public_key_pem(rust_rsa::pkcs8::LineEnding::LF)?,
@@ -119,20 +146,17 @@ impl Attester for TpmAttester {
 
         if ak_pubkey_pem.is_none() {
             let attestation_key = generate_rsa_ak()?;
-            quote.insert(
-                "SHA1".to_string(),
-                get_quote(attestation_key.clone(), &report_data, "SHA1")?,
-            );
-            quote.insert(
-                "SHA256".to_string(),
-                get_quote(attestation_key.clone(), &report_data, "SHA256")?,
-            );
+            for algorithm in &quote_algorithms {
+                quote.insert(
+                    (*algorithm).to_string(),
+                    get_quote(attestation_key.clone(), &report_data, algorithm)?,
+                );
+            }
             ak_pubkey_pem = Some(
                 get_ak_pub(attestation_key)?.to_public_key_pem(rust_rsa::pkcs8::LineEnding::LF)?,
             );
         }
 
-        let engine = base64::engine::general_purpose::STANDARD;
         let eventlog = match std::fs::read(TPM_EVENTLOG_FILE_PATH) {
             Result::Ok(el) => Some(engine.encode(el)),
             Result::Err(e) => {
@@ -140,10 +164,16 @@ impl Attester for TpmAttester {
                 None
             }
         };
-        let aa_eventlog = read_eventlog().await?;
+        let aa_eventlog = read_aa_eventlog().await?;
+        let ek_cert = if is_svsm_vtpm() {
+            None
+        } else {
+            dump_ek_cert_pem().ok()
+        };
 
         let evidence = TpmEvidence {
-            ek_cert: dump_ek_cert_pem().ok(),
+            ek_pubkey,
+            ek_cert,
             ak_pubkey: ak_pubkey_pem.ok_or_else(|| anyhow!("AK pubkey must be set"))?,
             keylime_agent_uuid: keylime_uuid,
             quote,
@@ -153,6 +183,10 @@ impl Attester for TpmAttester {
 
         serde_json::to_value(evidence)
             .map_err(|e| anyhow!("Serialize TPM evidence failed: {:?}", e))
+    }
+
+    fn supports_runtime_measurement(&self) -> bool {
+        true
     }
 
     async fn extend_runtime_measurement(&self, digest: Vec<u8>, index: u64) -> Result<()> {
@@ -184,6 +218,16 @@ impl Attester for TpmAttester {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn detect_svsm_vtpm_from_modalias() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("modalias"), "platform:tpm-svsm\n").unwrap();
+        assert!(is_svsm_vtpm_device(dir.path()));
+
+        std::fs::write(dir.path().join("modalias"), "platform:tpm-crb\n").unwrap();
+        assert!(!is_svsm_vtpm_device(dir.path()));
+    }
     #[ignore]
     #[tokio::test]
     async fn test_tpm_get_evidence() {

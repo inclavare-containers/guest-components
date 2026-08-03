@@ -166,6 +166,25 @@ pub async fn read_eventlog() -> Result<Option<String>> {
     Ok(Some(STANDARD.encode(eventlog)))
 }
 
+/// Read only the Attestation Agent runtime event log.
+///
+/// TPM evidence already carries the firmware TPM event log separately.  Do
+/// not prepend a platform CCEL here, otherwise a verifier that replays both
+/// fields could extend the firmware events twice.
+pub async fn read_aa_eventlog() -> Result<Option<String>> {
+    let aael_path = env::var("AAEL_PATH").unwrap_or(DEFAULT_AAEL_PATH.to_string());
+    if !Path::new(&aael_path).exists() {
+        return Ok(None);
+    }
+
+    let mut eventlog = EL_HEADER.to_vec();
+    let mut file = File::open(aael_path).await?;
+    file.read_to_end(&mut eventlog).await?;
+    eventlog.extend_from_slice(&EL_END_FLAG);
+
+    Ok(Some(STANDARD.encode(eventlog)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
