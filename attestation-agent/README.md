@@ -134,6 +134,13 @@ VMPL0 report.
 already been activated and registered with Keylime and registrar-side AK/EK
 binding verification is required.
 
+The same build remains compatible with a plain SEV-SNP guest that does not run
+SVSM. In that environment AA emits ordinary SNP evidence and no additional TPM
+evidence. If runtime event logging is enabled in the configuration but the
+guest exposes neither an RTMR nor an SVSM vTPM, AA logs a warning and keeps
+basic remote attestation available; runtime measurement extension requests
+return an explicit error.
+
 To build AA with all available attesters and install, use
 ```shell
 make ATTESTER=all-attesters && make install

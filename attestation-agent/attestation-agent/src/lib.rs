@@ -129,21 +129,23 @@ impl AttestationAgent {
 
         if config.eventlog_config.enable_eventlog {
             let rtmr_extender = if self.primary_attester.supports_runtime_measurement() {
-                self.primary_attester.clone()
+                Some(self.primary_attester.clone())
             } else {
                 self.additional_attesters
                     .values()
                     .find(|attester| attester.supports_runtime_measurement())
                     .cloned()
-                    .ok_or_else(|| {
-                        anyhow::anyhow!(
-                            "Runtime eventlog is enabled, but neither the primary nor an additional attester supports runtime measurement"
-                        )
-                    })?
             };
-            let eventlog = EventLog::new(rtmr_extender, config.eventlog_config.init_pcr).await?;
 
-            self.eventlog = Some(Mutex::new(eventlog));
+            if let Some(rtmr_extender) = rtmr_extender {
+                let eventlog =
+                    EventLog::new(rtmr_extender, config.eventlog_config.init_pcr).await?;
+                self.eventlog = Some(Mutex::new(eventlog));
+            } else {
+                warn!(
+                    "Runtime eventlog is enabled, but this platform has no runtime measurement backend; continuing with remote attestation without dynamic measurements"
+                );
+            }
         }
 
         Ok(())
@@ -339,5 +341,22 @@ mod tests {
         // In test environment, the aliyun_ecs module should fail gracefully
         // and either not set the env var or set it to None/empty
         // Let's just verify the init() call completes successfully
+    }
+
+    #[tokio::test]
+    async fn test_eventlog_without_measurement_backend_degrades_gracefully() {
+        let mut aa = AttestationAgent::new(None).unwrap();
+        aa.config.write().await.eventlog_config.enable_eventlog = true;
+
+        aa.init()
+            .await
+            .expect("remote attestation must remain available without an RTMR or TPM");
+
+        assert!(aa.eventlog.is_none());
+        assert!(aa.get_evidence(&[0; 64]).await.is_ok());
+        assert!(aa
+            .extend_runtime_measurement("domain", "operation", "content", None)
+            .await
+            .is_err());
     }
 }
