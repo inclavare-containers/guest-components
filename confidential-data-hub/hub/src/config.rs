@@ -309,6 +309,7 @@ some_undefined_field = "unknown value"
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_config_path() {
         // --config takes precedence,
         // then env.CDH_CONFIG_PATH
@@ -343,6 +344,7 @@ some_undefined_field = "unknown value"
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_config_auth_override_by_env() {
         let config = r#"
 [kbc]
