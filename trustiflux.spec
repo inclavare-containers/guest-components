@@ -3,7 +3,7 @@
 %global libdir /usr/lib
 
 Name:		trustiflux
-Version:	1.5.2
+Version:	1.6.0
 Release:	%{release}%{?dist}
 Summary:	A daemon service running inside TEE (Trusted Execution Environment) to confidential resource related APIs
 
@@ -137,6 +137,12 @@ rm -rf %{buildroot}
 %{libdir}/dracut/modules.d/99confidential-data-hub/module-setup.sh
 
 %changelog
+* Thu Aug 20 2026 Jiale Zhang <zhangjiale@linux.alibaba.com> - 1.6.0-1
+- Attestation Agent: support SVSM vTPM measurements in SNP evidence
+- Attestation Agent: preserve compatibility with plain SNP attestation
+- CDH: serialize environment-dependent configuration tests to avoid global
+  environment races
+
 * Wed Jul 29 2026 Jiale Zhang <zhangjiale@linux.alibaba.com> - 1.5.2-1
 - Attestation: add pure-Go attester and attestation-agent libraries
 - CDH: add Aliyun KMS remote-attestation client and configuration improvements
@@ -180,7 +186,7 @@ rm -rf %{buildroot}
 - CI: Add SLSA provenance generation logic
 - AA instance info: aliyun ecs type support fqdn as instance name
 
-* Thu Nov 12 2025 Jiale Zhang <zhangjiale@linux.alibaba.com> - 1.4.5-1
+* Wed Nov 12 2025 Jiale Zhang <zhangjiale@linux.alibaba.com> - 1.4.5-1
 - TPM attester: Support TCG format AAEL
 - TPM attester: support keylime agent AK
 
