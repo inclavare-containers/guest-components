@@ -65,11 +65,39 @@ For more details, please refer to [the guide](use-cases/secure-mount-with-aliyun
 
 ### Block Device
 
-The [plugin](../hub/src/storage/volume_type/blockdevice) provides ways to encrypt a block device and mount it to a specific mount point. Currently only support LUKS in [cryptsetup](https://gitlab.com/cryptsetup/cryptsetup/) for block device encryption.
+The [plugin](../hub/src/storage/volume_type/blockdevice) provides ways to encrypt a block device and mount it to a specific mount point.
 
-#### LUKS Encryption
+It supports **two secure mount modes**, selected by the `encryptionType` field in the `secure_mount()` request:
 
-In this mode, the device would be encrypted as LUKS device first, and then mount it to a target path to store the data to protect the confidentiality and integrity of the data.
+- **LUKS2 mode (`"luks2"`)**: Uses `cryptsetup` to create and open a LUKS2-encrypted device.
+- **ZFS mode (`"zfs"`)**: Uses ZFS native encryption on top of a ZFS pool and encrypted dataset created on the block device.
+
+In both modes, the cleartext device or filesystem is only exposed inside the TEE guest.
+
+#### Secure mount modes overview
+
+- **Common request shape**: Both modes use `volume_type: "block-device"` and share the same basic options:
+  - `deviceId` / `devicePath`: identify the block device.
+  - `sourceType`: `"empty"` (new/unencrypted device) or `"encrypted"` (existing encrypted device).
+  - `key`: where to fetch the encryption key (`"sealed.*"`, `"kbs://..."`, or `"file://..."`).
+- **LUKS2 mode**:
+  - Uses `targetType` to decide whether to expose a cleartext **device** (`"device"`) or a cleartext **filesystem** (`"fileSystem"`).
+  - Can optionally enable dm-integrity via `dataIntegrity`.
+  - Uses a `/dev/mapper/<name>` device created by `cryptsetup` as the cleartext device.
+  - When formatting an empty ext4 filesystem with dm-integrity enabled, CDH
+    defaults `lazy_itable_init` to `0` unless the caller explicitly provides a
+    `lazy_itable_init` setting in `mkfsOpts`.
+  - Empty devices use a detached LUKS2 header in
+    `/run/confidential-containers/cdh/luks-headers`, keeping ephemeral header
+    metadata on guest tmpfs rather than on the backing device.
+- **ZFS mode**:
+  - Always provides a filesystem mount at the given `mount_point`; `targetType` is currently ignored but should be set to `"fileSystem"` for clarity.
+  - Adds ZFS-specific options: `pool` (zpool name, defaults to `zpool`) and `dataset` (dataset name, defaults to `zdataset`).
+  - Uses ZFS commands (`zpool`, `zfs`) to create/import a zpool, load the key, and mount an encrypted dataset.
+
+#### LUKS2 secure mount mode
+
+In this mode, the device will be encrypted as a LUKS2 device first, and then mounted to a target path to store the data to protect the confidentiality and integrity of the data.
 
 The architecture diagram is
 
@@ -86,4 +114,23 @@ flowchart LR
     end
 ```
 
-For more details, please refer to [the guide](use-cases/secure-mount-with-block-device.md).
+#### ZFS secure mount mode
+
+In this mode, the block device is used as backing storage for a ZFS pool and an encrypted dataset:
+
+- When `sourceType` is `"empty"`, CDH will:
+  - Create a new zpool on the device (using the optional `pool` name or the default `zpool`).
+  - Create an encrypted dataset in that pool (using the optional `dataset` name or the default `zdataset`) and mount it at the requested `mount_point`.
+- When `sourceType` is `"encrypted"`, CDH assumes a zpool and encrypted dataset already exist on the device, and will:
+  - Import the zpool from the device.
+  - Load the encryption key into the dataset using the provided `key`.
+  - Mount the dataset to the requested `mount_point`.
+
+This mode requires `zfsutils-linux` (on Ubuntu) and an enabled ZFS kernel module.
+
+The API continues to return the requested path in `mount_path`. Legacy
+inclavare requests (`BlockDevice`, `encryptType=LUKS`, and `encryptKey`)
+remain accepted, and KBS-backed keys continue to be resolved through
+OpenAnolis Trustee.
+
+For end-to-end request examples for both modes, please refer to [the guide](use-cases/secure-mount-with-block-device.md).
