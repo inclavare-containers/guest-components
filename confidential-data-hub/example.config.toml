@@ -1,6 +1,15 @@
 # The ttrpc sock of CDH that is used to listen to the requests
 socket = "unix:///run/confidential-containers/cdh.sock"
 
+# The ttrpc socket CDH uses to obtain a passport token from AA.
+# The legacy top-level `aa_socket` setting is also accepted.
+[aa]
+aa_socket = "unix:///run/confidential-containers/attestation-agent/attestation-agent.sock"
+
+# Used when RUST_LOG is not set.
+[log]
+level = "info"
+
 # KBC related configs.
 [kbc]
 # Required. The KBC name. It could be `cc_kbc`, `online_sev_kbc` or
