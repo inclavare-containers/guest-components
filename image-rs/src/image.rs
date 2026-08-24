@@ -75,6 +75,16 @@ pub struct ImageMeta {
     pub layer_metas: Vec<LayerMeta>,
 }
 
+/// Digests identifying a successfully pulled image.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImageInfo {
+    /// Digest of the OCI image configuration.
+    pub config_digest: String,
+
+    /// Digest of the selected OCI image manifest.
+    pub manifest_digest: String,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum TaskType {
     Origininal,
@@ -205,7 +215,7 @@ impl ImageClient {
         bundle_dir: &Path,
         auth_info: &Option<&str>,
         decrypt_config: &Option<&str>,
-    ) -> Result<String> {
+    ) -> Result<ImageInfo> {
         let reference = Reference::try_from(image_url)?;
 
         let tasks = match &self.registry_handler {
@@ -245,7 +255,7 @@ impl ImageClient {
         bundle_dir: &Path,
         auth_info: &Option<&str>,
         decrypt_config: &Option<&str>,
-    ) -> Result<String> {
+    ) -> Result<ImageInfo> {
         let image_url = task.image_reference.to_string();
 
         // Try to find a valid registry auth. Logic order
@@ -317,7 +327,12 @@ impl ImageClient {
             {
                 let m = self.meta_store.read().await;
                 if let Some(image_data) = &m.image_db.get(&id) {
-                    return service::create_nydus_bundle(image_data, bundle_dir, snapshot);
+                    let config_digest =
+                        service::create_nydus_bundle(image_data, bundle_dir, snapshot)?;
+                    return Ok(ImageInfo {
+                        config_digest,
+                        manifest_digest: image_digest,
+                    });
                 }
             }
 
@@ -337,7 +352,7 @@ impl ImageClient {
                 &image_config,
             )?;
 
-            return self
+            let config_digest = self
                 .do_pull_image_with_nydus(
                     &mut client,
                     &mut image_data,
@@ -345,14 +360,22 @@ impl ImageClient {
                     decrypt_config,
                     bundle_dir,
                 )
-                .await;
+                .await?;
+            return Ok(ImageInfo {
+                config_digest,
+                manifest_digest: image_digest,
+            });
         }
 
         // If image has already been populated, just create the bundle.
         {
             let m = self.meta_store.read().await;
             if let Some(image_data) = &m.image_db.get(&id) {
-                return create_bundle(image_data, bundle_dir, snapshot);
+                let config_digest = create_bundle(image_data, bundle_dir, snapshot)?;
+                return Ok(ImageInfo {
+                    config_digest,
+                    manifest_digest: image_digest,
+                });
             }
         }
 
@@ -416,7 +439,10 @@ impl ImageClient {
             .await
             .write_to_file(&meta_file)
             .context("update meta store failed")?;
-        Ok(image_id)
+        Ok(ImageInfo {
+            config_digest: image_id,
+            manifest_digest: image_digest,
+        })
     }
 
     #[cfg(feature = "nydus")]

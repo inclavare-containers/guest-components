@@ -40,6 +40,12 @@ pub enum Error {
         source: anyhow::Error,
     },
 
+    #[error("attestation agent client failed")]
+    AttestationAgentClient {
+        #[source]
+        source: anyhow::Error,
+    },
+
     #[error("resource injection failed: {0}")]
     ResourceInjection(String),
 }
