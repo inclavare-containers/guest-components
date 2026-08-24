@@ -18,6 +18,7 @@ use confidential_data_hub::secret::{
 };
 
 use crypto::WrapType;
+use jose_jwk::Jwk;
 use rand::TryRngCore;
 #[cfg(feature = "ehsm")]
 use serde_json::Value;
@@ -42,6 +43,14 @@ struct SealArgs {
     /// Type of the Secret, i.e. `vault` or `envelope`
     #[command(subcommand)]
     r#type: TypeArgs,
+
+    /// KID embedded in the JWS header and used to resolve the verification key.
+    #[arg(long)]
+    signing_kid: String,
+
+    /// Path to a private P-256 JWK used to sign the sealed secret.
+    #[arg(long)]
+    signing_jwk_path: String,
 }
 
 #[derive(Args)]
@@ -58,6 +67,10 @@ struct UnsealArgs {
     /// configuration for connecting to KBS provider
     #[arg(short, long)]
     aa_kbc_params: Option<String>,
+
+    /// Accept a legacy or otherwise unverified sealed secret.
+    #[arg(short, long)]
+    skip_verification: bool,
 }
 
 #[derive(Subcommand)]
@@ -164,8 +177,18 @@ async fn main() {
 async fn unseal_secret(unseal_args: &UnsealArgs) {
     let secret_string = fs::read_to_string(&unseal_args.file_path)
         .await
-        .expect("failed to read sealed secret");
-    let secret = Secret::from_signed_base64_string(secret_string).expect("Failed to parse secret.");
+        .expect("failed to read sealed secret")
+        .trim()
+        .to_string();
+
+    // Signature verification may itself retrieve a key from Trustee, so the
+    // KBC selection must be available before the sealed-secret body is parsed.
+    if let Some(params) = &unseal_args.aa_kbc_params {
+        env::set_var("AA_KBC_PARAMS", params);
+    }
+    let secret = Secret::from_signed_base64_string(secret_string, unseal_args.skip_verification)
+        .await
+        .expect("Failed to parse secret.");
 
     // Setup secret provider
     let secret_provider = match secret.r#type {
@@ -197,9 +220,9 @@ async fn unseal_secret(unseal_args: &UnsealArgs) {
     let blob = secret.unseal().await.expect("unseal failed");
 
     // Write the unsealed secret to the filesystem
-    let output_file_name = Path::new(&format!("{}.unsealed", &unseal_args.file_path)).to_owned();
+    let output_file_name = Path::new(&format!("{}.unsealed", unseal_args.file_path)).to_owned();
     if output_file_name.exists() {
-        panic!("{}", format!("{:?} already exists", &output_file_name));
+        panic!("{}", format!("{output_file_name:?} already exists"));
     }
     let mut output_file = fs::File::create(&output_file_name)
         .await
@@ -212,7 +235,7 @@ async fn unseal_secret(unseal_args: &UnsealArgs) {
 
     println!(
         "unseal success, secret is saved in newly generated file: '{:?}'",
-        &output_file_name
+        output_file_name
     );
 }
 
@@ -279,12 +302,16 @@ async fn seal_secret(seal_args: &SealArgs) {
         }
     };
 
+    let signing_jwk =
+        std::fs::read_to_string(&seal_args.signing_jwk_path).expect("Could not find signing JWK");
+    let signing_jwk: Jwk = serde_json::from_str(&signing_jwk).expect("Could not parse signing JWK");
+
     let secret = Secret {
         version: VERSION.into(),
         r#type: sc,
     };
     let secret_string = secret
-        .to_signed_base64_string()
+        .to_signed_base64_string(signing_jwk, seal_args.signing_kid.clone())
         .expect("failed to serialize secret");
     println!("{secret_string}");
 }
