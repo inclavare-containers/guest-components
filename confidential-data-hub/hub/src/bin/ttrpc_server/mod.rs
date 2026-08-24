@@ -225,10 +225,29 @@ impl SecureMountService for Server {
             Error::RpcStatus(status)
         })?;
 
-        let mut reply = SecureMountResponse::new();
-        reply.mount_path = resource;
+        let reply = secure_mount_response(resource);
         debug!("[ttRPC CDH] secure mount succeeded.");
         Ok(reply)
+    }
+}
+
+fn secure_mount_response(mount_path: String) -> SecureMountResponse {
+    let mut reply = SecureMountResponse::new();
+    reply.mount_path = mount_path;
+    reply
+}
+
+#[cfg(test)]
+mod secure_mount_tests {
+    use super::secure_mount_response;
+
+    #[test]
+    fn response_preserves_mount_path() {
+        let mount_path = "/run/kata-containers/shared/containers/storage";
+        assert_eq!(
+            secure_mount_response(mount_path.to_string()).mount_path,
+            mount_path
+        );
     }
 }
 

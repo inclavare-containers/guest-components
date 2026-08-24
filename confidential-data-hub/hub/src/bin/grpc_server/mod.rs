@@ -174,9 +174,27 @@ impl SecureMountService for Cdh {
 
         debug!("[gRPC CDH] Secure mount successfully!");
 
-        let reply = SecureMountResponse { mount_path };
+        let reply = secure_mount_response(mount_path);
 
         Result::Ok(Response::new(reply))
+    }
+}
+
+fn secure_mount_response(mount_path: String) -> SecureMountResponse {
+    SecureMountResponse { mount_path }
+}
+
+#[cfg(test)]
+mod secure_mount_tests {
+    use super::secure_mount_response;
+
+    #[test]
+    fn response_preserves_mount_path() {
+        let mount_path = "/run/kata-containers/shared/containers/storage";
+        assert_eq!(
+            secure_mount_response(mount_path.to_string()).mount_path,
+            mount_path
+        );
     }
 }
 

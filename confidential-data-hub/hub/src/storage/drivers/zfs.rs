@@ -234,3 +234,63 @@ pub fn export_zpool(pool_name: &str) -> Result<()> {
     let _ = run_command("zpool", &["export", pool_name], None)?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::storage::drivers::TempFileLoopDevice;
+
+    #[test]
+    fn zfs_parameters_have_stable_defaults() {
+        let parameters: ZfsParameters = serde_json::from_str("{}").unwrap();
+        assert_eq!(parameters.pool, DEFAULT_ZPOOL_NAME);
+        assert_eq!(parameters.dataset, DEFAULT_ZDATASET_NAME);
+    }
+
+    #[tokio::test]
+    async fn encrypted_zfs_dataset_survives_export_and_import() {
+        if !is_zfs_installed() {
+            return;
+        }
+
+        let device = TempFileLoopDevice::new(256 * 1024 * 1024).unwrap();
+        let mount = tempfile::TempDir::new().unwrap();
+        let pool = format!("cdhpool{}{:x}", std::process::id(), rand::random::<u32>());
+        let dataset = "secrets".to_string();
+        let key = Zeroizing::new(b"correct horse battery staple".to_vec());
+        let parameters = ZfsParameters {
+            pool: pool.clone(),
+            dataset: dataset.clone(),
+        };
+
+        parameters
+            .do_mount(
+                device.dev_path(),
+                mount.path().to_str().unwrap(),
+                key.clone(),
+                SourceType::Empty,
+            )
+            .await
+            .unwrap();
+        fs::write(mount.path().join("confidential.txt"), b"secret").unwrap();
+        export_zpool(&pool).unwrap();
+
+        ZfsParameters {
+            pool: pool.clone(),
+            dataset,
+        }
+        .do_mount(
+            device.dev_path(),
+            mount.path().to_str().unwrap(),
+            key,
+            SourceType::Encrypted,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            fs::read(mount.path().join("confidential.txt")).unwrap(),
+            b"secret"
+        );
+        destroy_zpool(&pool).unwrap();
+    }
+}

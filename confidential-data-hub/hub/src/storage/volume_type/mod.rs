@@ -72,3 +72,22 @@ impl Storage {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use super::Volume;
+
+    #[test]
+    fn block_device_accepts_upstream_and_legacy_names() {
+        assert_eq!(
+            Volume::from_str("block-device").unwrap(),
+            Volume::BlockDevice
+        );
+        assert_eq!(
+            Volume::from_str("BlockDevice").unwrap(),
+            Volume::BlockDevice
+        );
+    }
+}

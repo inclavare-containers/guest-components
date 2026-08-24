@@ -197,3 +197,62 @@ fn is_dd_installed() -> bool {
     }
     installed
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{disable_lazy_itable_init, is_ext4_installed, FsFormatter, FsType};
+
+    #[test]
+    fn ext4_args_add_lazy_itable_init_when_missing() {
+        let args = vec!["-m".to_string(), "0".to_string()];
+        assert_eq!(
+            disable_lazy_itable_init(&args),
+            vec![
+                "-m".to_string(),
+                "0".to_string(),
+                "-E".to_string(),
+                "lazy_itable_init=0".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn ext4_args_merge_separate_extended_options() {
+        let args = vec!["-E".to_string(), "nodiscard".to_string()];
+        assert_eq!(
+            disable_lazy_itable_init(&args),
+            vec!["-E".to_string(), "nodiscard,lazy_itable_init=0".to_string()]
+        );
+    }
+
+    #[test]
+    fn ext4_args_merge_combined_extended_options() {
+        let args = vec!["-Enodiscard".to_string()];
+        assert_eq!(
+            disable_lazy_itable_init(&args),
+            vec!["-Enodiscard,lazy_itable_init=0".to_string()]
+        );
+    }
+
+    #[test]
+    fn ext4_args_keep_explicit_caller_choice() {
+        let args = vec!["-E".to_string(), "lazy_itable_init=1".to_string()];
+        assert_eq!(disable_lazy_itable_init(&args), args);
+    }
+
+    #[test]
+    fn format_ext4_file_with_caller_options() {
+        if !is_ext4_installed() {
+            return;
+        }
+        let file = tempfile::NamedTempFile::new().unwrap();
+        file.as_file().set_len(32 * 1024 * 1024).unwrap();
+        FsFormatter {
+            fs_type: FsType::Ext4,
+            force: true,
+            args: vec!["-m".to_string(), "0".to_string()],
+        }
+        .format(file.path().to_str().unwrap())
+        .unwrap();
+    }
+}

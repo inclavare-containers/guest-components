@@ -345,3 +345,379 @@ async fn get_device_path(major: u32, minor: u32) -> Result<String> {
     }
     Err(BlockDeviceError::NoDeviceFound { major, minor })
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        collections::HashMap,
+        io::Write,
+        path::{Path, PathBuf},
+    };
+
+    use nix::mount::{mount, umount, MsFlags};
+    use serial_test::serial;
+    use zeroize::Zeroizing;
+
+    use super::*;
+    use crate::storage::{
+        drivers::{
+            filesystem::{FsFormatter, FsType},
+            luks2::{luks_header_path, Luks2Formatter, TargetType},
+            run_command,
+        },
+        volume_type::blockdevice::error::BlockDeviceError,
+    };
+
+    const TEST_KEY: &[u8] = b"correct horse battery staple";
+
+    struct CloseDeviceOnDrop(String);
+
+    impl Drop for CloseDeviceOnDrop {
+        fn drop(&mut self) {
+            let _ = Luks2Formatter::default().close_device(&self.0);
+        }
+    }
+
+    struct RemoveFileOnDrop(PathBuf);
+
+    impl Drop for RemoveFileOnDrop {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(&self.0);
+        }
+    }
+
+    fn cryptsetup_available() -> bool {
+        run_command("cryptsetup", &["--version"], None).is_ok()
+    }
+
+    fn unique_mapper_name(prefix: &str) -> String {
+        format!(
+            "{prefix}-{}-{:016x}",
+            std::process::id(),
+            rand::random::<u64>()
+        )
+    }
+
+    fn new_device(size: u64) -> tempfile::NamedTempFile {
+        let device = tempfile::NamedTempFile::new().unwrap();
+        device.as_file().set_len(size).unwrap();
+        device
+    }
+
+    fn new_key_file() -> tempfile::NamedTempFile {
+        let mut key = tempfile::NamedTempFile::new().unwrap();
+        key.write_all(TEST_KEY).unwrap();
+        key.flush().unwrap();
+        key
+    }
+
+    fn key_uri(key: &tempfile::NamedTempFile) -> String {
+        format!("file://{}", key.path().display())
+    }
+
+    fn luks_options(
+        device_path: &str,
+        key: &tempfile::NamedTempFile,
+        source_type: &str,
+        target_type: &str,
+        mapper_name: &str,
+    ) -> HashMap<String, String> {
+        HashMap::from([
+            ("devicePath".to_string(), device_path.to_string()),
+            ("sourceType".to_string(), source_type.to_string()),
+            ("targetType".to_string(), target_type.to_string()),
+            ("encryptionType".to_string(), "luks2".to_string()),
+            ("key".to_string(), key_uri(key)),
+            ("mapperName".to_string(), mapper_name.to_string()),
+            ("dataIntegrity".to_string(), "false".to_string()),
+        ])
+    }
+
+    #[test]
+    fn parse_device_id_requires_exact_major_minor_pair() {
+        assert_eq!(parse_device_id("8:0").unwrap(), (8, 0));
+        assert!(matches!(
+            parse_device_id("8"),
+            Err(BlockDeviceError::IllegalDeviceId)
+        ));
+        assert!(matches!(
+            parse_device_id("8:0:1"),
+            Err(BlockDeviceError::IllegalDeviceId)
+        ));
+        assert!(matches!(
+            parse_device_id("major:minor"),
+            Err(BlockDeviceError::IllegalDeviceId)
+        ));
+    }
+
+    #[test]
+    fn upstream_luks2_schema_defaults_filesystem_to_ext4() {
+        let options = HashMap::from([
+            ("devicePath".to_string(), "/dev/loop0".to_string()),
+            ("sourceType".to_string(), "empty".to_string()),
+            ("targetType".to_string(), "fileSystem".to_string()),
+            ("encryptionType".to_string(), "luks2".to_string()),
+        ]);
+        let parameters: BlockDeviceParameters =
+            serde_json::from_str(&serde_json::to_string(&options).unwrap()).unwrap();
+        match parameters.encryption_type {
+            BlockDeviceEncryptType::Luks2(parameters) => assert!(matches!(
+                parameters.target_type,
+                TargetType::FileSystem {
+                    filesystem_type: FsType::Ext4,
+                    ..
+                }
+            )),
+            other => panic!("unexpected encryption type: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn legacy_ephemeral_request_maps_to_empty_luks2_filesystem() {
+        let options = HashMap::from([
+            ("deviceId".to_string(), "7:0".to_string()),
+            ("encryptType".to_string(), "LUKS".to_string()),
+            ("dataIntegrity".to_string(), "true".to_string()),
+        ]);
+        let normalized = normalize_options(&options).unwrap();
+        assert_eq!(normalized["encryptionType"], "luks2");
+        assert_eq!(normalized["sourceType"], "empty");
+        assert_eq!(normalized["targetType"], "fileSystem");
+        assert_eq!(normalized["filesystemType"], "ext4");
+        assert!(!normalized.contains_key("key"));
+    }
+
+    #[test]
+    fn legacy_persistent_request_preserves_key_and_custom_fields() {
+        let options = HashMap::from([
+            ("deviceId".to_string(), "7:0".to_string()),
+            ("encryptType".to_string(), "luks".to_string()),
+            (
+                "encryptKey".to_string(),
+                "kbs:///repository/storage-key".to_string(),
+            ),
+            ("mapperName".to_string(), "stable-name".to_string()),
+        ]);
+        let normalized = normalize_options(&options).unwrap();
+        assert_eq!(normalized["sourceType"], "encrypted");
+        assert_eq!(normalized["key"], "kbs:///repository/storage-key");
+        assert_eq!(normalized["mapperName"], "stable-name");
+    }
+
+    #[test]
+    fn legacy_unknown_encryption_type_is_rejected() {
+        let options = HashMap::from([("encryptType".to_string(), "unknown".to_string())]);
+        assert!(matches!(
+            normalize_options(&options),
+            Err(BlockDeviceError::UnsupportedEncryptionType { .. })
+        ));
+    }
+
+    #[tokio::test]
+    async fn invalid_data_integrity_retains_the_full_error_chain() {
+        let options = HashMap::from([
+            ("devicePath".to_string(), "/not/a/device".to_string()),
+            ("sourceType".to_string(), "empty".to_string()),
+            ("targetType".to_string(), "device".to_string()),
+            ("encryptionType".to_string(), "luks2".to_string()),
+            ("dataIntegrity".to_string(), "invalid".to_string()),
+        ]);
+        let error = BlockDevice::default()
+            .real_mount(&options, &[], "/tmp/not-created")
+            .await
+            .unwrap_err();
+        let message = format!("{error:#}");
+        assert!(message.contains("dataIntegrity"), "{message}");
+        assert!(message.contains("true"), "{message}");
+        assert!(message.contains("false"), "{message}");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn empty_luks2_device_target_cleans_mapper_symlink_and_header() {
+        if !cryptsetup_available() {
+            return;
+        }
+
+        let device = new_device(128 * 1024 * 1024);
+        let key = new_key_file();
+        let mapper_name = unique_mapper_name("cdh-device");
+        let _mapper_guard = CloseDeviceOnDrop(mapper_name.clone());
+        let header_path = PathBuf::from(luks_header_path(device.path().to_str().unwrap()));
+        let _header_guard = RemoveFileOnDrop(header_path.clone());
+        let target_dir = tempfile::TempDir::new().unwrap();
+        let target = target_dir.path().join("plaintext-device");
+        let options = luks_options(
+            device.path().to_str().unwrap(),
+            &key,
+            "empty",
+            "device",
+            &mapper_name,
+        );
+        let mut block_device = BlockDevice::default();
+
+        block_device
+            .real_mount(&options, &[], target.to_str().unwrap())
+            .await
+            .unwrap();
+        assert!(target.is_symlink());
+        assert!(Path::new(&format!("/dev/mapper/{mapper_name}")).exists());
+        assert!(header_path.exists());
+
+        block_device.umount().await.unwrap();
+        assert!(!target.exists());
+        assert!(!Path::new(&format!("/dev/mapper/{mapper_name}")).exists());
+        assert!(!header_path.exists());
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn empty_luks2_ext4_filesystem_honors_mkfs_options() {
+        if !cryptsetup_available() {
+            return;
+        }
+
+        let device = new_device(256 * 1024 * 1024);
+        let key = new_key_file();
+        let mapper_name = unique_mapper_name("cdh-ext4");
+        let _mapper_guard = CloseDeviceOnDrop(mapper_name.clone());
+        let header_path = PathBuf::from(luks_header_path(device.path().to_str().unwrap()));
+        let _header_guard = RemoveFileOnDrop(header_path);
+        let mount_point = tempfile::TempDir::new().unwrap();
+        let mut options = luks_options(
+            device.path().to_str().unwrap(),
+            &key,
+            "empty",
+            "fileSystem",
+            &mapper_name,
+        );
+        options.insert("mkfsOpts".to_string(), "-m 0".to_string());
+        let mut block_device = BlockDevice::default();
+
+        block_device
+            .real_mount(&options, &[], mount_point.path().to_str().unwrap())
+            .await
+            .unwrap();
+        tokio::fs::write(mount_point.path().join("confidential.txt"), b"secret")
+            .await
+            .unwrap();
+        assert_eq!(
+            tokio::fs::read(mount_point.path().join("confidential.txt"))
+                .await
+                .unwrap(),
+            b"secret"
+        );
+        block_device.umount().await.unwrap();
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn preexisting_luks2_ext4_filesystem_is_reopened_without_reformatting() {
+        if !cryptsetup_available() {
+            return;
+        }
+
+        let device = new_device(256 * 1024 * 1024);
+        let key_file = new_key_file();
+        let key = Zeroizing::new(TEST_KEY.to_vec());
+        let formatter = Luks2Formatter::default();
+        formatter
+            .encrypt_device(device.path().to_str().unwrap(), None, key.clone())
+            .unwrap();
+
+        let setup_mapper = unique_mapper_name("cdh-setup");
+        formatter
+            .open_device(device.path().to_str().unwrap(), None, &setup_mapper, key)
+            .unwrap();
+        let setup_guard = CloseDeviceOnDrop(setup_mapper.clone());
+        let mapped_path = format!("/dev/mapper/{setup_mapper}");
+        FsFormatter {
+            fs_type: FsType::Ext4,
+            force: true,
+            args: vec!["-m".to_string(), "0".to_string()],
+        }
+        .format(&mapped_path)
+        .unwrap();
+        let setup_mount = tempfile::TempDir::new().unwrap();
+        mount(
+            Some(mapped_path.as_str()),
+            setup_mount.path(),
+            Some("ext4"),
+            MsFlags::MS_NOATIME,
+            None::<&str>,
+        )
+        .unwrap();
+        std::fs::write(setup_mount.path().join("persistent.txt"), b"preserved").unwrap();
+        umount(setup_mount.path()).unwrap();
+        formatter.close_device(&setup_mapper).unwrap();
+        std::mem::forget(setup_guard);
+
+        let mapper_name = unique_mapper_name("cdh-reopen");
+        let _mapper_guard = CloseDeviceOnDrop(mapper_name.clone());
+        let mount_point = tempfile::TempDir::new().unwrap();
+        let options = luks_options(
+            device.path().to_str().unwrap(),
+            &key_file,
+            "encrypted",
+            "fileSystem",
+            &mapper_name,
+        );
+        let mut block_device = BlockDevice::default();
+        block_device
+            .real_mount(&options, &[], mount_point.path().to_str().unwrap())
+            .await
+            .unwrap();
+        assert_eq!(
+            tokio::fs::read(mount_point.path().join("persistent.txt"))
+                .await
+                .unwrap(),
+            b"preserved"
+        );
+        block_device.umount().await.unwrap();
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn dm_integrity_ext4_supports_real_io() {
+        if !cryptsetup_available() {
+            return;
+        }
+
+        let device = new_device(512 * 1024 * 1024);
+        let key = new_key_file();
+        let mapper_name = unique_mapper_name("cdh-integrity");
+        let _mapper_guard = CloseDeviceOnDrop(mapper_name.clone());
+        let header_path = PathBuf::from(luks_header_path(device.path().to_str().unwrap()));
+        let _header_guard = RemoveFileOnDrop(header_path);
+        let mount_point = tempfile::TempDir::new().unwrap();
+        let mut options = luks_options(
+            device.path().to_str().unwrap(),
+            &key,
+            "empty",
+            "fileSystem",
+            &mapper_name,
+        );
+        options.insert("dataIntegrity".to_string(), "true".to_string());
+        options.insert(
+            "mkfsOpts".to_string(),
+            "-O ^has_journal -m 0 -i 163840 -I 128".to_string(),
+        );
+        let mut block_device = BlockDevice::default();
+
+        block_device
+            .real_mount(&options, &[], mount_point.path().to_str().unwrap())
+            .await
+            .unwrap();
+        let data = vec![0x5a; 4 * 1024 * 1024];
+        tokio::fs::write(mount_point.path().join("integrity.bin"), &data)
+            .await
+            .unwrap();
+        assert_eq!(
+            tokio::fs::read(mount_point.path().join("integrity.bin"))
+                .await
+                .unwrap(),
+            data
+        );
+        block_device.umount().await.unwrap();
+    }
+}

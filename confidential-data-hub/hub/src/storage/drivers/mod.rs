@@ -94,3 +94,37 @@ impl Drop for TempFileLoopDevice {
         let _ = run_command("losetup", &["-d", self.loop_path.as_str()], None);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::run_command;
+
+    #[test]
+    fn command_captures_stdout_stderr_and_status() {
+        let error = run_command(
+            "sh",
+            &["-c", "printf stdout; printf stderr >&2; exit 7"],
+            None,
+        )
+        .unwrap_err();
+        let message = format!("{error:#}");
+        assert!(message.contains("status exit status: 7"), "{message}");
+        assert!(message.contains("stdout"), "{message}");
+        assert!(message.contains("stderr"), "{message}");
+    }
+
+    #[test]
+    fn command_reports_a_missing_binary() {
+        let command = "cdh-command-that-does-not-exist";
+        let error = run_command(command, &[], None).unwrap_err();
+        let message = format!("{error:#}");
+        assert!(message.contains(command), "{message}");
+        assert!(message.contains("not found"), "{message}");
+    }
+
+    #[test]
+    fn command_writes_binary_stdin() {
+        let (stdout, _) = run_command("wc", &["-c"], Some(vec![0, 1, 2, 3, 4])).unwrap();
+        assert_eq!(stdout.trim(), "5");
+    }
+}

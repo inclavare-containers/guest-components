@@ -93,7 +93,7 @@ toml.workspace = true
 tonic = { workspace = true, optional = true }
 ttrpc = { workspace = true, features = ["async"], optional = true }
 url = { workspace = true, optional = true }
-uuid = { workspace = true, features = ["serde", "v4"], optional = true }
+uuid = { workspace = true, features = ["serde", "v4"] }
 yasna = { version = "0.5.2", optional = true }
 zeroize.workspace = true
 
@@ -140,7 +140,7 @@ kbs = ["kbs_protocol"]
 resource_injection = ["kbs", "dep:canon-json", "dep:ttrpc"]
 
 # support sev to provide confidential resources
-sev = ["bincode", "dep:sev", "prost", "tonic", "uuid"]
+sev = ["bincode", "dep:sev", "prost", "tonic"]
 
 # support eHSM stacks (KMS, ...)
 ehsm = ["ehsm_client"]

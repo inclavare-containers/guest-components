@@ -230,7 +230,7 @@ impl Luks2MountParameters {
             .context("dataIntegrity must be `true` or `false`")?;
         let formatter = Luks2Formatter::default().with_integrity(data_integrity);
         // 3.1 if the source type is empty, encrypt the device and create detached header
-        let header_path = if source_type == SourceType::Empty {
+        let mut header_path = if source_type == SourceType::Empty {
             warn!("encrypting the device. This will wipe original data on the disk.");
             let header_path = luks_header_path(device_path);
             prepare_luks_header_file(&header_path)?;
@@ -248,13 +248,50 @@ impl Luks2MountParameters {
 
         let devmapper_name = self.mapper_name.unwrap_or_else(|| {
             debug!("No mapper name provided, generating a random one");
-            format!("encrypted-disk-{:016x}", rand::random::<u64>())
+            uuid::Uuid::new_v4().to_string()
         });
 
         debug!("luks2 opening device: {device_path}");
-        formatter
-            .open_device(device_path, header_path.as_deref(), &devmapper_name, key)
-            .context("failed to open LUKS2 device")?;
+        if let Err(detached_error) = formatter.open_device(
+            device_path,
+            header_path.as_deref(),
+            &devmapper_name,
+            key.clone(),
+        ) {
+            // cryptsetup 2.3.x cannot reliably activate dm-integrity when the
+            // LUKS2 header is detached. Since sourceType=empty explicitly
+            // authorizes initialization, retry with an on-device header. The
+            // random key still makes keyless ephemeral storage unrecoverable
+            // after reboot.
+            if data_integrity && source_type == SourceType::Empty && header_path.is_some() {
+                warn!(
+                    "detached LUKS2 header with dm-integrity is unsupported by this cryptsetup; retrying with an on-device header"
+                );
+                let _ = formatter.close_device(&devmapper_name);
+                if let Some(path) = header_path.take() {
+                    let _ = std::fs::remove_file(path);
+                }
+
+                let fallback_result = formatter
+                    .encrypt_device(device_path, None, key.clone())
+                    .context("failed to format the dm-integrity compatibility fallback")
+                    .and_then(|_| {
+                        formatter
+                            .open_device(device_path, None, &devmapper_name, key)
+                            .context("failed to open the dm-integrity compatibility fallback")
+                    });
+                if let Err(fallback_error) = fallback_result {
+                    return Err(anyhow::anyhow!(
+                        "failed to open LUKS2 with detached header: {detached_error:#}; on-device-header fallback also failed: {fallback_error:#}"
+                    ));
+                }
+            } else {
+                if let Some(path) = &header_path {
+                    let _ = std::fs::remove_file(path);
+                }
+                return Err(detached_error).context("failed to open LUKS2 device");
+            }
+        }
 
         let dev_path = format!("/dev/mapper/{}", devmapper_name);
         let target_is_device = self.target_type == TargetType::Device;
@@ -378,5 +415,117 @@ impl Luks2MountParameters {
             mapper_name: devmapper_name,
             target_is_device,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use serial_test::serial;
+    use zeroize::Zeroizing;
+
+    use super::{
+        luks_header_path, prepare_luks_header_file, Luks2Formatter, LUKS2_HEADER_MIN_SIZE_BYTES,
+    };
+    use crate::storage::drivers::run_command;
+
+    const TEST_PASSPHRASE: &[u8] = b"correct horse battery staple";
+
+    struct CloseDeviceOnDrop(String);
+
+    impl Drop for CloseDeviceOnDrop {
+        fn drop(&mut self) {
+            let _ = Luks2Formatter::default().close_device(&self.0);
+        }
+    }
+
+    struct RemoveFileOnDrop(String);
+
+    impl Drop for RemoveFileOnDrop {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(&self.0);
+        }
+    }
+
+    fn cryptsetup_available() -> bool {
+        run_command("cryptsetup", &["--version"], None).is_ok()
+    }
+
+    fn unique_mapper_name(prefix: &str) -> String {
+        format!(
+            "{prefix}-{}-{:016x}",
+            std::process::id(),
+            rand::random::<u64>()
+        )
+    }
+
+    #[test]
+    fn detached_header_path_is_stable_and_file_is_exclusive() {
+        let device_path = format!("/dev/cdh-test-{:016x}", rand::random::<u64>());
+        let header_path = luks_header_path(&device_path);
+        let _guard = RemoveFileOnDrop(header_path.clone());
+
+        prepare_luks_header_file(&header_path).unwrap();
+        assert_eq!(
+            std::fs::metadata(&header_path).unwrap().len(),
+            LUKS2_HEADER_MIN_SIZE_BYTES
+        );
+        assert_eq!(
+            prepare_luks_header_file(&header_path).unwrap_err().kind(),
+            std::io::ErrorKind::AlreadyExists
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn encrypt_and_open_device_with_detached_header() {
+        if !cryptsetup_available() {
+            return;
+        }
+
+        let device = tempfile::NamedTempFile::new().unwrap();
+        device.as_file().set_len(64 * 1024 * 1024).unwrap();
+        let device_path = device.path().to_str().unwrap();
+        let header_path = luks_header_path(device_path);
+        let _header_guard = RemoveFileOnDrop(header_path.clone());
+        prepare_luks_header_file(&header_path).unwrap();
+
+        let formatter = Luks2Formatter::default();
+        let key = Zeroizing::new(TEST_PASSPHRASE.to_vec());
+        formatter
+            .encrypt_device(device_path, Some(&header_path), key.clone())
+            .unwrap();
+
+        let mapper_name = unique_mapper_name("cdh-luks-header");
+        formatter
+            .open_device(device_path, Some(&header_path), &mapper_name, key)
+            .unwrap();
+        let _mapper_guard = CloseDeviceOnDrop(mapper_name.clone());
+        assert!(Path::new(&format!("/dev/mapper/{mapper_name}")).exists());
+    }
+
+    #[test]
+    #[serial]
+    fn encrypt_and_open_preexisting_luks2_device() {
+        if !cryptsetup_available() {
+            return;
+        }
+
+        let device = tempfile::NamedTempFile::new().unwrap();
+        device.as_file().set_len(64 * 1024 * 1024).unwrap();
+        let device_path = device.path().to_str().unwrap();
+        let formatter = Luks2Formatter::default();
+        let key = Zeroizing::new(TEST_PASSPHRASE.to_vec());
+        formatter
+            .encrypt_device(device_path, None, key.clone())
+            .unwrap();
+
+        let mapper_name = unique_mapper_name("cdh-luks-existing");
+        formatter
+            .open_device(device_path, None, &mapper_name, key)
+            .unwrap();
+        let _mapper_guard = CloseDeviceOnDrop(mapper_name.clone());
+        assert!(Path::new(&format!("/dev/mapper/{mapper_name}")).exists());
     }
 }
