@@ -287,13 +287,16 @@ impl OcicryptConfig {
             .map_err(|e| anyhow!("Error reading file {:?}", e.to_string()))
     }
 
-    /// from_env tries to read the configuration file at the following locations
-    /// ${OCICRYPT_KEYPROVIDER_CONFIG} == "/etc/ocicrypt_keyprovider.json"
-    /// If no configuration file could be found or read a null pointer is returned
+    /// Read the configuration file named by `env`. If the variable is unset,
+    /// no keyproviders can be registered and `Ok(None)` is returned.
     pub fn from_env(env: &str) -> Result<Option<OcicryptConfig>> {
-        // find file name from environment variable, ignore error if environment variable is not set.
         match std::env::var(env) {
-            Err(_e) => Ok(None),
+            Err(_) => {
+                log::warn!(
+                    "ocicrypt keyprovider config env var {env} is not set; no keyproviders will be registered"
+                );
+                Ok(None)
+            }
             Ok(filename) => OcicryptConfig::from_file(filename.as_str()).map(Some),
         }
     }

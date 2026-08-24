@@ -3,7 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use anyhow::{bail, Context, Result};
-use log::info;
+use log::{info, warn};
+use oci_client::client::{Certificate, CertificateEncoding, ClientConfig, ClientProtocol};
 use oci_client::manifest::{OciDescriptor, OciImageManifest};
 use oci_client::secrets::RegistryAuth;
 use oci_client::Reference;
@@ -19,8 +20,10 @@ use crate::auth::Auth;
 use crate::bundle::{create_runtime_config, BUNDLE_ROOTFS};
 use crate::config::{ImageConfig, CONFIGURATION_FILE_NAME, DEFAULT_WORK_DIR};
 use crate::decoder::Compression;
+use crate::layer_store::LayerStore;
 use crate::meta_store::{MetaStore, METAFILE};
 use crate::pull::PullClient;
+use crate::registry::RegistryHandler;
 use crate::signature::SignatureValidator;
 use crate::snapshots::{SnapshotType, Snapshotter};
 
@@ -73,6 +76,32 @@ pub struct ImageMeta {
     pub layer_metas: Vec<LayerMeta>,
 }
 
+/// Digests identifying a successfully pulled image.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImageInfo {
+    /// Digest of the OCI image configuration.
+    pub config_digest: String,
+
+    /// Digest of the selected OCI image manifest.
+    pub manifest_digest: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum TaskType {
+    Origininal,
+    Remapped,
+    Mirror,
+    UnqualifiedSearch,
+}
+
+/// One concrete source to try for an image pull.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ImagePullTask {
+    pub image_reference: Reference,
+    pub use_http: bool,
+    pub task_type: TaskType,
+}
+
 /// The`image-rs` client will support OCI image
 /// pulling, image signing verfication, image layer
 /// decryption/unpack/store and management.
@@ -85,6 +114,9 @@ pub struct ImageClient {
     /// policy
     pub(crate) signature_validator: Option<SignatureValidator>,
 
+    /// Registry blocking, remapping, mirror, and unqualified-search rules.
+    pub(crate) registry_handler: Option<RegistryHandler>,
+
     /// The metadata database for `image-rs` client.
     pub(crate) meta_store: Arc<RwLock<MetaStore>>,
 
@@ -93,6 +125,9 @@ pub struct ImageClient {
 
     /// The config
     pub(crate) config: ImageConfig,
+
+    /// Allocator for unique unpacked-layer locations.
+    pub(crate) layer_store: LayerStore,
 }
 
 impl Default for ImageClient {
@@ -103,12 +138,15 @@ impl Default for ImageClient {
             .unwrap_or_default();
         let meta_store = MetaStore::try_from(work_dir.join(METAFILE).as_path()).unwrap_or_default();
         let snapshots = Self::init_snapshots(&config.work_dir, &meta_store);
+        let layer_store = LayerStore::new(config.work_dir.clone()).unwrap_or_default();
         ImageClient {
             registry_auth: None,
             meta_store: Arc::new(RwLock::new(meta_store)),
             snapshots,
             signature_validator: None,
+            registry_handler: None,
             config,
+            layer_store,
         }
     }
 }
@@ -116,14 +154,15 @@ impl Default for ImageClient {
 impl ImageClient {
     ///Initialize metadata database and supported snapshots.
     pub fn init_snapshots(
-        work_dir: &Path,
+        _work_dir: &Path,
         _meta_store: &MetaStore,
     ) -> HashMap<SnapshotType, Box<dyn Snapshotter>> {
+        #[allow(unused_mut)]
         let mut snapshots = HashMap::new();
 
         #[cfg(feature = "snapshot-overlayfs")]
         {
-            let data_dir = work_dir.join(SnapshotType::Overlay.to_string());
+            let data_dir = _work_dir.join(SnapshotType::Overlay.to_string());
             let overlayfs = OverlayFs::new(data_dir);
             snapshots.insert(
                 SnapshotType::Overlay,
@@ -137,7 +176,7 @@ impl ImageClient {
                 .get(&SnapshotType::OcclumUnionfs.to_string())
                 .unwrap_or(&0);
             let occlum_unionfs = Unionfs {
-                data_dir: work_dir.join(SnapshotType::OcclumUnionfs.to_string()),
+                data_dir: _work_dir.join(SnapshotType::OcclumUnionfs.to_string()),
                 index: std::sync::atomic::AtomicUsize::new(*occlum_unionfs_index),
             };
             snapshots.insert(
@@ -154,13 +193,16 @@ impl ImageClient {
             .unwrap_or_else(|_| ImageConfig::new(work_dir.clone()));
         let meta_store = MetaStore::try_from(work_dir.join(METAFILE).as_path()).unwrap_or_default();
         let snapshots = Self::init_snapshots(&config.work_dir, &meta_store);
+        let layer_store = LayerStore::new(config.work_dir.clone()).unwrap_or_default();
 
         Self {
             meta_store: Arc::new(RwLock::new(meta_store)),
             snapshots,
             registry_auth: None,
             signature_validator: None,
+            registry_handler: None,
             config,
+            layer_store,
         }
     }
 
@@ -182,8 +224,48 @@ impl ImageClient {
         bundle_dir: &Path,
         auth_info: &Option<&str>,
         decrypt_config: &Option<&str>,
-    ) -> Result<String> {
+    ) -> Result<ImageInfo> {
         let reference = Reference::try_from(image_url)?;
+
+        let tasks = match &self.registry_handler {
+            Some(handler) => handler.process(reference)?,
+            None => vec![ImagePullTask {
+                image_reference: reference,
+                use_http: false,
+                task_type: TaskType::Origininal,
+            }],
+        };
+
+        let mut tried_images_and_errors = Vec::new();
+        for task in tasks {
+            let task_image_url = task.image_reference.to_string();
+            match self
+                .pull_task(task, bundle_dir, auth_info, decrypt_config)
+                .await
+            {
+                Ok(image_id) => return Ok(image_id),
+                Err(error) => {
+                    warn!("failed to pull {image_url} from {task_image_url}: {error:#}");
+                    tried_images_and_errors
+                        .push(format!("image: {task_image_url}, error: {error:#}"));
+                }
+            }
+        }
+
+        bail!(
+            "failed to pull image {image_url} from all configured locations:\n{}",
+            tried_images_and_errors.join("\n")
+        )
+    }
+
+    async fn pull_task(
+        &mut self,
+        task: ImagePullTask,
+        bundle_dir: &Path,
+        auth_info: &Option<&str>,
+        decrypt_config: &Option<&str>,
+    ) -> Result<ImageInfo> {
+        let image_url = task.image_reference.to_string();
 
         // Try to find a valid registry auth. Logic order
         // 1. the input parameter
@@ -197,7 +279,11 @@ impl ImageClient {
                 None => bail!("Invalid authentication info ({:?})", auth_info),
             },
             None => match &self.registry_auth {
-                Some(registry_auth) => registry_auth.credential_for_reference(&reference).await?,
+                Some(registry_auth) => {
+                    registry_auth
+                        .credential_for_reference(&task.image_reference)
+                        .await?
+                }
                 None => {
                     info!("Use Anonymous image registry auth");
                     RegistryAuth::Anonymous
@@ -205,16 +291,34 @@ impl ImageClient {
             },
         };
 
+        let mut client_config = ClientConfig::default();
+        if task.use_http {
+            client_config.protocol = ClientProtocol::Http;
+        }
+        if let Some(proxy) = self.config.effective_proxy_config() {
+            client_config.https_proxy = proxy.https_proxy;
+            client_config.http_proxy = proxy.http_proxy;
+            client_config.no_proxy = proxy.no_proxy;
+        }
+        client_config.extra_root_certificates.extend(
+            self.config
+                .extra_root_certificates
+                .iter()
+                .map(|pem| Certificate {
+                    encoding: CertificateEncoding::Pem,
+                    data: pem.as_bytes().to_vec(),
+                }),
+        );
+
         let mut client = PullClient::new(
-            reference,
-            &self.config.work_dir.join("layers"),
+            task.image_reference,
+            self.layer_store.clone(),
             &auth,
             self.config.max_concurrent_layer_downloads_per_image,
-            self.config.skip_proxy_ips.as_deref(),
-            self.config.image_pull_proxy.as_deref(),
-            self.config.extra_root_certificates.clone(),
+            client_config,
         )?;
-        let (image_manifest, image_digest, image_config) = client.pull_manifest().await?;
+        let (image_manifest, image_digest, image_config, manifest_list_digest) =
+            client.pull_manifest().await?;
 
         let id = image_manifest.config.digest.clone();
 
@@ -233,27 +337,36 @@ impl ImageClient {
             {
                 let m = self.meta_store.read().await;
                 if let Some(image_data) = &m.image_db.get(&id) {
-                    return service::create_nydus_bundle(image_data, bundle_dir, snapshot);
+                    let config_digest =
+                        service::create_nydus_bundle(image_data, bundle_dir, snapshot)?;
+                    return Ok(ImageInfo {
+                        config_digest,
+                        manifest_digest: image_digest,
+                    });
                 }
             }
 
-            #[cfg(feature = "signature")]
             if let Some(signature_validator) = &self.signature_validator {
                 signature_validator
-                    .check_image_signature(image_url, &image_digest, &auth)
+                    .check_image_signature(
+                        &image_url,
+                        &image_digest,
+                        manifest_list_digest.as_deref(),
+                        &auth,
+                    )
                     .await
                     .context("image security validation failed")?;
             }
 
             let (mut image_data, _, _) = create_image_meta(
                 &id,
-                image_url,
+                &image_url,
                 &image_manifest,
                 &image_digest,
                 &image_config,
             )?;
 
-            return self
+            let config_digest = self
                 .do_pull_image_with_nydus(
                     &mut client,
                     &mut image_data,
@@ -261,28 +374,40 @@ impl ImageClient {
                     decrypt_config,
                     bundle_dir,
                 )
-                .await;
+                .await?;
+            return Ok(ImageInfo {
+                config_digest,
+                manifest_digest: image_digest,
+            });
         }
 
         // If image has already been populated, just create the bundle.
         {
             let m = self.meta_store.read().await;
             if let Some(image_data) = &m.image_db.get(&id) {
-                return create_bundle(image_data, bundle_dir, snapshot);
+                let config_digest = create_bundle(image_data, bundle_dir, snapshot)?;
+                return Ok(ImageInfo {
+                    config_digest,
+                    manifest_digest: image_digest,
+                });
             }
         }
 
-        #[cfg(feature = "signature")]
         if let Some(signature_validator) = &self.signature_validator {
             signature_validator
-                .check_image_signature(image_url, &image_digest, &auth)
+                .check_image_signature(
+                    &image_url,
+                    &image_digest,
+                    manifest_list_digest.as_deref(),
+                    &auth,
+                )
                 .await
                 .context("image security validation failed")?;
         }
 
         let (mut image_data, unique_layers, unique_diff_ids) = create_image_meta(
             &id,
-            image_url,
+            &image_url,
             &image_manifest,
             &image_digest,
             &image_config,
@@ -332,7 +457,10 @@ impl ImageClient {
             .await
             .write_to_file(&meta_file)
             .context("update meta store failed")?;
-        Ok(image_id)
+        Ok(ImageInfo {
+            config_digest: image_id,
+            manifest_digest: image_digest,
+        })
     }
 
     #[cfg(feature = "nydus")]
@@ -552,6 +680,14 @@ mod tests {
     #[cfg(feature = "nydus")]
     #[tokio::test]
     async fn test_nydus_image() {
+        if !live_image_pull_tests_enabled() {
+            eprintln!(
+                "skipping live image pull test; set {}=1 to run it",
+                LIVE_IMAGE_PULL_TESTS_ENV
+            );
+            return;
+        }
+
         let work_dir = tempfile::tempdir().unwrap();
 
         let nydus_images = [
@@ -585,6 +721,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_image_reuse() {
+        if !live_image_pull_tests_enabled() {
+            eprintln!(
+                "skipping live image pull test; set {}=1 to run it",
+                LIVE_IMAGE_PULL_TESTS_ENV
+            );
+            return;
+        }
+
         let work_dir = tempfile::tempdir().unwrap();
 
         let image = "mcr.microsoft.com/hello-world";
@@ -622,6 +766,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_meta_store_reuse() {
+        if !live_image_pull_tests_enabled() {
+            eprintln!(
+                "skipping live image pull test; set {}=1 to run it",
+                LIVE_IMAGE_PULL_TESTS_ENV
+            );
+            return;
+        }
+
         let work_dir = tempfile::tempdir().unwrap();
 
         let image = "mcr.microsoft.com/hello-world";

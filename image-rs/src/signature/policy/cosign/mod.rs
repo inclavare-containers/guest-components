@@ -15,18 +15,39 @@ use sigstore::{
         verification_constraint::{PublicKeyVerifier, VerificationConstraintVec},
         verify_constraints, ClientBuilder, CosignCapabilities,
     },
-    crypto::SigningScheme,
     errors::SigstoreVerifyConstraintsError,
     registry::{Auth, OciReference},
 };
 use std::{str::FromStr, sync::Arc};
 
-use crate::signature::{
-    image::Image, payload::simple_signing::SigPayload, policy::ref_match::PolicyReqMatchType,
+use crate::{
+    config::ProxyConfig,
+    signature::{
+        image::Image, payload::simple_signing::SigPayload, policy::ref_match::PolicyReqMatchType,
+    },
 };
 use crate::{resource::ResourceProvider, signature::SignatureValidator};
 
 use super::CosignParameters;
+
+fn validate_manifest_digest(payload: &SigPayload, image: &Image) -> Result<()> {
+    if payload
+        .validate_signed_docker_manifest_digest(&image.manifest_digest.to_string())
+        .is_ok()
+    {
+        return Ok(());
+    }
+
+    if let Some(manifest_list_digest) = &image.manifest_list_digest {
+        payload.validate_signed_docker_manifest_digest(&manifest_list_digest.to_string())
+    } else {
+        bail!("Manifest digest does not match signature.")
+    }
+}
+
+fn strip_signature_newlines(signature: &str) -> String {
+    signature.replace(['\n', '\r'], "")
+}
 
 impl SignatureValidator {
     /// Judge whether an image is allowed by this SignScheme.
@@ -38,12 +59,11 @@ impl SignatureValidator {
     ) -> Result<()> {
         parameter
             .check_image_signature(
-                self.resource_provider.clone(),
+                self._resource_provider.clone(),
                 image,
                 auth,
                 self.certificates.iter().collect(),
-                self.no_proxy.as_ref(),
-                self.https_proxy.as_ref(),
+                self._proxy_config.as_ref(),
             )
             .await
     }
@@ -56,8 +76,7 @@ impl CosignParameters {
         image: &Image,
         auth: &RegistryAuth,
         certificates: Vec<&Certificate>,
-        no_proxy: Option<&String>,
-        https_proxy: Option<&String>,
+        proxy_config: Option<&ProxyConfig>,
     ) -> Result<()> {
         // Check before we access the network
         self.check_reference_rule_types()?;
@@ -72,7 +91,7 @@ impl CosignParameters {
 
         // Verification, will access the network
         let payloads = self
-            .verify_signature_and_get_payload(image, auth, key, certificates, no_proxy, https_proxy)
+            .verify_signature_and_get_payload(image, auth, key, certificates, proxy_config)
             .await?;
 
         // check the reference rules (signed identity)
@@ -81,7 +100,7 @@ impl CosignParameters {
                 payload.validate_signed_docker_reference(&image.reference, rule)?;
             }
 
-            payload.validate_signed_docker_manifest_digest(&image.manifest_digest.to_string())?;
+            validate_manifest_digest(&payload, image)?;
         }
 
         Ok(())
@@ -118,21 +137,24 @@ impl CosignParameters {
         auth: &RegistryAuth,
         key: Vec<u8>,
         certificates: Vec<&Certificate>,
-        no_proxy: Option<&String>,
-        https_proxy: Option<&String>,
+        proxy_config: Option<&ProxyConfig>,
     ) -> Result<Vec<SigPayload>> {
         let image_ref = OciReference::from_str(&image.reference.whole())?;
         let auth = match auth {
             RegistryAuth::Anonymous => Auth::Anonymous,
             RegistryAuth::Basic(username, pass) => Auth::Basic(username.clone(), pass.clone()),
+            RegistryAuth::Bearer(token) => Auth::Bearer(token.clone()),
         };
 
-        let config = ClientConfig {
-            no_proxy: no_proxy.cloned(),
-            https_proxy: https_proxy.cloned(),
+        let mut config = ClientConfig {
             extra_root_certificates: certificates.into_iter().cloned().collect(),
             ..Default::default()
         };
+        if let Some(proxy) = proxy_config {
+            config.http_proxy = proxy.http_proxy.clone();
+            config.https_proxy = proxy.https_proxy.clone();
+            config.no_proxy = proxy.no_proxy.clone();
+        }
         let mut client = ClientBuilder::default()
             .with_oci_client_config(config)
             .build()?;
@@ -144,9 +166,20 @@ impl CosignParameters {
             .trusted_signature_layers(&auth, &source_image_digest, &cosign_image)
             .await?;
 
-        // By default, the hashing algorithm is SHA256
-        let pub_key_verifier =
-            PublicKeyVerifier::new(&key, &SigningScheme::ECDSA_P256_SHA256_ASN1)?;
+        // Some cosign implementations leave newlines in the signature. Strip these out.
+        let signature_layers: Vec<sigstore::cosign::SignatureLayer> = signature_layers
+            .iter()
+            .map(|layer| {
+                let mut cleaned = layer.clone();
+                if let Some(signature) = &cleaned.signature {
+                    cleaned.signature = Some(strip_signature_newlines(signature));
+                }
+                cleaned
+            })
+            .collect();
+
+        let pub_key_verifier = PublicKeyVerifier::try_from(key.as_slice())
+            .map_err(|e| anyhow!("failed to build public key verifier: {e}"))?;
 
         let verification_constraints: VerificationConstraintVec = vec![Box::new(pub_key_verifier)];
 
@@ -177,17 +210,81 @@ mod tests {
     };
 
     use oci_client::Reference;
+    use rsa::pkcs8::{EncodePublicKey, LineEnding};
+    use rsa::rand_core::OsRng;
+    use rsa::RsaPrivateKey;
     use rstest::rstest;
     use serial_test::serial;
+    use sigstore::crypto::SigningScheme;
 
     // All the test images are the same image, but different
     // registry and repository
     const IMAGE_DIGEST: &str =
-        "sha256:10e0ec4c7663b5f9be6efd16d8ceec760efe5377b9a0762ef3f51101ac08b7e8";
+        "sha256:4f926abc2dc7b29781fd7870c7c91a1550f390fc86e10b7b3d5fa795eb5a3d39";
     const LIVE_COSIGN_TESTS_ENV: &str = "RUN_LIVE_COSIGN_TESTS";
 
     fn live_cosign_tests_enabled() -> bool {
         std::env::var_os(LIVE_COSIGN_TESTS_ENV).is_some()
+    }
+
+    #[test]
+    fn signature_newlines_are_removed() {
+        assert_eq!(strip_signature_newlines("YWJj\r\nZGVm\n"), "YWJjZGVm");
+    }
+
+    #[test]
+    fn ecdsa_fixture_pubkey_is_detected() {
+        let key = std::fs::read(format!(
+            "{}/test_data/signature/cosign/cosign1.pub",
+            std::env::current_dir().unwrap().display()
+        ))
+        .unwrap();
+        assert!(PublicKeyVerifier::try_from(key.as_slice()).is_ok());
+    }
+
+    #[test]
+    fn rsa_pubkey_is_detected_without_forcing_ecdsa() {
+        let private_key = RsaPrivateKey::new(&mut OsRng, 2048).unwrap();
+        let pem = private_key
+            .to_public_key()
+            .to_public_key_pem(LineEnding::LF)
+            .unwrap();
+
+        assert!(
+            PublicKeyVerifier::new(pem.as_bytes(), &SigningScheme::ECDSA_P256_SHA256_ASN1).is_err()
+        );
+        assert!(PublicKeyVerifier::try_from(pem.as_bytes()).is_ok());
+    }
+
+    #[test]
+    fn manifest_list_digest_is_used_for_multi_arch_signature() {
+        let payload: SigPayload = serde_json::from_str(
+            r#"{
+                "critical": {
+                    "identity": {"docker-reference": "example.com/test:latest"},
+                    "image": {"docker-manifest-digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+                    "type": "cosign container image signature"
+                },
+                "optional": null
+            }"#,
+        )
+        .unwrap();
+        let mut image =
+            Image::default_with_reference(Reference::try_from("example.com/test:latest").unwrap());
+        image
+            .set_manifest_digest(
+                "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            )
+            .unwrap();
+        image
+            .set_manifest_list_digest(
+                "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            )
+            .unwrap();
+
+        assert!(validate_manifest_digest(&payload, &image).is_ok());
+        image.manifest_list_digest = None;
+        assert!(validate_manifest_digest(&payload, &image).is_err());
     }
 
     #[rstest]
@@ -239,7 +336,6 @@ mod tests {
                 &oci_client::secrets::RegistryAuth::Anonymous,
                 key,
                 vec![],
-                None,
                 None,
             )
             .await;
@@ -376,7 +472,6 @@ mod tests {
                     &image,
                     &oci_client::secrets::RegistryAuth::Anonymous,
                     vec![],
-                    None,
                     None,
                 )
                 .await;

@@ -47,6 +47,14 @@ Confidential Data Hub is a daemon service running inside TEE (Trusted Execution 
 tar -xvf %{SOURCE1} 
 
 %build
+# Alibaba Cloud Linux 8 ships GCC 10, which is affected by GCC PR95189 and
+# rejected by aws-lc-sys at release optimization levels. Keep the default
+# compiler on newer distributions because their RPM LTO flags are GCC-specific.
+%if 0%{?rhel} == 8
+export CC=clang
+export CXX=clang++
+%endif
+
 # building the attestation-agent
 OPENSSL_NO_VENDOR=1 cargo build -p attestation-agent --bin ttrpc-aa --release --no-default-features --features bin,ttrpc,rust-crypto,coco_as,kbs,tdx-attester,system-attester,tpm-attester,instance_info,csv-attester,hygon-dcu-attester --target x86_64-unknown-linux-gnu
 cargo build -p attestation-agent --bin ttrpc-aa-client --release --no-default-features --features bin,ttrpc,eventlog --target x86_64-unknown-linux-gnu

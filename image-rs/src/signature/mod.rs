@@ -16,7 +16,7 @@ pub use policy::Policy;
 use anyhow::{bail, Context, Result};
 use oci_client::secrets::RegistryAuth;
 
-use crate::resource::ResourceProvider;
+use crate::{config::ProxyConfig, resource::ResourceProvider};
 
 /// Image security config dir contains important information such as
 /// security policy configuration file and signature verification configuration file.
@@ -25,10 +25,9 @@ pub const IMAGE_SECURITY_CONFIG_SUBDIR: &str = "image-security";
 pub struct SignatureValidator {
     policy: Policy,
 
-    resource_provider: Arc<ResourceProvider>,
+    _resource_provider: Arc<ResourceProvider>,
 
-    no_proxy: Option<String>,
-    https_proxy: Option<String>,
+    _proxy_config: Option<ProxyConfig>,
 
     #[cfg(feature = "signature-simple")]
     simple_signing_sigstore_config: Option<policy::SigstoreConfig>,
@@ -88,16 +87,22 @@ impl SignatureValidator {
         &self,
         image_reference: &str,
         image_digest: &str,
+        manifest_list_digest: Option<&str>,
         auth: &RegistryAuth,
     ) -> Result<()> {
         let reference = oci_client::Reference::try_from(image_reference)?;
         let mut image = Image::default_with_reference(reference);
         image.set_manifest_digest(image_digest)?;
 
+        if let Some(list_digest) = manifest_list_digest {
+            image.set_manifest_list_digest(list_digest)?;
+        }
+
         // Get the policy set that matches the image.
         let reqs = self.policy.requirements_for_image(&image);
         if reqs.is_empty() {
-            bail!("List of verification policy requirements must not be empty");
+            // If no rule covers the image, containers/image policy semantics allow it.
+            return Ok(());
         }
 
         // The image must meet the requirements of each policy in the policy set.
@@ -112,10 +117,9 @@ impl SignatureValidator {
         policy: &[u8],
         _simple_signing_sigstore_config: Option<Vec<u8>>,
         workdir: &Path,
-        no_proxy: Option<String>,
-        https_proxy: Option<String>,
-        certificates: Vec<String>,
-        resource_provider: Arc<ResourceProvider>,
+        _proxy_config: Option<ProxyConfig>,
+        _certificates: Vec<String>,
+        _resource_provider: Arc<ResourceProvider>,
     ) -> Result<Self> {
         let policy: Policy = serde_json::from_slice(policy).context("parse image policy")?;
         tokio::fs::create_dir_all(workdir.join(IMAGE_SECURITY_CONFIG_SUBDIR)).await?;
@@ -138,7 +142,7 @@ impl SignatureValidator {
         };
 
         #[cfg(feature = "signature-cosign")]
-        let certificates = certificates
+        let certificates = _certificates
             .into_iter()
             .map(|pem| pem.into_bytes())
             .map(|data| sigstore::registry::Certificate {
@@ -149,12 +153,42 @@ impl SignatureValidator {
 
         Ok(Self {
             policy,
-            resource_provider,
-            no_proxy,
-            https_proxy,
+            _resource_provider,
+            _proxy_config,
+            #[cfg(feature = "signature-cosign")]
             certificates,
             #[cfg(feature = "signature-simple")]
             simple_signing_sigstore_config,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn empty_matching_policy_allows_image() {
+        let workdir = tempfile::tempdir().unwrap();
+        let validator = SignatureValidator::new(
+            br#"{"default":[],"transports":{}}"#,
+            None,
+            workdir.path(),
+            None,
+            Vec::new(),
+            Arc::new(ResourceProvider::default()),
+        )
+        .await
+        .unwrap();
+
+        validator
+            .check_image_signature(
+                "example.com/test:latest",
+                "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                None,
+                &RegistryAuth::Anonymous,
+            )
+            .await
+            .unwrap();
     }
 }

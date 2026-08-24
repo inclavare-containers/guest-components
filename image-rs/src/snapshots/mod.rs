@@ -27,6 +27,8 @@ impl Default for SnapshotType {
         cfg_if::cfg_if! {
             if #[cfg(feature = "snapshot-overlayfs")] {
                 Self::Overlay
+            } else if #[cfg(feature = "snapshot-unionfs")] {
+                Self::OcclumUnionfs
             } else {
                 Self::Unknown
             }

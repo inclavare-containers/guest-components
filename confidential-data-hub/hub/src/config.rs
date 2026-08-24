@@ -12,6 +12,9 @@ use image_rs::config::ImageConfig;
 use log::{debug, info};
 use serde::Deserialize;
 
+#[cfg(any(feature = "ttrpc", feature = "grpc"))]
+mod ocicrypt_config;
+
 cfg_if::cfg_if! {
     if #[cfg(feature = "ttrpc")] {
         const DEFAULT_CDH_SOCKET_ADDR: &str = "unix:///run/confidential-containers/cdh.sock";
@@ -268,7 +271,7 @@ impl CdhConfig {
 }
 
 impl CdhConfig {
-    pub fn set_configuration_envs(&self) {
+    pub fn set_configuration_envs(&self) -> Result<()> {
         if env::var("AA_KBC_PARAMS").is_err() {
             env::set_var(
                 "AA_KBC_PARAMS",
@@ -285,6 +288,10 @@ impl CdhConfig {
         if self.skip_sealed_secret_verification {
             env::set_var("SKIP_SEALED_SECRET_VERIFICATION", "true");
         }
+
+        #[cfg(any(feature = "ttrpc", feature = "grpc"))]
+        self.ensure_ocicrypt_keyprovider_config()?;
+        Ok(())
     }
 }
 
@@ -293,7 +300,7 @@ mod tests {
     use std::{env, io::Write};
 
     use anyhow::anyhow;
-    use image_rs::config::ImageConfig;
+    use image_rs::config::{ImageConfig, ProxyConfig};
     use rstest::rstest;
 
     use crate::{
@@ -335,7 +342,11 @@ image_pull_proxy = "http://127.0.0.1:8080"
                 sigstore_config_uri: Some("kbs:///default/sigstore-config/test".to_string()),
                 image_security_policy_uri: Some("kbs:///default/security-policy/test".to_string()),
                 authenticated_registry_credentials_uri: Some("kbs:///default/credential/test".to_string()),
-                image_pull_proxy: Some("http://127.0.0.1:8080".into()),
+                image_pull_proxy: Some(ProxyConfig {
+                    https_proxy: Some("http://127.0.0.1:8080".into()),
+                    http_proxy: None,
+                    no_proxy: None,
+                }),
                 skip_proxy_ips: None,
                 extra_root_certificates: vec!["cert1".into(), "cert2".into()],
                 ..Default::default()
@@ -430,6 +441,12 @@ some_undefined_field = "unknown value"
         }
     }
 
+    #[test]
+    fn example_config_is_valid() {
+        let path = format!("{}/../example.config.toml", env!("CARGO_MANIFEST_DIR"));
+        CdhConfig::from_file(&path).unwrap();
+    }
+
     #[rstest]
     #[case(
         r#"
@@ -489,9 +506,14 @@ name = "offline_fs_kbc"
         let old_kbc_params = env::var_os("AA_KBC_PARAMS");
         let old_aa_socket = env::var_os("AA_SOCKET");
         let old_skip_verification = env::var_os("SKIP_SEALED_SECRET_VERIFICATION");
+        let old_ocicrypt_config = env::var_os("OCICRYPT_KEYPROVIDER_CONFIG");
         env::remove_var("AA_KBC_PARAMS");
         env::remove_var("AA_SOCKET");
         env::remove_var("SKIP_SEALED_SECRET_VERIFICATION");
+        env::set_var(
+            "OCICRYPT_KEYPROVIDER_CONFIG",
+            "/operator/ocicrypt-config.json",
+        );
 
         let config = CdhConfig {
             kbc: KbsConfig {
@@ -507,7 +529,7 @@ name = "offline_fs_kbc"
             log: LogConfig::default(),
         };
 
-        config.set_configuration_envs();
+        config.set_configuration_envs().unwrap();
         assert_eq!(
             env::var("AA_KBC_PARAMS").unwrap(),
             "cc_kbc::http://127.0.0.1:8080"
@@ -520,7 +542,7 @@ name = "offline_fs_kbc"
 
         env::set_var("AA_KBC_PARAMS", "deployment_kbc::http://kbs.example");
         env::set_var("AA_SOCKET", "unix:///run/custom/deployment-aa.sock");
-        config.set_configuration_envs();
+        config.set_configuration_envs().unwrap();
         assert_eq!(
             env::var("AA_KBC_PARAMS").unwrap(),
             "deployment_kbc::http://kbs.example"
@@ -541,6 +563,10 @@ name = "offline_fs_kbc"
         match old_skip_verification {
             Some(value) => env::set_var("SKIP_SEALED_SECRET_VERIFICATION", value),
             None => env::remove_var("SKIP_SEALED_SECRET_VERIFICATION"),
+        }
+        match old_ocicrypt_config {
+            Some(value) => env::set_var("OCICRYPT_KEYPROVIDER_CONFIG", value),
+            None => env::remove_var("OCICRYPT_KEYPROVIDER_CONFIG"),
         }
     }
 

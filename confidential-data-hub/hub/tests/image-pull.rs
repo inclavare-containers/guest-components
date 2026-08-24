@@ -51,10 +51,6 @@ async fn test_pull_image(#[case] image_ref: &str) {
         std::env!("CARGO_MANIFEST_DIR")
     );
 
-    let keyprovider_config = format!(
-        "{}/../../image-rs/test_data/ocicrypt_keyprovider_ttrpc.conf",
-        std::env!("CARGO_MANIFEST_DIR")
-    );
     let _cdh = tokio::process::Command::new(cdh_path)
         .arg("-c")
         .arg(format!(
@@ -62,7 +58,6 @@ async fn test_pull_image(#[case] image_ref: &str) {
             std::env!("CARGO_MANIFEST_DIR")
         ))
         .env("RUST_LOG", "info")
-        .env("OCICRYPT_KEYPROVIDER_CONFIG", keyprovider_config)
         .kill_on_drop(true)
         .spawn()
         .unwrap();
@@ -70,6 +65,10 @@ async fn test_pull_image(#[case] image_ref: &str) {
     tokio::time::sleep(Duration::from_secs(2)).await;
     assert_cmd::Command::cargo_bin("ttrpc-cdh-tool")
         .unwrap()
+        // Encrypted and multi-layer image pulls can exceed the generic short
+        // RPC timeout on a cold cache or a constrained guest network.
+        .arg("--timeout")
+        .arg("300")
         .arg("pull-image")
         .arg("--image-url")
         .arg(image_ref)
@@ -82,7 +81,13 @@ async fn test_pull_image(#[case] image_ref: &str) {
     flag_file.push("rootfs");
     flag_file.push("bin");
     flag_file.push("ls");
-    assert!(flag_file.as_path().exists(), "failed to pull image");
+    // `bin/ls` is commonly an absolute symlink to `/bin/busybox`. `exists()`
+    // follows that link against the host rootfs and can report a false
+    // negative even though the image rootfs is populated.
+    assert!(
+        std::fs::symlink_metadata(&flag_file).is_ok(),
+        "failed to pull image"
+    );
 
     let mounted_path = tempdir.path().to_path_buf().join("rootfs");
     nix::mount::umount(&mounted_path).unwrap();

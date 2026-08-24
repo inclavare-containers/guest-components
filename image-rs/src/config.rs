@@ -4,16 +4,17 @@
 
 use anyhow::{anyhow, Result};
 use log::debug;
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 
+use crate::registry::Config as RegistryConfig;
 use crate::snapshots::SnapshotType;
 
 /// By default use a work dir in `/run` because for confidential guests `/run`
 /// is typically in a `tmpfs` which is backed by encrypted memory.
-pub const DEFAULT_WORK_DIR: &str = "/run/image-rs/";
+pub const DEFAULT_WORK_DIR: &str = "/run/kata-containers/image/";
 
 /// Default path to policy file in KBS or locally
 pub const POLICY_FILE_PATH: &str = "kbs:///default/security-policy/test";
@@ -29,6 +30,54 @@ pub const DEFAULT_MAX_CONCURRENT_DOWNLOAD: usize = 3;
 
 /// Path to the configuration file to generate ImageConfiguration
 pub const CONFIGURATION_FILE_NAME: &str = "config.json";
+
+/// Proxy configuration for image pulls and signature lookups.
+///
+/// A legacy string value is still accepted and interpreted as `https_proxy`
+/// so existing Inclavare CDH configurations remain valid.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ProxyConfig {
+    pub https_proxy: Option<String>,
+    pub http_proxy: Option<String>,
+    pub no_proxy: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum ProxyConfigRepr {
+    Legacy(String),
+    Structured {
+        #[serde(default)]
+        https_proxy: Option<String>,
+        #[serde(default)]
+        http_proxy: Option<String>,
+        #[serde(default)]
+        no_proxy: Option<String>,
+    },
+}
+
+impl<'de> Deserialize<'de> for ProxyConfig {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Ok(match ProxyConfigRepr::deserialize(deserializer)? {
+            ProxyConfigRepr::Legacy(https_proxy) => Self {
+                https_proxy: Some(https_proxy),
+                ..Default::default()
+            },
+            ProxyConfigRepr::Structured {
+                https_proxy,
+                http_proxy,
+                no_proxy,
+            } => Self {
+                https_proxy,
+                http_proxy,
+                no_proxy,
+            },
+        })
+    }
+}
 
 /// `image-rs` configuration information.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -65,6 +114,10 @@ pub struct ImageConfig {
     #[serde(default = "Option::default")]
     pub image_security_policy_uri: Option<String>,
 
+    /// Inline image security policy. A configured URI takes precedence.
+    #[serde(default = "Option::default")]
+    pub image_security_policy: Option<String>,
+
     /// Sigstore config file URI for simple signing scheme.
     ///
     /// When `image_security_policy_uri` is set and `SimpleSigning` (signedBy) is
@@ -77,6 +130,10 @@ pub struct ImageConfig {
     #[serde(default = "Option::default")]
     pub sigstore_config_uri: Option<String>,
 
+    /// Inline sigstore configuration. A configured URI takes precedence.
+    #[serde(default = "Option::default")]
+    pub sigstore_config: Option<String>,
+
     /// To pull an image from an authenticated/private registry, credentials
     /// must be provided to image-rs. This field points to a credential file,
     /// which can either be stored locally in the rootfs or retrieved from the KBS.
@@ -85,6 +142,14 @@ pub struct ImageConfig {
     #[serde(default = "Option::default")]
     pub authenticated_registry_credentials_uri: Option<String>,
 
+    /// URI of a containers-registries compatible TOML configuration.
+    #[serde(default = "Option::default")]
+    pub registry_configuration_uri: Option<String>,
+
+    /// Inline registry configuration. This takes precedence over the URI.
+    #[serde(default = "Option::default")]
+    pub registry_config: Option<RegistryConfig>,
+
     /// The maximum number of layers downloaded concurrently when
     /// pulling one specific image.
     ///
@@ -92,23 +157,13 @@ pub struct ImageConfig {
     #[serde(default = "default_max_concurrent_layer_downloads_per_image")]
     pub max_concurrent_layer_downloads_per_image: usize,
 
-    /// Proxy that will be used to pull image
-    ///
-    /// If a registry is not accessible to the guest, you can try
-    /// pulling an image through a proxy specified here.
-    ///
-    /// This value defaults to `None`.
-    pub image_pull_proxy: Option<String>,
+    /// Structured proxy configuration for pulling images.
+    #[serde(default = "Option::default")]
+    pub image_pull_proxy: Option<ProxyConfig>,
 
-    /// If the above proxy is enabled, this field can be used to list IPs
-    /// that will bypass the proxy.
-    ///
-    /// In other words all requests, except those made to these IPs,
-    /// will go through the proxy.
-    ///
-    /// If `image_pull_proxy` is not set, this field will do nothing.
-    ///
-    /// This value defaults to `None`.
+    /// Legacy downstream no-proxy setting. Structured `no_proxy` takes
+    /// precedence, while this field remains supported for compatibility.
+    #[serde(default = "Option::default")]
     pub skip_proxy_ips: Option<String>,
 
     /// To pull an image from a registry with a self-signed ceritifcate,
@@ -166,8 +221,12 @@ impl Default for ImageConfig {
             #[cfg(not(feature = "nydus"))]
             nydus_config: None,
             image_security_policy_uri: None,
+            image_security_policy: None,
             sigstore_config_uri: None,
+            sigstore_config: None,
             authenticated_registry_credentials_uri: None,
+            registry_configuration_uri: None,
+            registry_config: None,
             image_pull_proxy: None,
             skip_proxy_ips: None,
             extra_root_certificates: Vec::new(),
@@ -184,6 +243,7 @@ impl Default for ImageConfig {
 #[derive(PartialEq, Debug)]
 struct KernelParameterConfigs {
     https_proxy: Option<String>,
+    http_proxy: Option<String>,
     no_proxy: Option<String>,
     authenticated_registry_credentials_uri: Option<String>,
     image_security_policy_uri: Option<String>,
@@ -199,6 +259,7 @@ impl KernelParameterConfigs {
 
         Self {
             https_proxy: cmdline.get("agent.https_proxy").map(|s| s.to_string()),
+            http_proxy: cmdline.get("agent.http_proxy").map(|s| s.to_string()),
             no_proxy: cmdline.get("agent.no_proxy").map(|s| s.to_string()),
             authenticated_registry_credentials_uri: cmdline
                 .get("agent.image_registry_auth")
@@ -253,8 +314,12 @@ impl ImageConfig {
             #[cfg(not(feature = "nydus"))]
             nydus_config: None,
             image_security_policy_uri: None,
+            image_security_policy: None,
             sigstore_config_uri: None,
+            sigstore_config: None,
             authenticated_registry_credentials_uri: None,
+            registry_configuration_uri: None,
+            registry_config: None,
             image_pull_proxy: None,
             skip_proxy_ips: None,
             extra_root_certificates: Vec::new(),
@@ -269,8 +334,17 @@ impl ImageConfig {
         if let Ok(kernel_cmdline) = fs::read_to_string("/proc/cmdline") {
             debug!("Try read image pull parameters from kernel cmdline");
             let parameters_from_kernel = KernelParameterConfigs::new(&kernel_cmdline);
-            res.image_pull_proxy = parameters_from_kernel.https_proxy;
-            res.skip_proxy_ips = parameters_from_kernel.no_proxy;
+            let image_pull_proxy = ProxyConfig {
+                https_proxy: parameters_from_kernel.https_proxy,
+                http_proxy: parameters_from_kernel.http_proxy,
+                no_proxy: parameters_from_kernel.no_proxy,
+            };
+            if image_pull_proxy.https_proxy.is_some()
+                || image_pull_proxy.http_proxy.is_some()
+                || image_pull_proxy.no_proxy.is_some()
+            {
+                res.image_pull_proxy = Some(image_pull_proxy);
+            }
             res.authenticated_registry_credentials_uri =
                 parameters_from_kernel.authenticated_registry_credentials_uri;
             if parameters_from_kernel.enable_signature_verification {
@@ -286,6 +360,20 @@ impl ImageConfig {
         Self {
             work_dir: image_work_dir,
             ..Default::default()
+        }
+    }
+
+    /// Return the effective proxy configuration while retaining support for
+    /// the downstream `skip_proxy_ips` field.
+    pub fn effective_proxy_config(&self) -> Option<ProxyConfig> {
+        let mut proxy = self.image_pull_proxy.clone().unwrap_or_default();
+        if proxy.no_proxy.is_none() {
+            proxy.no_proxy.clone_from(&self.skip_proxy_ips);
+        }
+        if proxy.https_proxy.is_some() || proxy.http_proxy.is_some() || proxy.no_proxy.is_some() {
+            Some(proxy)
+        } else {
+            None
         }
     }
     /// Validate the configuration object.
@@ -445,6 +533,7 @@ mod tests {
         "BOOT_IMAGE=/boot/vmlinuz-6.2.0-060200-generic root=UUID=f601123 ro vga=792 console=tty0 console=ttyS0,115200n8 agent.https_proxy=http://1.2.3.4:1234",
         KernelParameterConfigs {
             https_proxy: Some("http://1.2.3.4:1234".into()),
+            http_proxy: None,
             no_proxy: None,
             authenticated_registry_credentials_uri: None,
             image_security_policy_uri: None,
@@ -455,6 +544,7 @@ mod tests {
         BOOT_IMAGE=/boot/vmlinuz-6.2.0-060200-generic agent.no_proxy=localhost root=UUID=f601123 ro vga=792 console=tty0 console=ttyS0,115200n8 agent.https_proxy=http://1.2.3.4:1234",
         KernelParameterConfigs {
             https_proxy: Some("http://1.2.3.4:1234".into()),
+            http_proxy: None,
             no_proxy: Some("localhost".into()),
             authenticated_registry_credentials_uri: None,
             image_security_policy_uri: None,
@@ -465,6 +555,7 @@ mod tests {
         BOOT_IMAGE=/boot/vmlinuz-6.2.0-060200-generic agent.no_proxy=localhost   \n agent.image_registry_auth=kbs:///default/credentials/test root=UUID=f601123 ro vga=792 console=tty0 console=ttyS0,115200n8 agent.https_proxy=http://1.2.3.4:1234",
         KernelParameterConfigs {
             https_proxy: Some("http://1.2.3.4:1234".into()),
+            http_proxy: None,
             no_proxy: Some("localhost".into()),
             authenticated_registry_credentials_uri: Some("kbs:///default/credentials/test".into()),
             image_security_policy_uri: None,
@@ -475,6 +566,7 @@ mod tests {
         agent.no_proxy=localhost   \n agent.image_registry_auth=file:///root/.docker/config.json agent.https_proxy=http://1.2.3.4:1234",
         KernelParameterConfigs {
             https_proxy: Some("http://1.2.3.4:1234".into()),
+            http_proxy: None,
             no_proxy: Some("localhost".into()),
             authenticated_registry_credentials_uri: Some("file:///root/.docker/config.json".into()),
             image_security_policy_uri: None,
@@ -485,6 +577,7 @@ mod tests {
         BOOT_IMAGE=/boot/vmlinuz-6.2.0-060200-generic agent.no_proxy=localhost agent.image_policy_file=kbs:///default/image-policy/test  \n agent.image_registry_auth=kbs:///a/b/c root=UUID=f601123 ro vga=792 console=tty0 console=ttyS0,115200n8 agent.https_proxy=http://1.2.3.4:1234",
         KernelParameterConfigs {
             https_proxy: Some("http://1.2.3.4:1234".into()),
+            http_proxy: None,
             no_proxy: Some("localhost".into()),
             authenticated_registry_credentials_uri: Some("kbs:///a/b/c".into()),
             image_security_policy_uri: Some("kbs:///default/image-policy/test".into()),
@@ -495,6 +588,7 @@ mod tests {
         BOOT_IMAGE=/boot/vmlinuz-6.2.0-060200-generic agent.no_proxy=localhost agent.image_policy_file=file:///etc/image-policy.json  \n agent.image_registry_auth=kbs:///a/b/c root=UUID=f601123 ro vga=792 console=tty0 console=ttyS0,115200n8 agent.https_proxy=http://1.2.3.4:1234",
         KernelParameterConfigs {
             https_proxy: Some("http://1.2.3.4:1234".into()),
+            http_proxy: None,
             no_proxy: Some("localhost".into()),
             authenticated_registry_credentials_uri: Some("kbs:///a/b/c".into()),
             image_security_policy_uri: Some("file:///etc/image-policy.json".into()),
@@ -505,10 +599,22 @@ mod tests {
         agent.enable_signature_verification=true agent.no_proxy=localhost agent.image_policy_file=file:///etc/image-policy.json  \n agent.image_registry_auth=kbs:///a/b/c agent.https_proxy=http://1.2.3.4:1234",
         KernelParameterConfigs {
             https_proxy: Some("http://1.2.3.4:1234".into()),
+            http_proxy: None,
             no_proxy: Some("localhost".into()),
             authenticated_registry_credentials_uri: Some("kbs:///a/b/c".into()),
             image_security_policy_uri: Some("file:///etc/image-policy.json".into()),
             enable_signature_verification: true
+        }
+    )]
+    #[case(
+        "agent.http_proxy=http://1.2.3.4:8080 agent.no_proxy=registry.internal",
+        KernelParameterConfigs {
+            https_proxy: None,
+            http_proxy: Some("http://1.2.3.4:8080".into()),
+            no_proxy: Some("registry.internal".into()),
+            authenticated_registry_credentials_uri: None,
+            image_security_policy_uri: None,
+            enable_signature_verification: false
         }
     )]
     fn test_parse_kernel_parameter(
@@ -556,7 +662,7 @@ mod tests {
             .unwrap();
 
         let config = ImageConfig::try_from(config_file.as_path()).unwrap();
-        let work_dir = PathBuf::from(DEFAULT_WORK_DIR);
+        let work_dir = PathBuf::from("/run/image-rs/");
 
         assert_eq!(config.work_dir, work_dir);
         assert_eq!(config.default_snapshot, SnapshotType::Overlay);
@@ -575,6 +681,35 @@ mod tests {
 
         let _ = ImageConfig::try_from(invalid_config_file.as_path()).is_err();
         assert!(!invalid_config_file.exists());
+    }
+
+    #[test]
+    fn test_proxy_config_legacy_and_structured() {
+        let legacy: ImageConfig = serde_json::from_str(
+            r#"{"image_pull_proxy":"http://legacy.proxy:8080","skip_proxy_ips":"localhost"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            legacy.effective_proxy_config(),
+            Some(ProxyConfig {
+                https_proxy: Some("http://legacy.proxy:8080".into()),
+                http_proxy: None,
+                no_proxy: Some("localhost".into()),
+            })
+        );
+
+        let structured: ImageConfig = serde_json::from_str(
+            r#"{"image_pull_proxy":{"https_proxy":"http://https.proxy","http_proxy":"http://http.proxy","no_proxy":"registry.internal"},"skip_proxy_ips":"legacy.internal"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            structured.effective_proxy_config(),
+            Some(ProxyConfig {
+                https_proxy: Some("http://https.proxy".into()),
+                http_proxy: Some("http://http.proxy".into()),
+                no_proxy: Some("registry.internal".into()),
+            })
+        );
     }
 
     #[test]
@@ -602,7 +737,7 @@ mod tests {
             .unwrap();
 
         let config = ImageConfig::try_from(config_file.as_path()).unwrap();
-        let work_dir = PathBuf::from(DEFAULT_WORK_DIR);
+        let work_dir = PathBuf::from("/run/image-rs/");
 
         assert_eq!(config.work_dir, work_dir);
         assert_eq!(config.default_snapshot, SnapshotType::Overlay);

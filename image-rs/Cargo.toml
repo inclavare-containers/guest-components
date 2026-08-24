@@ -24,19 +24,22 @@ dircpy = { version = "0.3.19", optional = true }
 filetime = "0.2"
 flate2.workspace = true
 fs_extra = { version = "1.2.0", optional = true }
-futures = { version = "0.3.31", optional = true }
 futures-util = "0.3"
-hex = { workspace = true, optional = true }
+hex.workspace = true
 kbc = { path = "../attestation-agent/kbc", default-features = false, optional = true }
 lazy_static = { workspace = true, optional = true }
 log = "0.4.22"
 loopdev = { git = "https://github.com/mdaffin/loopdev", rev = "c9f91e8f0326ce8a3364ac911e81eb32328a5f27" }
-nix = { workspace = true, optional = true, features = ["mount", "fs"] }
-oci-client = { version = "0.14", default-features = false, optional = true }
+nix = { workspace = true, features = ["mount", "fs"] }
+# oci-client 0.15 does not compile without one reqwest TLS backend. Keep the
+# Rustls backend available even for the minimal feature set; higher-level
+# features still select native roots or native-tls as needed.
+oci-client = { version = "0.15", default-features = false, features = ["rustls-tls"] }
 oci-spec = "0.7.1"
 ocicrypt-rs = { path = "../ocicrypt-rs", default-features = false, features = [
     "async-io",
 ], optional = true }
+pathrs = "=0.2.4"
 protos = { path = "../protos", optional = true, default-features = false }
 reqwest = { workspace = true, features = ["json"], optional = true }
 resource_uri = { path = "../attestation-agent/deps/resource_uri", optional = true }
@@ -48,14 +51,16 @@ sequoia-openpgp = { version = "1.22.0", default-features = false, features = [
 ], optional = true }
 serde = { workspace = true, features = ["serde_derive", "rc"] }
 serde_json.workspace = true
+toml.workspace = true
 serde_yaml = { version = "0.9", optional = true }
 sha2.workspace = true
-sigstore = { git = "https://github.com/sigstore/sigstore-rs.git", rev = "037b7be86a68bc63e1d2ee7f16ea8f843ddcc7d8", default-features = false, optional = true }
+sigstore = { version = "0.12.1", default-features = false, optional = true }
 strum.workspace = true
 strum_macros = "0.26"
 krata-tokio-tar = "0.4.2"
+thiserror.workspace = true
 tokio.workspace = true
-tokio-util = "0.7.13"
+tokio-util = { version = "0.7.13", features = ["io-util"] }
 tonic = { workspace = true, optional = true }
 ttrpc = { workspace = true, features = ["async"], optional = true }
 url = "2.5.4"
@@ -74,11 +79,13 @@ cfg-if.workspace = true
 criterion = "0.5"
 nix = { workspace = true, features = ["user"] }
 ring.workspace = true
+rsa.workspace = true
 rstest.workspace = true
 serial_test = "3.2.0"
 strum.workspace = true
 tempfile.workspace = true
 test-utils = { path = "libs/test-utils" }
+testcontainers.workspace = true
 tokio = { workspace = true, features = ["process"] }
 
 [features]
@@ -165,19 +172,23 @@ keywrap-ttrpc = [
 # Enable keywrap-jwe to decrypt image
 keywrap-jwe = ["ocicrypt-rs/keywrap-jwe"]
 
-signature = ["hex"]
-signature-cosign = ["signature", "futures"]
-signature-cosign-rustls = ["signature-cosign", "sigstore/cosign-rustls-tls"]
-signature-cosign-native = ["signature-cosign", "sigstore/cosign-native-tls"]
+signature = []
+signature-cosign = ["signature", "sigstore/registry", "sigstore/cosign"]
+signature-cosign-rustls = [
+    "signature-cosign",
+    "sigstore/rustls-tls",
+    "sigstore/rustls-tls-native-roots",
+]
+signature-cosign-native = ["signature-cosign", "sigstore/native-tls"]
 
-oci-client-rustls = ["oci-client/rustls-tls"]
+oci-client-rustls = ["oci-client/rustls-tls", "oci-client/rustls-tls-native-roots"]
 oci-client-native = ["oci-client/native-tls"]
 
 signature-simple-xrss = ["signature-simple", "dep:reqwest"]
 signature-simple = ["signature", "sequoia-openpgp", "serde_yaml"]
 
-snapshot-overlayfs = ["hex", "nix"]
-snapshot-unionfs = ["nix", "dircpy", "fs_extra"]
+snapshot-overlayfs = []
+snapshot-unionfs = ["dircpy", "fs_extra", "ocicrypt-rs/block-cipher-ring"]
 
 # This features controls whether kbs uri scheme is supported in resource location, s.t. `kbs://...`
 # it will try to connect to a service with `GetResource` API, typically `Confidential Data Hub`.

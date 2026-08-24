@@ -21,6 +21,7 @@ hmac = { workspace = true, optional = true }
 josekit = { version = ">=0.7", optional = true }
 kbc = { path = "../attestation-agent/kbc", default-features = false, optional = true }
 lazy_static.workspace = true
+log.workspace = true
 openssl = { workspace = true, features = ["vendored"], optional = true }
 pin-project-lite = { version = "0.2.16", optional = true }
 protos = { path = "../protos", default-features = false, optional = true }
