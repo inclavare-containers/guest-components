@@ -152,8 +152,10 @@ impl BlockDevice {
         _flags: &[String],
         mount_point: &str,
     ) -> Result<()> {
-        // construct BlockDeviceParameters
-        let parameters = serde_json::to_string(options)?;
+        // Normalize the historical downstream request before parsing the
+        // upstream block-device schema.
+        let options = normalize_options(options)?;
+        let parameters = serde_json::to_string(&options)?;
         let parameters: BlockDeviceParameters = serde_json::from_str(&parameters)?;
 
         // 1. get the source device path
@@ -267,6 +269,54 @@ impl SecureMount for BlockDevice {
             .await
             .map_err(|e| e.into())
     }
+}
+
+/// Preserve the original inclavare CDH request while accepting the upstream
+/// block-device schema.
+///
+/// Historical callers use `encryptType=LUKS`, `encryptKey`, and a
+/// filesystem-only target. In that schema, the presence of `encryptKey`
+/// means the device is already encrypted; otherwise CDH initializes an empty
+/// ephemeral device.
+fn normalize_options(options: &HashMap<String, String>) -> Result<HashMap<String, String>> {
+    if options.contains_key("encryptionType") {
+        return Ok(options.clone());
+    }
+
+    let Some(encryption_type) = options.get("encryptType") else {
+        return Ok(options.clone());
+    };
+    if !encryption_type.eq_ignore_ascii_case("luks")
+        && !encryption_type.eq_ignore_ascii_case("luks2")
+    {
+        return Err(BlockDeviceError::UnsupportedEncryptionType {
+            encryption_type: encryption_type.clone(),
+        });
+    }
+
+    let mut normalized = options.clone();
+    normalized.insert("encryptionType".to_string(), "luks2".to_string());
+    normalized
+        .entry("targetType".to_string())
+        .or_insert_with(|| "fileSystem".to_string());
+    normalized
+        .entry("filesystemType".to_string())
+        .or_insert_with(|| "ext4".to_string());
+
+    if let Some(key) = options.get("encryptKey") {
+        normalized
+            .entry("key".to_string())
+            .or_insert_with(|| key.clone());
+        normalized
+            .entry("sourceType".to_string())
+            .or_insert_with(|| "encrypted".to_string());
+    } else {
+        normalized
+            .entry("sourceType".to_string())
+            .or_insert_with(|| "empty".to_string());
+    }
+
+    Ok(normalized)
 }
 
 fn parse_device_id(device_id: &str) -> Result<(u32, u32)> {

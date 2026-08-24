@@ -15,6 +15,9 @@ pub enum BlockDeviceError {
     #[error("Either `device_id` or `device_path` must be specified")]
     NoDeviceSpecified,
 
+    #[error("Unsupported legacy block-device encryption type: {encryption_type}")]
+    UnsupportedEncryptionType { encryption_type: String },
+
     #[error("Failed to get device path with major: {major}, minor: {minor}")]
     NoDeviceFound { major: u32, minor: u32 },
 
