@@ -6,7 +6,7 @@
 use std::env;
 
 use async_trait::async_trait;
-use kbs_types::{ErrorInformation, Response};
+use kbs_types::ErrorInformation;
 use log::{debug, warn};
 use resource_uri::ResourceUri;
 
@@ -65,15 +65,7 @@ impl KbsClientCapabilities for KbsClient<Box<dyn TokenProvider>> {
 
             match res.status() {
                 reqwest::StatusCode::OK => {
-                    let response = res
-                        .json::<Response>()
-                        .await
-                        .map_err(|e| Error::KbsResponseDeserializationFailed(e.to_string()))?;
-                    let payload_data = self
-                        .tee_key
-                        .decrypt_response(response)
-                        .map_err(|e| Error::DecryptResponseFailed(e.to_string()))?;
-                    return Ok(payload_data);
+                    return self.decode_resource_response(res).await;
                 }
                 reqwest::StatusCode::UNAUTHORIZED => {
                     warn!(
