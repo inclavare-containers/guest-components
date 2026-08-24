@@ -237,20 +237,6 @@ fn secure_mount_response(mount_path: String) -> SecureMountResponse {
     reply
 }
 
-#[cfg(test)]
-mod secure_mount_tests {
-    use super::secure_mount_response;
-
-    #[test]
-    fn response_preserves_mount_path() {
-        let mount_path = "/run/kata-containers/shared/containers/storage";
-        assert_eq!(
-            secure_mount_response(mount_path.to_string()).mount_path,
-            mount_path
-        );
-    }
-}
-
 #[async_trait]
 impl ImagePullService for Server {
     async fn pull_image(
@@ -276,5 +262,19 @@ impl ImagePullService for Server {
         reply.manifest_digest = manifest_digest;
         debug!("[ttRPC CDH] pull image succeeded.");
         Ok(reply)
+    }
+}
+
+#[cfg(test)]
+mod secure_mount_tests {
+    use super::secure_mount_response;
+
+    #[test]
+    fn response_preserves_mount_path() {
+        let mount_path = "/run/kata-containers/shared/containers/storage";
+        assert_eq!(
+            secure_mount_response(mount_path.to_string()).mount_path,
+            mount_path
+        );
     }
 }

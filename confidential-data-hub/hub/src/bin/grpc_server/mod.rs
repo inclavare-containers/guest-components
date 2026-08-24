@@ -184,20 +184,6 @@ fn secure_mount_response(mount_path: String) -> SecureMountResponse {
     SecureMountResponse { mount_path }
 }
 
-#[cfg(test)]
-mod secure_mount_tests {
-    use super::secure_mount_response;
-
-    #[test]
-    fn response_preserves_mount_path() {
-        let mount_path = "/run/kata-containers/shared/containers/storage";
-        assert_eq!(
-            secure_mount_response(mount_path.to_string()).mount_path,
-            mount_path
-        );
-    }
-}
-
 #[tonic::async_trait]
 impl ImagePullService for Cdh {
     async fn pull_image(
@@ -302,4 +288,18 @@ pub async fn start_grpc_service(socket: SocketAddr, inner: Hub) -> Result<()> {
         .serve(socket)
         .await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod secure_mount_tests {
+    use super::secure_mount_response;
+
+    #[test]
+    fn response_preserves_mount_path() {
+        let mount_path = "/run/kata-containers/shared/containers/storage";
+        assert_eq!(
+            secure_mount_response(mount_path.to_string()).mount_path,
+            mount_path
+        );
+    }
 }
