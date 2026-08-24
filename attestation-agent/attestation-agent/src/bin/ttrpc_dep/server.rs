@@ -41,7 +41,7 @@ impl AttestationAgentService for AA {
                 error!("AA (ttrpc): get token failed\n {e:?}");
                 let mut error_status = ::ttrpc::proto::Status::new();
                 error_status.set_code(Code::INTERNAL);
-                error_status.set_message(format!("[ERROR:{AGENT_NAME}] AA-KBC get token failed"));
+                error_status.set_message(format!("[ERROR:{AGENT_NAME}] AA get token failed"));
                 ::ttrpc::Error::RpcStatus(error_status)
             })?;
 
@@ -68,8 +68,7 @@ impl AttestationAgentService for AA {
                 error!("AA (ttrpc): get evidence failed:\n {e:?}");
                 let mut error_status = ::ttrpc::proto::Status::new();
                 error_status.set_code(Code::INTERNAL);
-                error_status
-                    .set_message(format!("[ERROR:{AGENT_NAME}] AA-KBC get evidence failed"));
+                error_status.set_message(format!("[ERROR:{AGENT_NAME}] AA get evidence failed"));
                 ::ttrpc::Error::RpcStatus(error_status)
             })?;
 
@@ -96,8 +95,7 @@ impl AttestationAgentService for AA {
                 error!("AA (ttrpc): get evidence failed:\n {e:?}");
                 let mut error_status = ::ttrpc::proto::Status::new();
                 error_status.set_code(Code::INTERNAL);
-                error_status
-                    .set_message(format!("[ERROR:{AGENT_NAME}] AA-KBC get evidence failed"));
+                error_status.set_message(format!("[ERROR:{AGENT_NAME}] AA get evidence failed"));
                 ::ttrpc::Error::RpcStatus(error_status)
             })?;
 
@@ -153,8 +151,7 @@ impl AttestationAgentService for AA {
                 error!("AA (ttrpc): get tee type failed:\n {e:?}");
                 let mut error_status = ::ttrpc::proto::Status::new();
                 error_status.set_code(Code::INTERNAL);
-                error_status
-                    .set_message(format!("[ERROR:{AGENT_NAME}] AA-KBC get tee type failed"));
+                error_status.set_message(format!("[ERROR:{AGENT_NAME}] AA get tee type failed"));
                 ::ttrpc::Error::RpcStatus(error_status)
             })?
             .trim_end_matches('"')
@@ -183,7 +180,7 @@ impl AttestationAgentService for AA {
                     let mut error_status = ::ttrpc::proto::Status::new();
                     error_status.set_code(Code::INTERNAL);
                     error_status
-                        .set_message(format!("[ERROR:{AGENT_NAME}] AA-KBC get tee type failed"));
+                        .set_message(format!("[ERROR:{AGENT_NAME}] AA get tee type failed"));
                     ::ttrpc::Error::RpcStatus(error_status)
                 })?
                 .trim_end_matches('"')
