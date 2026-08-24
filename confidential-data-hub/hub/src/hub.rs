@@ -28,7 +28,9 @@ pub struct Hub {
 
 impl Hub {
     pub async fn new(config: CdhConfig) -> Result<Self> {
-        config.set_configuration_envs();
+        config.set_configuration_envs().map_err(|error| {
+            Error::InitializationFailed(format!("set configuration envs: {error:#}"))
+        })?;
         let credentials = config
             .credentials
             .iter()

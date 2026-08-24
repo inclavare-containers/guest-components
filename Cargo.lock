@@ -4499,6 +4499,7 @@ dependencies = [
  "josekit",
  "kbc",
  "lazy_static",
+ "log",
  "openssl",
  "pin-project-lite",
  "protos",

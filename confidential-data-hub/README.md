@@ -3,6 +3,11 @@
 Confidential Data Hub (`CDH`) is a service running inside the guest to provide resource related
 APIs.
 
+CDH supports decryption of encrypted images. When
+`OCICRYPT_KEYPROVIDER_CONFIG` is unset, CDH creates
+`/run/confidential-containers/cdh/ocicrypt_config.json`, maps the historical
+`attestation-agent` provider to its own configured RPC socket, and exports the
+generated path. An operator-provided environment value still takes precedence.
 
 
 ### Build
