@@ -20,6 +20,7 @@ pub enum Volume {
     #[cfg(feature = "aliyun")]
     #[strum(serialize = "alibaba-cloud-oss")]
     AliOss,
+    #[strum(serialize = "block-device", serialize = "BlockDevice")]
     BlockDevice,
 }
 
@@ -44,7 +45,7 @@ pub struct Storage {
 pub trait SecureMount {
     /// Mount the volume to `mount_point` due to the given options.
     async fn mount(
-        &self,
+        &mut self,
         options: &HashMap<String, String>,
         flags: &[String],
         mount_point: &str,
@@ -57,17 +58,36 @@ impl Storage {
         match volume_type {
             #[cfg(feature = "aliyun")]
             Volume::AliOss => {
-                let oss = aliyun::Oss {};
+                let mut oss = aliyun::Oss {};
                 oss.mount(&self.options, &self.flags, &self.mount_point)
                     .await?;
                 Ok(self.mount_point.clone())
             }
             Volume::BlockDevice => {
-                let bd = blockdevice::BlockDevice {};
+                let mut bd = blockdevice::BlockDevice::default();
                 bd.mount(&self.options, &self.flags, &self.mount_point)
                     .await?;
                 Ok(self.mount_point.clone())
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use super::Volume;
+
+    #[test]
+    fn block_device_accepts_upstream_and_legacy_names() {
+        assert_eq!(
+            Volume::from_str("block-device").unwrap(),
+            Volume::BlockDevice
+        );
+        assert_eq!(
+            Volume::from_str("BlockDevice").unwrap(),
+            Volume::BlockDevice
+        );
     }
 }

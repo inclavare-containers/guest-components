@@ -50,9 +50,10 @@ jobs:
           override: true
           components: rustfmt, clippy
 
-      - name: Install protoc
+      - name: Install test dependencies
         run: |
-          sudo apt-get update && sudo apt-get install -y protobuf-compiler
+          sudo apt-get update
+          sudo apt-get install -y cryptsetup protobuf-compiler zfsutils-linux
 
       - name: Build and install
         run: |
