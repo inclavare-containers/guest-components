@@ -6,6 +6,10 @@ socket = "unix:///run/confidential-containers/cdh.sock"
 [aa]
 aa_socket = "unix:///run/confidential-containers/attestation-agent/attestation-agent.sock"
 
+# Used when RUST_LOG is not set.
+[log]
+level = "info"
+
 # KBC related configs.
 [kbc]
 # Required. The KBC name. It could be `cc_kbc`, `online_sev_kbc` or

@@ -22,6 +22,7 @@ cfg_if::cfg_if! {
 
 const DEFAULT_AA_SOCKET_ADDR: &str =
     "unix:///run/confidential-containers/attestation-agent/attestation-agent.sock";
+const DEFAULT_LOG_LEVEL: &str = "info";
 
 const CDH_DEFAULT_IMAGE_AUTHENTICATED_REGISTRY_CREDENTIALS: &str =
     "CDH_DEFAULT_IMAGE_AUTHENTICATED_REGISTRY_CREDENTIALS";
@@ -77,6 +78,24 @@ impl Default for AaConfig {
     }
 }
 
+fn default_log_level() -> String {
+    DEFAULT_LOG_LEVEL.to_string()
+}
+
+#[derive(Clone, Deserialize, Debug, PartialEq)]
+pub struct LogConfig {
+    #[serde(default = "default_log_level")]
+    pub level: String,
+}
+
+impl Default for LogConfig {
+    fn default() -> Self {
+        Self {
+            level: default_log_level(),
+        }
+    }
+}
+
 #[derive(Clone, Deserialize, Debug, PartialEq)]
 #[serde(from = "RawCdhConfig")]
 pub struct CdhConfig {
@@ -94,6 +113,8 @@ pub struct CdhConfig {
     pub socket: String,
 
     pub aa_socket: String,
+
+    pub log: LogConfig,
 }
 
 #[derive(Deserialize)]
@@ -116,6 +137,9 @@ struct RawCdhConfig {
     /// Legacy Inclavare configuration form.
     #[serde(default)]
     aa_socket: Option<String>,
+
+    #[serde(default)]
+    log: LogConfig,
 }
 
 impl From<RawCdhConfig> for CdhConfig {
@@ -137,6 +161,7 @@ impl From<RawCdhConfig> for CdhConfig {
                 .socket
                 .unwrap_or_else(|| DEFAULT_CDH_SOCKET_ADDR.to_string()),
             aa_socket,
+            log: raw.log,
         }
     }
 }
@@ -168,6 +193,7 @@ impl CdhConfig {
                     socket: DEFAULT_CDH_SOCKET_ADDR.into(),
                     aa_socket: DEFAULT_AA_SOCKET_ADDR.into(),
                     image: ImageConfig::from_kernel_cmdline(),
+                    log: LogConfig::default(),
                 }
             }
         };
@@ -259,13 +285,16 @@ mod tests {
 
     use crate::{
         config::{DEFAULT_AA_SOCKET_ADDR, DEFAULT_CDH_SOCKET_ADDR},
-        CdhConfig, KbsConfig,
+        CdhConfig, KbsConfig, LogConfig,
     };
 
     #[rstest]
     #[case(
         r#"
 socket = "unix:///run/confidential-containers/cdh.sock"
+
+[log]
+level = "debug"
 
 [kbc]
 name = "offline_fs_kbc"
@@ -299,6 +328,9 @@ image_pull_proxy = "http://127.0.0.1:8080"
             },
             socket: "unix:///run/confidential-containers/cdh.sock".to_string(),
             aa_socket: DEFAULT_AA_SOCKET_ADDR.to_string(),
+            log: LogConfig {
+                level: "debug".to_string(),
+            },
         })
     )]
     #[case(
@@ -336,6 +368,7 @@ name = "offline_fs_kbc"
         },
         socket: DEFAULT_CDH_SOCKET_ADDR.to_string(),
         aa_socket: DEFAULT_AA_SOCKET_ADDR.to_string(),
+        log: LogConfig::default(),
     })
     )]
     #[case(
@@ -363,6 +396,7 @@ some_undefined_field = "unknown value"
         },
         socket: DEFAULT_CDH_SOCKET_ADDR.to_string(),
         aa_socket: DEFAULT_AA_SOCKET_ADDR.to_string(),
+        log: LogConfig::default(),
     })
     )]
     fn read_config(#[case] config: &str, #[case] expected: Option<CdhConfig>) {
@@ -450,6 +484,7 @@ name = "offline_fs_kbc"
             image: ImageConfig::default(),
             socket: DEFAULT_CDH_SOCKET_ADDR.into(),
             aa_socket: "unix:///run/custom/config-aa.sock".into(),
+            log: LogConfig::default(),
         };
 
         config.set_configuration_envs();
@@ -501,6 +536,7 @@ name = "offline_fs_kbc"
             socket: DEFAULT_CDH_SOCKET_ADDR.into(),
             aa_socket: DEFAULT_AA_SOCKET_ADDR.into(),
             image: ImageConfig::from_kernel_cmdline(),
+            log: LogConfig::default(),
         };
         assert_eq!(config, expected);
 

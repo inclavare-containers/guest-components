@@ -43,10 +43,10 @@ struct Cli {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
     let cli = Cli::parse();
 
     let config = CdhConfig::new(cli.config)?;
+    env_logger::init_from_env(env_logger::Env::new().default_filter_or(&config.log.level));
 
     let unix_socket_path = config
         .socket
