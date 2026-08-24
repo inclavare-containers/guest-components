@@ -5,7 +5,10 @@
 
 use std::{env, path::Path};
 
-use base64::{engine::general_purpose::STANDARD, Engine};
+use base64::{
+    engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
+    Engine,
+};
 use clap::{command, Args, Parser, Subcommand};
 #[cfg(feature = "aliyun")]
 use confidential_data_hub::kms::plugins::aliyun::AliyunKmsClient;
@@ -19,6 +22,7 @@ use confidential_data_hub::secret::{
 
 use crypto::WrapType;
 use jose_jwk::Jwk;
+use p256::elliptic_curve::sec1::ToEncodedPoint;
 use rand::TryRngCore;
 #[cfg(feature = "ehsm")]
 use serde_json::Value;
@@ -35,6 +39,9 @@ enum Cli {
 
     /// Unseal the given secret
     Unseal(UnsealArgs),
+
+    /// Generate a P-256 signing keypair in JWK format.
+    Keygen(KeygenArgs),
 }
 
 #[derive(Args)]
@@ -71,6 +78,18 @@ struct UnsealArgs {
     /// Accept a legacy or otherwise unverified sealed secret.
     #[arg(short, long)]
     skip_verification: bool,
+}
+
+#[derive(Args)]
+#[command(author, version, about, long_about = None)]
+struct KeygenArgs {
+    /// Key ID embedded in the generated JWKs.
+    #[arg(long, default_value = "sealed-signing")]
+    kid: String,
+
+    /// Existing directory in which to write the key files.
+    #[arg(long, default_value = ".")]
+    output_dir: String,
 }
 
 #[derive(Subcommand)]
@@ -170,6 +189,9 @@ async fn main() {
         }
         Cli::Seal(seal_args) => {
             seal_secret(&seal_args).await;
+        }
+        Cli::Keygen(keygen_args) => {
+            generate_keys(&keygen_args);
         }
     }
 }
@@ -314,6 +336,78 @@ async fn seal_secret(seal_args: &SealArgs) {
         .to_signed_base64_string(signing_jwk, seal_args.signing_kid.clone())
         .expect("failed to serialize secret");
     println!("{secret_string}");
+}
+
+fn generate_keys(args: &KeygenArgs) {
+    let secret_key = loop {
+        let mut scalar_bytes = [0u8; 32];
+        rand::rngs::OsRng
+            .try_fill_bytes(&mut scalar_bytes)
+            .expect("failed to read randomness");
+        if let Ok(key) = p256::SecretKey::from_slice(&scalar_bytes) {
+            break key;
+        }
+    };
+    let point = secret_key.public_key().to_encoded_point(false);
+
+    let d = URL_SAFE_NO_PAD.encode(secret_key.to_bytes());
+    let x = URL_SAFE_NO_PAD.encode(
+        point
+            .x()
+            .expect("uncompressed point must have x coordinate"),
+    );
+    let y = URL_SAFE_NO_PAD.encode(
+        point
+            .y()
+            .expect("uncompressed point must have y coordinate"),
+    );
+
+    let private_jwk = serde_json::json!({
+        "kty": "EC",
+        "crv": "P-256",
+        "alg": "ES256",
+        "use": "sig",
+        "kid": args.kid,
+        "d": d,
+        "x": x,
+        "y": y,
+    });
+    let public_jwk = serde_json::json!({
+        "kty": "EC",
+        "crv": "P-256",
+        "alg": "ES256",
+        "use": "sig",
+        "kid": args.kid,
+        "x": x,
+        "y": y,
+    });
+
+    let output_dir = Path::new(&args.output_dir);
+    let private_path = output_dir.join(format!("{}-private.json", args.kid));
+    let public_path = output_dir.join(format!("{}-public.json", args.kid));
+    if private_path.exists() {
+        panic!("{private_path:?} already exists");
+    }
+    if public_path.exists() {
+        panic!("{public_path:?} already exists");
+    }
+
+    std::fs::write(
+        &private_path,
+        serde_json::to_string_pretty(&private_jwk).expect("Failed to serialize JWK") + "\n",
+    )
+    .unwrap_or_else(|e| panic!("Failed to write {}: {e}", private_path.display()));
+    std::fs::write(
+        &public_path,
+        serde_json::to_string_pretty(&public_jwk).expect("Failed to serialize JWK") + "\n",
+    )
+    .unwrap_or_else(|e| panic!("Failed to write {}: {e}", public_path.display()));
+
+    println!(
+        "Generated {} and {}",
+        private_path.display(),
+        public_path.display()
+    );
 }
 
 async fn handle_envelope_provider(

@@ -167,6 +167,16 @@ cargo run -p confidential-data-hub --bin secret -- seal \
 Provision only the public JWK at the URI in `--signing-kid`. The private JWK
 must remain with the party creating the sealed secret.
 
+Generate a P-256 keypair with the CLI:
+
+```bash
+cargo run -p confidential-data-hub --bin secret -- keygen \
+    --kid my-signing-key --output-dir ./keys
+```
+
+This writes `my-signing-key-private.json` for signing and
+`my-signing-key-public.json` for provisioning to OpenAnolis Trustee.
+
 Create a Kubernetes secret from the signed output:
 
 ```bash
