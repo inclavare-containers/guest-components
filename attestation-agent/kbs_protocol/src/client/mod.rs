@@ -20,6 +20,7 @@ pub mod rcar_client;
 pub mod token_client;
 
 use kbs_types::Tee;
+use resource_uri::ResourceUri;
 
 use crate::{keypair::TeeKeyPair, token_provider::Token};
 
@@ -56,3 +57,46 @@ pub const KBS_PROTOCOL_VERSION: &str = "0.4.0";
 pub const KBS_GET_RESOURCE_MAX_ATTEMPT: u64 = 3;
 
 pub const KBS_PREFIX: &str = "kbs/v0";
+
+pub(crate) fn resource_url(kbs_host_url: &str, resource_uri: &ResourceUri) -> String {
+    let mut url = format!(
+        "{}/{KBS_PREFIX}/{}/{}",
+        kbs_host_url.trim_end_matches('/'),
+        resource_uri.plugin(),
+        resource_uri.resource_path(),
+    );
+
+    if let Some(query) = &resource_uri.query {
+        url.push('?');
+        url.push_str(query);
+    }
+
+    url
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resource_url;
+    use resource_uri::ResourceUri;
+    use rstest::rstest;
+
+    #[rstest]
+    #[case(
+        "https://kbs.example.com/",
+        "kbs:///repo/type/tag",
+        "https://kbs.example.com/kbs/v0/resource/repo/type/tag"
+    )]
+    #[case(
+        "https://kbs.example.com",
+        "kbs+pkcs11:///slot/key/label/version?pin-source=file",
+        "https://kbs.example.com/kbs/v0/pkcs11/slot/key/label/version?pin-source=file"
+    )]
+    fn builds_openanolis_trustee_plugin_route(
+        #[case] base: &str,
+        #[case] uri: &str,
+        #[case] expected: &str,
+    ) {
+        let resource_uri = ResourceUri::try_from(uri).unwrap();
+        assert_eq!(resource_url(base, &resource_uri), expected);
+    }
+}

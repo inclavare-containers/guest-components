@@ -12,7 +12,7 @@ use resource_uri::ResourceUri;
 
 use crate::{
     api::KbsClientCapabilities,
-    client::{KbsClient, KBS_GET_RESOURCE_MAX_ATTEMPT, KBS_PREFIX},
+    client::{resource_url, KbsClient, KBS_GET_RESOURCE_MAX_ATTEMPT},
     token_provider::TokenProvider,
     Error, Result,
 };
@@ -45,13 +45,7 @@ impl KbsClient<Box<dyn TokenProvider>> {
 #[async_trait]
 impl KbsClientCapabilities for KbsClient<Box<dyn TokenProvider>> {
     async fn get_resource(&mut self, resource_uri: ResourceUri) -> Result<Vec<u8>> {
-        let mut remote_url = format!(
-            "{}/{KBS_PREFIX}/resource/{}/{}/{}",
-            self.kbs_host_url, resource_uri.repository, resource_uri.r#type, resource_uri.tag
-        );
-        if let Some(ref q) = resource_uri.query {
-            remote_url = format!("{}?{}", remote_url, q);
-        }
+        let remote_url = resource_url(&self.kbs_host_url, &resource_uri);
 
         for attempt in 1..=KBS_GET_RESOURCE_MAX_ATTEMPT {
             debug!("KBS client: trying to request KBS, attempt {attempt}");

@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use base64::{engine::general_purpose::STANDARD, Engine};
 use log::warn;
-use resource_uri::ResourceUri;
+use resource_uri::{ResourcePluginPath, ResourceUri};
 use tokio::fs;
 
 use super::Kbc;
@@ -26,7 +26,13 @@ pub struct OfflineFsKbc {
 #[async_trait]
 impl Kbc for OfflineFsKbc {
     async fn get_resource(&mut self, rid: ResourceUri) -> Result<Vec<u8>> {
-        let resource_path = rid.resource_path();
+        let ResourcePluginPath { repo, r#type, tag } =
+            ResourcePluginPath::try_from(&rid).map_err(|e| {
+                Error::KbsClientError(format!(
+                    "offline-fs-kbc only supports the resource plugin: {e:#}"
+                ))
+            })?;
+        let resource_path = format!("{repo}/{type}/{tag}");
         self.resources
             .get(&resource_path)
             .ok_or(Error::KbsClientError(format!(
@@ -99,5 +105,14 @@ mod tests {
             kbc.get_resource(rid).await.expect("get key failed")[..],
             *value
         );
+    }
+
+    #[tokio::test]
+    async fn rejects_non_resource_plugin() {
+        let mut kbc = OfflineFsKbc {
+            resources: Default::default(),
+        };
+        let rid = ResourceUri::try_from("kbs+pkcs11:///slot/key/label").unwrap();
+        assert!(kbc.get_resource(rid).await.is_err());
     }
 }

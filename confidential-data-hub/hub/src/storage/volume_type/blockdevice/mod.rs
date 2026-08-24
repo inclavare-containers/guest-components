@@ -16,6 +16,7 @@ use strum::{Display, EnumString};
 use crate::kms;
 use crate::kms::{Annotations, ProviderSettings};
 use crate::secret;
+use resource_uri::ResourceUri;
 
 #[derive(EnumString, Serialize, Deserialize, Display, Debug, PartialEq, Eq)]
 pub enum BlockDeviceEncryptType {
@@ -59,7 +60,7 @@ async fn get_plaintext_key(resource: &str) -> anyhow::Result<Vec<u8>> {
         return Ok(unsealed);
     }
 
-    if resource.starts_with("kbs://") {
+    if ResourceUri::try_from(resource).is_ok() {
         let secret = kms::new_getter("kbs", ProviderSettings::default())
             .await?
             .get_secret(resource, &Annotations::default())

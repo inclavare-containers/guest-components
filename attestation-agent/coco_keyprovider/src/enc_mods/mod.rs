@@ -5,12 +5,13 @@
 
 use std::collections::HashMap;
 
-use anyhow::*;
+use anyhow::{anyhow, bail, Context, Result};
 use base64::Engine;
 use jwt_simple::prelude::Ed25519KeyPair;
 use log::{debug, info};
 use rand::TryRngCore;
 use reqwest::Url;
+use resource_uri::ResourceUri;
 use serde::{Deserialize, Serialize};
 use tokio::fs;
 
@@ -150,24 +151,40 @@ async fn generate_key_parameters(input_params: &InputParams) -> Result<(Vec<u8>,
 
 /// Normalize the given keyid into (kbs addr, key path), s.t.
 /// converting `kbs://...` or `../..` to `(<kbs-addr>, <repository>/<type>/<tag>)`.
-fn normalize_path(keyid: &str) -> Result<(String, String)> {
-    debug!("normalize key id {keyid}");
-    let path = keyid.strip_prefix(KBS_RESOURCE_URL_PREFIX).unwrap_or(keyid);
-    let values: Vec<&str> = path.split('/').collect();
+fn normalize_path(key_id: &str) -> Result<(String, String)> {
+    debug!("normalize key id {key_id}");
+
+    if let Ok(resource_uri) = ResourceUri::try_from(key_id) {
+        return Ok((
+            resource_uri.kbs_address.clone(),
+            resource_uri.resource_path(),
+        ));
+    }
+
+    let values: Vec<&str> = key_id.split('/').collect();
     if values.len() == 4 {
-        Ok((
+        return Ok((
             values[0].to_string(),
             format!("{}/{}/{}", values[1], values[2], values[3]),
-        ))
-    } else {
-        bail!(
-            "Resource path {keyid} must follow one of the following formats:
+        ));
+    }
+
+    bail!(
+        "Resource path {key_id} must follow one of the following formats:
                 'kbs:///<repository>/<type>/<tag>'
                 'kbs://<kbs-addr>/<repository>/<type>/<tag>'
+                'kbs+<plugin>:///<path>'
+                'kbs+<plugin>://<kbs-addr>/<path>'
                 '<kbs-addr>/<repository>/<type>/<tag>'
                 '/<repository>/<type>/<tag>'
             "
-        )
+    )
+}
+
+fn normalized_annotation_kid(key_id: &str, kbs_address: &str, key_path: &str) -> String {
+    match ResourceUri::try_from(key_id) {
+        Ok(resource_uri) => resource_uri.whole_uri(),
+        Err(_) => format!("{KBS_RESOURCE_URL_PREFIX}{kbs_address}/{key_path}"),
     }
 }
 
@@ -196,6 +213,7 @@ pub async fn enc_optsdata_gen_anno(
         .context("generating key params")?;
 
     let (kbs_addr, k_path) = normalize_path(&kid)?;
+    let annotation_kid = normalized_annotation_kid(&kid, &kbs_addr, &k_path);
 
     let algorithm = input_params.algorithm;
     let encrypt_optsdata = crypto::encrypt(optsdata, &key, &iv, &algorithm)
@@ -213,7 +231,7 @@ pub async fn enc_optsdata_gen_anno(
 
     let engine = base64::engine::general_purpose::STANDARD;
     let annotation = AnnotationPacket {
-        kid: format!("{KBS_RESOURCE_URL_PREFIX}{kbs_addr}/{k_path}"),
+        kid: annotation_kid,
         wrapped_data: engine.encode(encrypt_optsdata),
         iv: engine.encode(iv),
         wrap_type: algorithm.to_string(),
@@ -229,11 +247,39 @@ mod tests {
     #[rstest]
     #[case("kbs://a/b/c/d", ("a", "b/c/d"))]
     #[case("kbs:///b/c/d", ("", "b/c/d"))]
+    #[case("kbs+pkcs11://a/slot/key/label", ("a", "slot/key/label"))]
+    #[case("kbs+pkcs11:///slot/key/label/version", ("", "slot/key/label/version"))]
     #[case("a/b/c/d", ("a", "b/c/d"))]
     #[case("/b/c/d", ("", "b/c/d"))]
     fn test_normalize_keypath(#[case] input: &str, #[case] expected: (&str, &str)) {
         let res = crate::enc_mods::normalize_path(input).expect("normalize failed");
         assert_eq!(res.0, expected.0);
         assert_eq!(res.1, expected.1);
+    }
+
+    #[rstest]
+    #[case(
+        "kbs+pkcs11:///slot/key/label/version",
+        "",
+        "slot/key/label/version",
+        "kbs+pkcs11:///slot/key/label/version"
+    )]
+    #[case(
+        "kbs+resource:///repo/type/tag",
+        "",
+        "repo/type/tag",
+        "kbs:///repo/type/tag"
+    )]
+    #[case("/repo/type/tag", "", "repo/type/tag", "kbs:///repo/type/tag")]
+    fn annotation_keeps_plugin_and_canonicalizes_legacy_paths(
+        #[case] input: &str,
+        #[case] address: &str,
+        #[case] path: &str,
+        #[case] expected: &str,
+    ) {
+        assert_eq!(
+            crate::enc_mods::normalized_annotation_kid(input, address, path),
+            expected
+        );
     }
 }

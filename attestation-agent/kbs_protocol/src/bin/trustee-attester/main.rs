@@ -5,7 +5,7 @@
 
 //! Attest and fetch confidential resources from Trustee
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use clap::{Parser, Subcommand};
@@ -74,12 +74,18 @@ async fn main() -> Result<()> {
 
     match cli.command {
         Commands::GetResource { path } => {
-            // resource_path should start with '/' but not with '//'
-            let resource_path = match path.starts_with('/') {
-                false => format!("/{}", path),
-                true => path,
+            let resource = if path.contains("://") {
+                ResourceUri::try_from(path.as_str())
+                    .map_err(anyhow::Error::msg)
+                    .context("failed to parse resource URI")?
+            } else {
+                // A bare path continues to address the default resource plugin.
+                let resource_path = match path.starts_with('/') {
+                    false => format!("/{path}"),
+                    true => path,
+                };
+                ResourceUri::new("", &resource_path, None, None)?
             };
-            let resource = ResourceUri::new("", &resource_path)?;
             let resource_bytes = client.get_resource(resource).await?;
 
             println!("{}", STANDARD.encode(resource_bytes));
