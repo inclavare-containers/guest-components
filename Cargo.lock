@@ -3342,6 +3342,7 @@ dependencies = [
  "strum_macros 0.26.4",
  "tempfile",
  "test-utils",
+ "testcontainers",
  "thiserror 2.0.12",
  "tokio",
  "tokio-util",

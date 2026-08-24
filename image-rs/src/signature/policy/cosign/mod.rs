@@ -220,7 +220,7 @@ mod tests {
     // All the test images are the same image, but different
     // registry and repository
     const IMAGE_DIGEST: &str =
-        "sha256:10e0ec4c7663b5f9be6efd16d8ceec760efe5377b9a0762ef3f51101ac08b7e8";
+        "sha256:4f926abc2dc7b29781fd7870c7c91a1550f390fc86e10b7b3d5fa795eb5a3d39";
     const LIVE_COSIGN_TESTS_ENV: &str = "RUN_LIVE_COSIGN_TESTS";
 
     fn live_cosign_tests_enabled() -> bool {
