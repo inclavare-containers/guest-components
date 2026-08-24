@@ -203,9 +203,9 @@ impl Attester for TdxAttester {
         serde_json::to_value(evidence).context("Serialize TDX evidence failed")
     }
 
-    // fn supports_runtime_measurement(&self) -> bool {
-    //     true
-    // }
+    fn supports_runtime_measurement(&self) -> bool {
+        runtime_measurement_extend_available()
+    }
 
     async fn extend_runtime_measurement(
         &self,

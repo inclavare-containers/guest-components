@@ -6,7 +6,7 @@
 use crate::{KbcCheckInfo, KbcInterface};
 use base64::Engine;
 use crypto::{decrypt, WrapType};
-use resource_uri::ResourceUri;
+use resource_uri::{ResourcePluginPath, ResourceUri};
 
 use anyhow::*;
 use async_trait::async_trait;
@@ -75,8 +75,11 @@ impl KbcInterface for SampleKbc {
         Ok(plain_text)
     }
 
-    async fn get_resource(&mut self, rid: ResourceUri) -> Result<Vec<u8>> {
-        let typ = ResourceType::try_from(&rid.r#type[..])?;
+    async fn get_resource(&mut self, resource_uri: ResourceUri) -> Result<Vec<u8>> {
+        let ResourcePluginPath { r#type, .. } = resource_uri
+            .try_into()
+            .context("sample KBC only supports the resource plugin")?;
+        let typ = ResourceType::try_from(r#type.as_str())?;
         match typ {
             ResourceType::Policy => Ok(std::include_str!("policy.json").as_bytes().to_vec()),
             ResourceType::SigstoreConfig => Ok(std::include_str!("sigstore_config.yaml")

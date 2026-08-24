@@ -3,26 +3,36 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
-//! ResourceUri is the identification information of all resources that need to be
-//! obtained from `get_resource` endpoint. Also, `kid` field in an
-//! [`super::AnnotationPacket`] of `decrypt_payload` should also follow this.
+//! Resource URI parsing for resources obtained from Trustee.
 
 use anyhow::{anyhow, bail, Result};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 const RESOURCE_ID_ERROR_INFO: &str =
-    "invalid kbs resource uri, should be kbs://<addr-of-kbs>/<repo>/<type>/<tag>";
+    "invalid KBS resource URI, expected kbs[+plugin]://<kbs-address>/<path>";
 
 const SCHEME: &str = "kbs";
+pub const DEFAULT_RESOURCE_PLUGIN: &str = "resource";
 
-/// Resource Id document <https://github.com/confidential-containers/guest-components/blob/main/attestation-agent/docs/KBS_URI.md>
+/// Identifies a resource exposed by a Trustee plugin.
+///
+/// The default `kbs://` scheme addresses the `resource` plugin. Other plugins
+/// use `kbs+<plugin>://`, and their resource paths may contain any positive
+/// number of segments.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ResourceUri {
-    pub kbs_addr: String,
-    pub repository: String,
+    pub kbs_address: String,
+    pub plugin: String,
+    pub path: Vec<String>,
+    pub query: Option<String>,
+}
+
+/// The three-segment path required by Trustee's default `resource` plugin.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResourcePluginPath {
+    pub repo: String,
     pub r#type: String,
     pub tag: String,
-    pub query: Option<String>,
 }
 
 impl TryFrom<&str> for ResourceUri {
@@ -38,174 +48,270 @@ impl TryFrom<url::Url> for ResourceUri {
     type Error = &'static str;
 
     fn try_from(value: url::Url) -> Result<Self, Self::Error> {
-        let mut addr = value.host_str().unwrap_or_default().to_string();
+        let mut kbs_address = value.host_str().unwrap_or_default().to_string();
 
-        if !addr.is_empty() {
+        if !kbs_address.is_empty() {
             if let Some(port) = value.port() {
-                addr += ":";
-                addr += &port.to_string();
+                kbs_address.push(':');
+                kbs_address.push_str(&port.to_string());
             }
         }
 
-        if value.scheme() != SCHEME {
-            return Err("scheme must be kbs");
-        }
+        let plugin = match value.scheme() {
+            SCHEME => DEFAULT_RESOURCE_PLUGIN.to_string(),
+            scheme if scheme.starts_with("kbs+") => {
+                let plugin = scheme.trim_start_matches("kbs+");
+                if plugin.is_empty() {
+                    return Err("scheme kbs+ requires a plugin name, e.g. kbs+pkcs11");
+                }
+                plugin.to_string()
+            }
+            _ => return Err("scheme must be kbs or kbs+<plugin>"),
+        };
 
-        if value.path().is_empty() {
-            return Err(RESOURCE_ID_ERROR_INFO);
-        }
+        let path = value.path().strip_prefix('/').unwrap_or(value.path());
+        let path = parse_path(path)?;
 
-        let path = &value.path()[1..];
-        let values: Vec<&str> = path.split('/').collect();
-        if values.len() == 3 {
-            Ok(Self {
-                kbs_addr: addr,
-                repository: values[0].into(),
-                r#type: values[1].into(),
-                tag: values[2].into(),
-                query: value.query().map(|s| s.to_string()),
-            })
-        } else {
-            Err(RESOURCE_ID_ERROR_INFO)
-        }
+        Ok(Self {
+            kbs_address,
+            plugin,
+            path,
+            query: value.query().map(ToString::to_string),
+        })
     }
 }
 
 impl From<ResourceUri> for url::Url {
-    fn from(val: ResourceUri) -> Self {
-        url::Url::try_from(&val.whole_uri()[..]).expect("unexpected parse")
+    fn from(value: ResourceUri) -> Self {
+        url::Url::try_from(value.whole_uri().as_str()).expect("unexpected resource URI parse")
+    }
+}
+
+impl TryFrom<ResourceUri> for ResourcePluginPath {
+    type Error = anyhow::Error;
+
+    fn try_from(value: ResourceUri) -> Result<Self, Self::Error> {
+        Self::try_from(&value)
+    }
+}
+
+impl TryFrom<&ResourceUri> for ResourcePluginPath {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &ResourceUri) -> Result<Self, Self::Error> {
+        if value.plugin != DEFAULT_RESOURCE_PLUGIN {
+            bail!(
+                "resource URI plugin must be {DEFAULT_RESOURCE_PLUGIN} instead of {}",
+                value.plugin
+            );
+        }
+
+        if value.path.len() != 3 {
+            bail!(
+                "resource URI path must contain 3 segments instead of {}",
+                value.path.len()
+            );
+        }
+
+        Ok(Self {
+            repo: value.path[0].clone(),
+            r#type: value.path[1].clone(),
+            tag: value.path[2].clone(),
+        })
     }
 }
 
 impl ResourceUri {
-    pub fn new(kbs_uri: &str, resource_path: &str) -> Result<Self> {
-        let kbs_addr = match url::Url::parse(kbs_uri) {
+    pub fn new(
+        kbs_uri: &str,
+        resource_path: &str,
+        plugin: Option<&str>,
+        query: Option<&str>,
+    ) -> Result<Self> {
+        let kbs_address = match url::Url::parse(kbs_uri) {
             Ok(url) => {
-                let kbs_host = url
+                let host = url
                     .host_str()
-                    .ok_or_else(|| anyhow!("Invalid URL: {}", url))?;
+                    .ok_or_else(|| anyhow!("Invalid URL: {url}"))?;
 
-                if let Some(port) = url.port() {
-                    format!("{kbs_host}:{port}")
-                } else {
-                    kbs_host.to_string()
+                match url.port() {
+                    Some(port) => format!("{host}:{port}"),
+                    None => host.to_string(),
                 }
             }
             Err(_) => kbs_uri.to_string(),
         };
 
-        if !resource_path.starts_with('/') {
-            bail!("Resource path {resource_path} must start with '/'")
-        }
+        let path = resource_path
+            .strip_prefix('/')
+            .ok_or_else(|| anyhow!("Resource path {resource_path} must start with '/'"))?;
 
-        let values: Vec<&str> = resource_path.split('/').collect();
-        if values.len() == 4 {
-            Ok(Self {
-                kbs_addr,
-                repository: values[1].into(),
-                r#type: values[2].into(),
-                tag: values[3].into(),
-                query: None,
-            })
-        } else {
-            bail!(
-                "Resource path {resource_path} must follow the format '/<repository>/<type>/<tag>'"
-            )
-        }
+        Ok(Self {
+            kbs_address,
+            plugin: plugin.unwrap_or(DEFAULT_RESOURCE_PLUGIN).to_string(),
+            path: parse_path(path).map_err(anyhow::Error::msg)?,
+            query: query.map(ToString::to_string),
+        })
     }
 
     pub fn whole_uri(&self) -> String {
-        let uri = format!(
-            "{SCHEME}://{}/{}/{}/{}",
-            self.kbs_addr, self.repository, self.r#type, self.tag
-        );
+        let scheme = match self.plugin.as_str() {
+            DEFAULT_RESOURCE_PLUGIN => SCHEME.to_string(),
+            plugin => format!("{SCHEME}+{plugin}"),
+        };
+        let uri = format!("{scheme}://{}/{}", self.kbs_address, self.resource_path());
+
         match &self.query {
-            Some(q) => format!("{uri}?{q}"),
+            Some(query) => format!("{uri}?{query}"),
             None => uri,
         }
     }
 
-    /// Only return the resource path. This function is used
-    /// currently because up to now the kbs-uri is given
-    /// to create an AA instance.
+    /// Returns the Trustee plugin name. `kbs://` maps to `resource`.
+    pub fn plugin(&self) -> &str {
+        &self.plugin
+    }
+
+    /// Returns the slash-separated path sent to the Trustee plugin.
     pub fn resource_path(&self) -> String {
-        format!("{}/{}/{}", self.repository, self.r#type, self.tag)
+        self.path.join("/")
     }
 }
 
+fn parse_path(path: &str) -> std::result::Result<Vec<String>, &'static str> {
+    if path.is_empty() {
+        return Err(RESOURCE_ID_ERROR_INFO);
+    }
+
+    let segments: Vec<String> = path.split('/').map(ToString::to_string).collect();
+    if segments.iter().any(|segment| segment.is_empty()) {
+        return Err("resource URI path must not contain empty segments");
+    }
+
+    Ok(segments)
+}
+
 impl Serialize for ResourceUri {
-    fn serialize<S>(&self, ser: S) -> ::std::result::Result<S::Ok, S::Error>
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        let url = self.whole_uri();
-        ser.serialize_str(&url)
+        serializer.serialize_str(&self.whole_uri())
     }
 }
 
 impl<'de> Deserialize<'de> for ResourceUri {
-    fn deserialize<D: Deserializer<'de>>(de: D) -> ::std::result::Result<Self, D::Error> {
-        let intermediate: &str = Deserialize::deserialize(de)?;
-        intermediate
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
+        let value: &str = Deserialize::deserialize(deserializer)?;
+        value
             .try_into()
-            .map_err(|e| serde::de::Error::custom(format!("{e:?}")))
+            .map_err(|error| serde::de::Error::custom(format!("{error:?}")))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::ResourceUri;
+    use super::{ResourcePluginPath, ResourceUri, DEFAULT_RESOURCE_PLUGIN};
     use rstest::rstest;
 
     #[rstest]
-    #[case("kbs:///alice/cosign-key/213", "alice", "cosign-key", "213", None)]
     #[case(
-        "kbs:///plugin/plugname/resourcename?param1=value1&param2=value2",
-        "plugin",
-        "plugname",
-        "resourcename",
+        "kbs:///alice/cosign-key/213",
+        "",
+        "resource",
+        "alice/cosign-key/213",
+        None
+    )]
+    #[case(
+        "kbs:///repo/type/tag?param1=value1&param2=value2",
+        "",
+        "resource",
+        "repo/type/tag",
         Some("param1=value1&param2=value2")
     )]
-    fn test_resource_uri_serialization_conversion(
-        #[case] url: &str,
-        #[case] repository: &str,
-        #[case] r#type: &str,
-        #[case] tag: &str,
+    #[case("kbs+pkcs11:///slot/key/label", "", "pkcs11", "slot/key/label", None)]
+    #[case(
+        "kbs+custom://example.com:8080/a/b/c/d/e",
+        "example.com:8080",
+        "custom",
+        "a/b/c/d/e",
+        None
+    )]
+    fn serialization_round_trip(
+        #[case] uri: &str,
+        #[case] address: &str,
+        #[case] plugin: &str,
+        #[case] path: &str,
         #[case] query: Option<&str>,
     ) {
-        let resource = ResourceUri {
-            kbs_addr: "".into(),
-            repository: repository.into(),
-            r#type: r#type.into(),
-            tag: tag.into(),
-            query: query.map(|s| s.to_string()),
-        };
+        let parsed: ResourceUri = uri.try_into().expect("parse resource URI");
+        assert_eq!(parsed.kbs_address, address);
+        assert_eq!(parsed.plugin(), plugin);
+        assert_eq!(parsed.resource_path(), path);
+        assert_eq!(parsed.query.as_deref(), query);
+        assert_eq!(parsed.whole_uri(), uri);
+        assert_eq!(
+            serde_json::to_string(&parsed).unwrap(),
+            format!("\"{uri}\"")
+        );
 
-        // Deserialization
-        let deserialized: ResourceUri =
-            serde_json::from_str(&format!("\"{url}\"")).expect("deserialize failed");
-        assert_eq!(deserialized, resource);
-
-        // Serialization
-        let serialized = serde_json::to_string(&resource).expect("deserialize failed");
-        assert_eq!(serialized, format!("\"{url}\""));
-
-        // Conversion to Url
-        let url_from_string = url::Url::try_from(url).expect("failed to parse url");
-        let url_from_resource: url::Url =
-            resource.clone().try_into().expect("failed to try into url");
-        assert_eq!(url_from_string, url_from_resource);
-
-        // Conversion to ResourceUri
-        let resource_from_url =
-            ResourceUri::try_from(url_from_string).expect("failed to try from url");
-        assert_eq!(resource_from_url, resource);
+        let as_url: url::Url = parsed.clone().into();
+        let from_url = ResourceUri::try_from(as_url).expect("parse URL");
+        assert_eq!(from_url, parsed);
     }
 
     #[test]
-    fn test_resource_path() {
-        let resource = ResourceUri::new("https://kbs.example.com/", "/repo/type/tag").unwrap();
+    fn default_resource_plugin_has_canonical_short_form() {
+        let shorthand: ResourceUri = "kbs:///repo/type/tag".try_into().unwrap();
+        let explicit: ResourceUri = "kbs+resource:///repo/type/tag".try_into().unwrap();
 
-        assert_eq!(resource.resource_path(), "repo/type/tag".to_string());
+        assert_eq!(shorthand, explicit);
+        assert_eq!(explicit.plugin(), DEFAULT_RESOURCE_PLUGIN);
+        assert_eq!(explicit.whole_uri(), "kbs:///repo/type/tag");
+    }
+
+    #[rstest]
+    #[case("http:///repo/type/tag", "scheme must be kbs")]
+    #[case("kbs+:///repo/type/tag", "requires a plugin name")]
+    #[case("kbs://example.com", "expected kbs")]
+    #[case("kbs:///repo//tag", "empty segments")]
+    fn rejects_invalid_uri(#[case] uri: &str, #[case] expected: &str) {
+        let error = ResourceUri::try_from(uri).unwrap_err();
+        assert!(error.contains(expected), "unexpected error: {error}");
+    }
+
+    #[test]
+    fn constructor_keeps_one_path_separator() {
+        let uri = ResourceUri::new(
+            "https://kbs.example.com:8443/",
+            "/repo/type/tag",
+            Some("pkcs11"),
+            Some("slot=1"),
+        )
+        .unwrap();
+
+        assert_eq!(
+            uri.whole_uri(),
+            "kbs+pkcs11://kbs.example.com:8443/repo/type/tag?slot=1"
+        );
+    }
+
+    #[test]
+    fn converts_only_default_three_segment_resource_paths() {
+        let uri: ResourceUri = "kbs:///repo/type/tag".try_into().unwrap();
+        assert_eq!(
+            ResourcePluginPath::try_from(&uri).unwrap(),
+            ResourcePluginPath {
+                repo: "repo".into(),
+                r#type: "type".into(),
+                tag: "tag".into(),
+            }
+        );
+
+        let plugin_uri: ResourceUri = "kbs+pkcs11:///repo/type/tag".try_into().unwrap();
+        assert!(ResourcePluginPath::try_from(plugin_uri).is_err());
+
+        let long_uri: ResourceUri = "kbs:///repo/type/tag/extra".try_into().unwrap();
+        assert!(ResourcePluginPath::try_from(long_uri).is_err());
     }
 }

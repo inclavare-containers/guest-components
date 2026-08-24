@@ -259,6 +259,21 @@ mod tests {
     use super::*;
 
     #[test]
+    fn attesters_with_complete_measurement_backends_report_support() {
+        #[cfg(feature = "az-snp-vtpm-attester")]
+        assert!(az_snp_vtpm::AzSnpVtpmAttester.supports_runtime_measurement());
+
+        #[cfg(feature = "az-tdx-vtpm-attester")]
+        assert!(az_tdx_vtpm::AzTdxVtpmAttester.supports_runtime_measurement());
+
+        #[cfg(feature = "csv-attester")]
+        assert!(csv::CsvAttester::default().supports_runtime_measurement());
+
+        #[cfg(feature = "tpm-attester")]
+        assert!(hygon_tpm::HygonTpmAttester::default().supports_runtime_measurement());
+    }
+
+    #[test]
     fn test_detect_tee_type() {
         let tee = detect_tee_type();
         assert_eq!(tee, Tee::Sample);

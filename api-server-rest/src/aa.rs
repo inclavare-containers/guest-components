@@ -11,7 +11,7 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use hyper::{body, Body, Method, Request, Response};
 use protos::ttrpc::aa::attestation_agent::{
     ExtendRuntimeMeasurementRequest, GetAdditionalEvidenceRequest, GetAdditionalTeesRequest,
-    GetEvidenceRequest, GetTeeTypeRequest, GetTokenRequest,
+    GetEvidenceRequest, GetTeeTypeRequest, GetTokenRequest, RuntimeMeasurementResult,
 };
 use protos::ttrpc::aa::attestation_agent_ttrpc::AttestationAgentServiceClient;
 use serde::Deserialize;
@@ -142,10 +142,15 @@ impl ApiHandler for AAClient {
                     )
                     .await
                 {
-                    std::result::Result::Ok(_) => {
+                    std::result::Result::Ok(RuntimeMeasurementResult::OK) => {
                         return Ok(Response::builder()
                             .status(hyper::StatusCode::OK)
                             .body(Body::empty())?)
+                    }
+                    std::result::Result::Ok(result) => {
+                        return Ok(Response::builder()
+                            .status(runtime_measurement_status(result))
+                            .body(Body::from(format!("{result:?}")))?)
                     }
                     Err(e) => return self.internal_error(e.to_string()),
                 }
@@ -238,7 +243,7 @@ impl AAClient {
         domain: &str,
         operation: &str,
         content: &str,
-    ) -> Result<()> {
+    ) -> Result<RuntimeMeasurementResult> {
         let req = ExtendRuntimeMeasurementRequest {
             Domain: domain.to_string(),
             Operation: operation.to_string(),
@@ -247,11 +252,23 @@ impl AAClient {
             ..Default::default()
         };
 
-        self.client
+        let response = self
+            .client
             .extend_runtime_measurement(ttrpc::context::with_timeout(TTRPC_TIMEOUT), &req)
             .await
             .context("ttrpc extend_runtime_measurement failed")?;
-        Ok(())
+        response
+            .Result
+            .enum_value()
+            .map_err(|value| anyhow!("unknown runtime measurement result: {value}"))
+    }
+}
+
+fn runtime_measurement_status(result: RuntimeMeasurementResult) -> hyper::StatusCode {
+    match result {
+        RuntimeMeasurementResult::OK => hyper::StatusCode::OK,
+        RuntimeMeasurementResult::NOT_SUPPORTED => hyper::StatusCode::NOT_IMPLEMENTED,
+        RuntimeMeasurementResult::NOT_ENABLED => hyper::StatusCode::CONFLICT,
     }
 }
 
@@ -296,6 +313,22 @@ fn parse_evidence_runtime_data(runtime_data: &str, encoding: Option<&str>) -> Re
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn runtime_measurement_results_have_distinct_http_statuses() {
+        assert_eq!(
+            runtime_measurement_status(RuntimeMeasurementResult::OK),
+            hyper::StatusCode::OK
+        );
+        assert_eq!(
+            runtime_measurement_status(RuntimeMeasurementResult::NOT_SUPPORTED),
+            hyper::StatusCode::NOT_IMPLEMENTED
+        );
+        assert_eq!(
+            runtime_measurement_status(RuntimeMeasurementResult::NOT_ENABLED),
+            hyper::StatusCode::CONFLICT
+        );
+    }
 
     fn local_addr() -> SocketAddr {
         SocketAddr::from(([127, 0, 0, 1], 8006))

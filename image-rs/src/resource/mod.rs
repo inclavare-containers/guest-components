@@ -24,6 +24,10 @@ pub struct ResourceProvider {
     secure_channel: kbs::SecureChannel,
 }
 
+fn is_kbs_scheme(scheme: &str) -> bool {
+    scheme == "kbs" || scheme.starts_with("kbs+")
+}
+
 impl ResourceProvider {
     pub fn new(_kbc_name: &str, _kbs_uri: &str, _work_dir: &Path) -> Result<Self> {
         #[cfg(feature = "kbs")]
@@ -48,7 +52,7 @@ impl ResourceProvider {
 
         let url = url::Url::parse(&uri).map_err(|e| anyhow!("Failed to parse: {:?}", e))?;
         match url.scheme() {
-            "kbs" => {
+            scheme if is_kbs_scheme(scheme) => {
                 #[cfg(feature = "kbs")]
                 {
                     self.secure_channel.get_resource(&uri).await
@@ -69,5 +73,21 @@ impl ResourceProvider {
             }
             others => bail!("not support scheme {}", others),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_kbs_scheme;
+    use rstest::rstest;
+
+    #[rstest]
+    #[case("kbs", true)]
+    #[case("kbs+pkcs11", true)]
+    #[case("kbs+nebula-ca", true)]
+    #[case("file", false)]
+    #[case("https", false)]
+    fn recognizes_kbs_plugin_schemes(#[case] scheme: &str, #[case] expected: bool) {
+        assert_eq!(is_kbs_scheme(scheme), expected);
     }
 }

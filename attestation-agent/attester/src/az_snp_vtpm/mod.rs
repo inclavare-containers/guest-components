@@ -6,6 +6,7 @@
 use super::{Attester, InitDataResult, TeeEvidence};
 use anyhow::{bail, Context, Result};
 use az_snp_vtpm::{imds, is_snp_cvm, vtpm};
+use kbs_types::HashAlgorithm;
 use log::{debug, info};
 use serde::{Deserialize, Serialize};
 
@@ -46,6 +47,10 @@ impl Attester for AzSnpVtpmAttester {
         Ok(serde_json::to_value(evidence)?)
     }
 
+    fn supports_runtime_measurement(&self) -> bool {
+        true
+    }
+
     async fn bind_init_data(&self, init_data_digest: &[u8]) -> anyhow::Result<InitDataResult> {
         utils::extend_pcr(init_data_digest, utils::INIT_DATA_PCR)?;
         Ok(InitDataResult::Ok)
@@ -58,6 +63,18 @@ impl Attester for AzSnpVtpmAttester {
     ) -> Result<()> {
         utils::extend_pcr(&event_digest, register_index as u8)?;
         Ok(())
+    }
+
+    async fn get_runtime_measurement(&self, pcr_index: u64) -> Result<Vec<u8>> {
+        utils::read_pcr(pcr_index)
+    }
+
+    fn pcr_to_ccmr(&self, pcr_index: u64) -> u64 {
+        pcr_index
+    }
+
+    fn ccel_hash_algorithm(&self) -> HashAlgorithm {
+        HashAlgorithm::Sha256
     }
 }
 
@@ -75,5 +92,24 @@ pub(crate) mod utils {
         vtpm::extend_pcr(pcr, &sha256_digest)?;
 
         Ok(())
+    }
+
+    /// Read a SHA-256 PCR through the quote interface exposed by the current
+    /// `az-cvm-vtpm` dependency. The quote contains all 24 PCR values in index
+    /// order, so this also works on releases that do not expose a direct PCR
+    /// read API.
+    pub fn read_pcr(pcr_index: u64) -> Result<Vec<u8>> {
+        let index = usize::try_from(pcr_index).context("PCR index does not fit usize")?;
+        if index > 23 {
+            bail!("Invalid PCR index: {pcr_index}");
+        }
+
+        let quote = vtpm::get_quote(&[]).context("quote vTPM while reading PCR")?;
+        let digest = quote
+            .pcrs_sha256()
+            .nth(index)
+            .map(|digest| digest.to_vec())
+            .context("vTPM quote did not contain the requested PCR")?;
+        Ok(digest)
     }
 }

@@ -8,11 +8,11 @@ use crate::{KbcCheckInfo, KbcInterface};
 pub mod common;
 use common::*;
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
 use base64::Engine;
 use crypto::WrapType;
-use resource_uri::ResourceUri;
+use resource_uri::{ResourcePluginPath, ResourceUri};
 use std::collections::HashMap;
 use zeroize::Zeroizing;
 
@@ -51,8 +51,11 @@ impl KbcInterface for OfflineFsKbc {
         Ok(plain_payload)
     }
 
-    async fn get_resource(&mut self, rid: ResourceUri) -> Result<Vec<u8>> {
-        let resource_path = rid.resource_path();
+    async fn get_resource(&mut self, resource_uri: ResourceUri) -> Result<Vec<u8>> {
+        let ResourcePluginPath { repo, r#type, tag } = resource_uri
+            .try_into()
+            .context("offline FS KBC only supports the resource plugin")?;
+        let resource_path = format!("{repo}/{type}/{tag}");
         let resources = self.resources.as_ref().map_err(|e| anyhow!("{}", e))?;
         let resource = resources
             .get(resource_path.as_str())
@@ -146,6 +149,7 @@ mod tests {
     #[case(true, ResourcePath::Credential.as_ref(), CREDENTIAL)]
     // Case 2. Error while get bad resource name from a good kbc instance
     #[case(false, "kbs:///default/credential/not-existed", "")]
+    #[case(false, "kbs+pkcs11:///default/credential/test", "")]
     #[tokio::test]
     async fn test_get_resource(
         #[case] success: bool,
