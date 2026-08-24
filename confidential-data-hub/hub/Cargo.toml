@@ -53,7 +53,7 @@ image-rs = { path = "../../image-rs", default-features = false, features = [
     "kata-cc-rustls-tls",
 ] }
 kbs_protocol = { path = "../../attestation-agent/kbs_protocol", default-features = false, features = [
-    "background_check",
+    "passport",
     "aa_ttrpc",
     "openssl",
 ], optional = true }

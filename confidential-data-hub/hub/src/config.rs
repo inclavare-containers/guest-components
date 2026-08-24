@@ -15,12 +15,13 @@ use serde::Deserialize;
 cfg_if::cfg_if! {
     if #[cfg(feature = "ttrpc")] {
         const DEFAULT_CDH_SOCKET_ADDR: &str = "unix:///run/confidential-containers/cdh.sock";
-        const DEFAULT_AA_SOCKET_ADDR: &str = "unix:///run/confidential-containers/attestation-agent/attestation-agent.sock";
     } else {
         const DEFAULT_CDH_SOCKET_ADDR: &str = "127.0.0.1:50000";
-        const DEFAULT_AA_SOCKET_ADDR: &str = "127.0.0.1:50004";
     }
 }
+
+const DEFAULT_AA_SOCKET_ADDR: &str =
+    "unix:///run/confidential-containers/attestation-agent/attestation-agent.sock";
 
 const CDH_DEFAULT_IMAGE_AUTHENTICATED_REGISTRY_CREDENTIALS: &str =
     "CDH_DEFAULT_IMAGE_AUTHENTICATED_REGISTRY_CREDENTIALS";
@@ -53,7 +54,31 @@ pub struct Credential {
     pub path: String,
 }
 
+fn default_aa_socket_addr() -> String {
+    DEFAULT_AA_SOCKET_ADDR.to_string()
+}
+
+/// Connection settings for the Attestation Agent.
+///
+/// CDH uses the AA ttrpc API to obtain a Trustee passport token.  The nested
+/// `[aa]` form matches upstream configuration, while the legacy top-level
+/// `aa_socket` field remains accepted by [`RawCdhConfig`].
 #[derive(Clone, Deserialize, Debug, PartialEq)]
+pub struct AaConfig {
+    #[serde(default = "default_aa_socket_addr")]
+    pub aa_socket: String,
+}
+
+impl Default for AaConfig {
+    fn default() -> Self {
+        Self {
+            aa_socket: default_aa_socket_addr(),
+        }
+    }
+}
+
+#[derive(Clone, Deserialize, Debug, PartialEq)]
+#[serde(from = "RawCdhConfig")]
 pub struct CdhConfig {
     pub kbc: KbsConfig,
 
@@ -69,6 +94,51 @@ pub struct CdhConfig {
     pub socket: String,
 
     pub aa_socket: String,
+}
+
+#[derive(Deserialize)]
+struct RawCdhConfig {
+    kbc: KbsConfig,
+
+    #[serde(default)]
+    credentials: Vec<Credential>,
+
+    #[serde(default = "ImageConfig::from_kernel_cmdline")]
+    image: ImageConfig,
+
+    #[serde(default)]
+    socket: Option<String>,
+
+    /// Upstream configuration form.
+    #[serde(default)]
+    aa: Option<AaConfig>,
+
+    /// Legacy Inclavare configuration form.
+    #[serde(default)]
+    aa_socket: Option<String>,
+}
+
+impl From<RawCdhConfig> for CdhConfig {
+    fn from(raw: RawCdhConfig) -> Self {
+        // Prefer the upstream nested form when both forms are explicitly
+        // present.  Otherwise retain the legacy top-level value and finally
+        // fall back to the standard AA ttrpc socket.
+        let aa_socket = raw
+            .aa
+            .map(|aa| aa.aa_socket)
+            .or(raw.aa_socket)
+            .unwrap_or_else(default_aa_socket_addr);
+
+        Self {
+            kbc: raw.kbc,
+            credentials: raw.credentials,
+            image: raw.image,
+            socket: raw
+                .socket
+                .unwrap_or_else(|| DEFAULT_CDH_SOCKET_ADDR.to_string()),
+            aa_socket,
+        }
+    }
 }
 
 impl CdhConfig {
@@ -117,8 +187,6 @@ impl CdhConfig {
     /// `config` crate.
     fn from_file(config_path: &str) -> Result<Self> {
         let c = Config::builder()
-            .set_default("socket", DEFAULT_CDH_SOCKET_ADDR)?
-            .set_default("aa_socket", DEFAULT_AA_SOCKET_ADDR)?
             .set_default("kbc.url", "")?
             .add_source(File::with_name(config_path))
             .build()?;
@@ -170,6 +238,9 @@ impl CdhConfig {
                 "AA_KBC_PARAMS",
                 format!("{}::{}", self.kbc.name, self.kbc.url),
             );
+        }
+        if env::var("AA_SOCKET").is_err() {
+            env::set_var("AA_SOCKET", &self.aa_socket);
         }
         // KBS configurations
         if let Some(kbs_cert) = &self.kbc.kbs_cert {
@@ -305,6 +376,111 @@ some_undefined_field = "unknown value"
         match expected {
             Some(cfg) => assert_eq!(cfg, res.unwrap()),
             None => assert!(res.is_err()),
+        }
+    }
+
+    #[rstest]
+    #[case(
+        r#"
+[kbc]
+name = "offline_fs_kbc"
+
+[aa]
+aa_socket = "unix:///run/custom/upstream-aa.sock"
+"#,
+        "unix:///run/custom/upstream-aa.sock"
+    )]
+    #[case(
+        r#"
+aa_socket = "unix:///run/custom/legacy-aa.sock"
+
+[kbc]
+name = "offline_fs_kbc"
+"#,
+        "unix:///run/custom/legacy-aa.sock"
+    )]
+    #[case(
+        r#"
+aa_socket = "unix:///run/custom/legacy-aa.sock"
+
+[kbc]
+name = "offline_fs_kbc"
+
+[aa]
+aa_socket = "unix:///run/custom/upstream-aa.sock"
+"#,
+        "unix:///run/custom/upstream-aa.sock"
+    )]
+    #[case(
+        r#"
+[kbc]
+name = "offline_fs_kbc"
+
+[aa]
+"#,
+        DEFAULT_AA_SOCKET_ADDR
+    )]
+    fn aa_socket_config_compatibility(#[case] config: &str, #[case] expected: &str) {
+        let mut file = tempfile::Builder::new()
+            .append(true)
+            .suffix(".toml")
+            .tempfile()
+            .unwrap();
+        file.write_all(config.as_bytes()).unwrap();
+
+        let config = CdhConfig::from_file(file.path().to_str().unwrap()).unwrap();
+        assert_eq!(config.aa_socket, expected);
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn set_configuration_envs_sets_defaults_without_overriding_deployment_values() {
+        let old_kbc_params = env::var_os("AA_KBC_PARAMS");
+        let old_aa_socket = env::var_os("AA_SOCKET");
+        env::remove_var("AA_KBC_PARAMS");
+        env::remove_var("AA_SOCKET");
+
+        let config = CdhConfig {
+            kbc: KbsConfig {
+                name: "cc_kbc".into(),
+                url: "http://127.0.0.1:8080".into(),
+                kbs_cert: None,
+            },
+            credentials: Vec::new(),
+            image: ImageConfig::default(),
+            socket: DEFAULT_CDH_SOCKET_ADDR.into(),
+            aa_socket: "unix:///run/custom/config-aa.sock".into(),
+        };
+
+        config.set_configuration_envs();
+        assert_eq!(
+            env::var("AA_KBC_PARAMS").unwrap(),
+            "cc_kbc::http://127.0.0.1:8080"
+        );
+        assert_eq!(
+            env::var("AA_SOCKET").unwrap(),
+            "unix:///run/custom/config-aa.sock"
+        );
+
+        env::set_var("AA_KBC_PARAMS", "deployment_kbc::http://kbs.example");
+        env::set_var("AA_SOCKET", "unix:///run/custom/deployment-aa.sock");
+        config.set_configuration_envs();
+        assert_eq!(
+            env::var("AA_KBC_PARAMS").unwrap(),
+            "deployment_kbc::http://kbs.example"
+        );
+        assert_eq!(
+            env::var("AA_SOCKET").unwrap(),
+            "unix:///run/custom/deployment-aa.sock"
+        );
+
+        match old_kbc_params {
+            Some(value) => env::set_var("AA_KBC_PARAMS", value),
+            None => env::remove_var("AA_KBC_PARAMS"),
+        }
+        match old_aa_socket {
+            Some(value) => env::set_var("AA_SOCKET", value),
+            None => env::remove_var("AA_SOCKET"),
         }
     }
 
