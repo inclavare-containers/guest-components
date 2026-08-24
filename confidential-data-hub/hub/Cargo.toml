@@ -52,6 +52,10 @@ env_logger = { workspace = true, optional = true }
 image-rs = { path = "../../image-rs", default-features = false, features = [
     "kata-cc-rustls-tls",
 ] }
+jose-b64 = "0.1.2"
+jose-jwa = "0.1.2"
+jose-jwk = "0.1.2"
+jose-jws = "0.1.2"
 kbs_protocol = { path = "../../attestation-agent/kbs_protocol", default-features = false, features = [
     "passport",
     "aa_ttrpc",
@@ -61,6 +65,7 @@ kbs-types.workspace = true
 lazy_static.workspace = true
 log.workspace = true
 p12 = { version = "0.6.3", optional = true }
+p256 = "0.13.2"
 prost = { workspace = true, optional = true }
 protos = { path = "../../protos", default-features = false, optional = true }
 rand.workspace = true
