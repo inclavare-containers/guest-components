@@ -59,6 +59,12 @@ By historical and backward-compatilibity reasons, `offline_fs_kbc` reads key/val
 **/etc/aa-offline_fs_kbc-keys.json** and **/etc/aa-offline_fs_kbc-resources.json** files. Here we
 will use **/etc/aa-offline_fs_kbc-resources.json** solely.
 
+Additional resource files can be supplied through the comma-separated
+`OFFLINE_FS_KBC_EXTRA_FILE_PATH` environment variable. They are loaded after
+the two standard files, in the listed order, so a later file overrides an
+earlier definition of the same resource. Whitespace and empty list entries are
+ignored.
+
 First, build the CDH. To faster the build, disable all KMS providers and let enabled only the
 KBS resources provider:
 

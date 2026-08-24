@@ -18,6 +18,10 @@ use super::{Error, Result};
 const KEYS_PATH: &str = "/etc/aa-offline_fs_kbc-keys.json";
 const RESOURCES_PATH: &str = "/etc/aa-offline_fs_kbc-resources.json";
 
+/// Comma-separated additional resource files loaded after the standard files.
+/// Later files override duplicate resource definitions from earlier files.
+const EXTRA_FILE_PATH_ENV_VAR: &str = "OFFLINE_FS_KBC_EXTRA_FILE_PATH";
+
 pub struct OfflineFsKbc {
     /// Stored resources, loaded from file system
     resources: HashMap<String, Vec<u8>>,
@@ -50,6 +54,14 @@ impl OfflineFsKbc {
 
         res.init_with_file(KEYS_PATH).await?;
         res.init_with_file(RESOURCES_PATH).await?;
+
+        if let Ok(extra_file_paths) = std::env::var(EXTRA_FILE_PATH_ENV_VAR) {
+            for path in extra_file_paths.split(',').map(str::trim) {
+                if !path.is_empty() {
+                    res.init_with_file(path).await?;
+                }
+            }
+        }
 
         Ok(res)
     }
@@ -84,10 +96,34 @@ impl OfflineFsKbc {
 
 #[cfg(test)]
 mod tests {
+    use std::{env, ffi::OsString};
+
+    use base64::{engine::general_purpose::STANDARD, Engine};
     use resource_uri::ResourceUri;
     use rstest::rstest;
+    use serial_test::serial;
 
-    use crate::kms::plugins::kbs::{offline_fs::OfflineFsKbc, Kbc};
+    use crate::kms::plugins::kbs::{
+        offline_fs::{OfflineFsKbc, EXTRA_FILE_PATH_ENV_VAR},
+        Kbc,
+    };
+
+    struct ExtraFilesEnvRestore(Option<OsString>);
+
+    impl ExtraFilesEnvRestore {
+        fn capture() -> Self {
+            Self(env::var_os(EXTRA_FILE_PATH_ENV_VAR))
+        }
+    }
+
+    impl Drop for ExtraFilesEnvRestore {
+        fn drop(&mut self) {
+            match self.0.take() {
+                Some(value) => env::set_var(EXTRA_FILE_PATH_ENV_VAR, value),
+                None => env::remove_var(EXTRA_FILE_PATH_ENV_VAR),
+            }
+        }
+    }
 
     #[rstest]
     #[tokio::test]
@@ -114,5 +150,115 @@ mod tests {
         };
         let rid = ResourceUri::try_from("kbs+pkcs11:///slot/key/label").unwrap();
         assert!(kbc.get_resource(rid).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn init_with_missing_file_is_noop() {
+        let mut kbc = OfflineFsKbc {
+            resources: Default::default(),
+        };
+        kbc.init_with_file("/no/such/path/resources.json")
+            .await
+            .expect("missing file must not fail");
+        assert!(kbc.resources.is_empty());
+    }
+
+    #[tokio::test]
+    async fn init_with_malformed_json_returns_error() {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        tokio::fs::write(file.path(), b"{ not valid json }")
+            .await
+            .unwrap();
+        let mut kbc = OfflineFsKbc {
+            resources: Default::default(),
+        };
+
+        assert!(kbc
+            .init_with_file(file.path().to_str().unwrap())
+            .await
+            .is_err());
+    }
+
+    #[tokio::test]
+    async fn init_with_valid_file_populates_resources() {
+        let content = serde_json::json!({
+            "default/key/1": STANDARD.encode(b"key1"),
+            "default/key/2": STANDARD.encode(b"key2"),
+        })
+        .to_string();
+        let file = tempfile::NamedTempFile::new().unwrap();
+        tokio::fs::write(file.path(), content.as_bytes())
+            .await
+            .unwrap();
+        let mut kbc = OfflineFsKbc {
+            resources: Default::default(),
+        };
+
+        kbc.init_with_file(file.path().to_str().unwrap())
+            .await
+            .unwrap();
+        assert_eq!(kbc.resources.get("default/key/1").unwrap(), b"key1");
+        assert_eq!(kbc.resources.get("default/key/2").unwrap(), b"key2");
+    }
+
+    #[tokio::test]
+    async fn duplicate_resource_is_overridden_by_later_file() {
+        let first = tempfile::NamedTempFile::new().unwrap();
+        let second = tempfile::NamedTempFile::new().unwrap();
+        tokio::fs::write(
+            first.path(),
+            serde_json::json!({"default/key/1": STANDARD.encode(b"first")}).to_string(),
+        )
+        .await
+        .unwrap();
+        tokio::fs::write(
+            second.path(),
+            serde_json::json!({"default/key/1": STANDARD.encode(b"second")}).to_string(),
+        )
+        .await
+        .unwrap();
+        let mut kbc = OfflineFsKbc {
+            resources: Default::default(),
+        };
+
+        kbc.init_with_file(first.path().to_str().unwrap())
+            .await
+            .unwrap();
+        kbc.init_with_file(second.path().to_str().unwrap())
+            .await
+            .unwrap();
+        assert_eq!(kbc.resources.get("default/key/1").unwrap(), b"second");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn new_loads_trimmed_extra_file_list_in_order() {
+        let _restore = ExtraFilesEnvRestore::capture();
+        let first = tempfile::NamedTempFile::new().unwrap();
+        let second = tempfile::NamedTempFile::new().unwrap();
+        tokio::fs::write(
+            first.path(),
+            serde_json::json!({
+                "default/key/extra": STANDARD.encode(b"first"),
+                "default/key/only-first": STANDARD.encode(b"one"),
+            })
+            .to_string(),
+        )
+        .await
+        .unwrap();
+        tokio::fs::write(
+            second.path(),
+            serde_json::json!({"default/key/extra": STANDARD.encode(b"second")}).to_string(),
+        )
+        .await
+        .unwrap();
+        env::set_var(
+            EXTRA_FILE_PATH_ENV_VAR,
+            format!(" {},, {} ", first.path().display(), second.path().display()),
+        );
+
+        let kbc = OfflineFsKbc::new().await.unwrap();
+        assert_eq!(kbc.resources.get("default/key/extra").unwrap(), b"second");
+        assert_eq!(kbc.resources.get("default/key/only-first").unwrap(), b"one");
     }
 }
