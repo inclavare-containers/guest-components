@@ -461,6 +461,10 @@ impl Attester for HygonTpmAttester {
             .map_err(|e| anyhow!("Serialize Hygon TPM evidence failed: {:?}", e))
     }
 
+    fn supports_runtime_measurement(&self) -> bool {
+        true
+    }
+
     async fn extend_runtime_measurement(&self, digest: Vec<u8>, index: u64) -> Result<()> {
         pcr_extend(digest, index)
     }

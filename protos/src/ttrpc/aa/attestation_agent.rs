@@ -831,6 +831,9 @@ impl ::protobuf::reflect::ProtobufValue for ExtendRuntimeMeasurementRequest {
 // @@protoc_insertion_point(message:attestation_agent.ExtendRuntimeMeasurementResponse)
 #[derive(PartialEq,Clone,Default,Debug)]
 pub struct ExtendRuntimeMeasurementResponse {
+    // message fields
+    // @@protoc_insertion_point(field:attestation_agent.ExtendRuntimeMeasurementResponse.Result)
+    pub Result: ::protobuf::EnumOrUnknown<RuntimeMeasurementResult>,
     // special fields
     // @@protoc_insertion_point(special_field:attestation_agent.ExtendRuntimeMeasurementResponse.special_fields)
     pub special_fields: ::protobuf::SpecialFields,
@@ -848,8 +851,13 @@ impl ExtendRuntimeMeasurementResponse {
     }
 
     fn generated_message_descriptor_data() -> ::protobuf::reflect::GeneratedMessageDescriptorData {
-        let mut fields = ::std::vec::Vec::with_capacity(0);
+        let mut fields = ::std::vec::Vec::with_capacity(1);
         let mut oneofs = ::std::vec::Vec::with_capacity(0);
+        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
+            "Result",
+            |m: &ExtendRuntimeMeasurementResponse| { &m.Result },
+            |m: &mut ExtendRuntimeMeasurementResponse| { &mut m.Result },
+        ));
         ::protobuf::reflect::GeneratedMessageDescriptorData::new_2::<ExtendRuntimeMeasurementResponse>(
             "ExtendRuntimeMeasurementResponse",
             fields,
@@ -868,6 +876,9 @@ impl ::protobuf::Message for ExtendRuntimeMeasurementResponse {
     fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream<'_>) -> ::protobuf::Result<()> {
         while let Some(tag) = is.read_raw_tag_or_eof()? {
             match tag {
+                8 => {
+                    self.Result = is.read_enum_or_unknown()?;
+                },
                 tag => {
                     ::protobuf::rt::read_unknown_or_skip_group(tag, is, self.special_fields.mut_unknown_fields())?;
                 },
@@ -880,12 +891,18 @@ impl ::protobuf::Message for ExtendRuntimeMeasurementResponse {
     #[allow(unused_variables)]
     fn compute_size(&self) -> u64 {
         let mut my_size = 0;
+        if self.Result != ::protobuf::EnumOrUnknown::new(RuntimeMeasurementResult::OK) {
+            my_size += ::protobuf::rt::int32_size(1, self.Result.value());
+        }
         my_size += ::protobuf::rt::unknown_fields_size(self.special_fields.unknown_fields());
         self.special_fields.cached_size().set(my_size as u32);
         my_size
     }
 
     fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream<'_>) -> ::protobuf::Result<()> {
+        if self.Result != ::protobuf::EnumOrUnknown::new(RuntimeMeasurementResult::OK) {
+            os.write_enum(1, ::protobuf::EnumOrUnknown::value(&self.Result))?;
+        }
         os.write_unknown_fields(self.special_fields.unknown_fields())?;
         ::std::result::Result::Ok(())
     }
@@ -903,11 +920,13 @@ impl ::protobuf::Message for ExtendRuntimeMeasurementResponse {
     }
 
     fn clear(&mut self) {
+        self.Result = ::protobuf::EnumOrUnknown::new(RuntimeMeasurementResult::OK);
         self.special_fields.clear();
     }
 
     fn default_instance() -> &'static ExtendRuntimeMeasurementResponse {
         static instance: ExtendRuntimeMeasurementResponse = ExtendRuntimeMeasurementResponse {
+            Result: ::protobuf::EnumOrUnknown::from_i32(0),
             special_fields: ::protobuf::SpecialFields::new(),
         };
         &instance
@@ -1746,6 +1765,73 @@ impl ::protobuf::reflect::ProtobufValue for GetAdditionalTeesResponse {
     type RuntimeType = ::protobuf::reflect::rt::RuntimeTypeMessage<Self>;
 }
 
+#[derive(Clone,Copy,PartialEq,Eq,Debug,Hash)]
+// @@protoc_insertion_point(enum:attestation_agent.RuntimeMeasurementResult)
+pub enum RuntimeMeasurementResult {
+    // @@protoc_insertion_point(enum_value:attestation_agent.RuntimeMeasurementResult.OK)
+    OK = 0,
+    // @@protoc_insertion_point(enum_value:attestation_agent.RuntimeMeasurementResult.NOT_SUPPORTED)
+    NOT_SUPPORTED = 1,
+    // @@protoc_insertion_point(enum_value:attestation_agent.RuntimeMeasurementResult.NOT_ENABLED)
+    NOT_ENABLED = 2,
+}
+
+impl ::protobuf::Enum for RuntimeMeasurementResult {
+    const NAME: &'static str = "RuntimeMeasurementResult";
+
+    fn value(&self) -> i32 {
+        *self as i32
+    }
+
+    fn from_i32(value: i32) -> ::std::option::Option<RuntimeMeasurementResult> {
+        match value {
+            0 => ::std::option::Option::Some(RuntimeMeasurementResult::OK),
+            1 => ::std::option::Option::Some(RuntimeMeasurementResult::NOT_SUPPORTED),
+            2 => ::std::option::Option::Some(RuntimeMeasurementResult::NOT_ENABLED),
+            _ => ::std::option::Option::None
+        }
+    }
+
+    fn from_str(str: &str) -> ::std::option::Option<RuntimeMeasurementResult> {
+        match str {
+            "OK" => ::std::option::Option::Some(RuntimeMeasurementResult::OK),
+            "NOT_SUPPORTED" => ::std::option::Option::Some(RuntimeMeasurementResult::NOT_SUPPORTED),
+            "NOT_ENABLED" => ::std::option::Option::Some(RuntimeMeasurementResult::NOT_ENABLED),
+            _ => ::std::option::Option::None
+        }
+    }
+
+    const VALUES: &'static [RuntimeMeasurementResult] = &[
+        RuntimeMeasurementResult::OK,
+        RuntimeMeasurementResult::NOT_SUPPORTED,
+        RuntimeMeasurementResult::NOT_ENABLED,
+    ];
+}
+
+impl ::protobuf::EnumFull for RuntimeMeasurementResult {
+    fn enum_descriptor() -> ::protobuf::reflect::EnumDescriptor {
+        static descriptor: ::protobuf::rt::Lazy<::protobuf::reflect::EnumDescriptor> = ::protobuf::rt::Lazy::new();
+        descriptor.get(|| file_descriptor().enum_by_package_relative_name("RuntimeMeasurementResult").unwrap()).clone()
+    }
+
+    fn descriptor(&self) -> ::protobuf::reflect::EnumValueDescriptor {
+        let index = *self as usize;
+        Self::enum_descriptor().value_by_index(index)
+    }
+}
+
+impl ::std::default::Default for RuntimeMeasurementResult {
+    fn default() -> Self {
+        RuntimeMeasurementResult::OK
+    }
+}
+
+impl RuntimeMeasurementResult {
+    fn generated_enum_descriptor_data() -> ::protobuf::reflect::GeneratedEnumDescriptorData {
+        ::protobuf::reflect::GeneratedEnumDescriptorData::new::<RuntimeMeasurementResult>("RuntimeMeasurementResult")
+    }
+}
+
 static file_descriptor_proto_data: &'static [u8] = b"\
     \n\x17attestation-agent.proto\x12\x11attestation_agent\"6\n\x12GetEviden\
     ceRequest\x12\x20\n\x0bRuntimeData\x18\x01\x20\x01(\x0cR\x0bRuntimeData\
@@ -1759,26 +1845,29 @@ static file_descriptor_proto_data: &'static [u8] = b"\
     \x06Domain\x18\x01\x20\x01(\tR\x06Domain\x12\x1c\n\tOperation\x18\x02\
     \x20\x01(\tR\tOperation\x12\x18\n\x07Content\x18\x03\x20\x01(\tR\x07Cont\
     ent\x12)\n\rRegisterIndex\x18\x04\x20\x01(\x04H\0R\rRegisterIndex\x88\
-    \x01\x01B\x10\n\x0e_RegisterIndex\"\"\n\x20ExtendRuntimeMeasurementRespo\
-    nse\"K\n\x11InitDataPlaintext\x12\x18\n\x07Content\x18\x01\x20\x01(\x0cR\
-    \x07Content\x12\x1c\n\tAlgorithm\x18\x02\x20\x01(\tR\tAlgorithm\"-\n\x13\
-    BindInitDataRequest\x12\x16\n\x06Digest\x18\x01\x20\x01(\x0cR\x06Digest\
-    \"\x16\n\x14BindInitDataResponse\"\x13\n\x11GetTeeTypeRequest\"&\n\x12Ge\
-    tTeeTypeResponse\x12\x10\n\x03tee\x18\x01\x20\x01(\tR\x03tee\"\x1a\n\x18\
-    GetAdditionalTeesRequest\"D\n\x19GetAdditionalTeesResponse\x12'\n\x0fadd\
-    itional_tees\x18\x01\x20\x03(\tR\x0eadditionalTees2\xf0\x05\n\x17Attesta\
-    tionAgentService\x12\\\n\x0bGetEvidence\x12%.attestation_agent.GetEviden\
-    ceRequest\x1a&.attestation_agent.GetEvidenceResponse\x12p\n\x15GetAdditi\
-    onalEvidence\x12/.attestation_agent.GetAdditionalEvidenceRequest\x1a&.at\
-    testation_agent.GetEvidenceResponse\x12S\n\x08GetToken\x12\".attestation\
-    _agent.GetTokenRequest\x1a#.attestation_agent.GetTokenResponse\x12\x83\
-    \x01\n\x18ExtendRuntimeMeasurement\x122.attestation_agent.ExtendRuntimeM\
-    easurementRequest\x1a3.attestation_agent.ExtendRuntimeMeasurementRespons\
-    e\x12_\n\x0cBindInitData\x12&.attestation_agent.BindInitDataRequest\x1a'\
-    .attestation_agent.BindInitDataResponse\x12Y\n\nGetTeeType\x12$.attestat\
-    ion_agent.GetTeeTypeRequest\x1a%.attestation_agent.GetTeeTypeResponse\
-    \x12n\n\x11GetAdditionalTees\x12+.attestation_agent.GetAdditionalTeesReq\
-    uest\x1a,.attestation_agent.GetAdditionalTeesResponseb\x06proto3\
+    \x01\x01B\x10\n\x0e_RegisterIndex\"g\n\x20ExtendRuntimeMeasurementRespon\
+    se\x12C\n\x06Result\x18\x01\x20\x01(\x0e2+.attestation_agent.RuntimeMeas\
+    urementResultR\x06Result\"K\n\x11InitDataPlaintext\x12\x18\n\x07Content\
+    \x18\x01\x20\x01(\x0cR\x07Content\x12\x1c\n\tAlgorithm\x18\x02\x20\x01(\
+    \tR\tAlgorithm\"-\n\x13BindInitDataRequest\x12\x16\n\x06Digest\x18\x01\
+    \x20\x01(\x0cR\x06Digest\"\x16\n\x14BindInitDataResponse\"\x13\n\x11GetT\
+    eeTypeRequest\"&\n\x12GetTeeTypeResponse\x12\x10\n\x03tee\x18\x01\x20\
+    \x01(\tR\x03tee\"\x1a\n\x18GetAdditionalTeesRequest\"D\n\x19GetAdditiona\
+    lTeesResponse\x12'\n\x0fadditional_tees\x18\x01\x20\x03(\tR\x0eadditiona\
+    lTees*F\n\x18RuntimeMeasurementResult\x12\x06\n\x02OK\x10\0\x12\x11\n\rN\
+    OT_SUPPORTED\x10\x01\x12\x0f\n\x0bNOT_ENABLED\x10\x022\xf0\x05\n\x17Atte\
+    stationAgentService\x12\\\n\x0bGetEvidence\x12%.attestation_agent.GetEvi\
+    denceRequest\x1a&.attestation_agent.GetEvidenceResponse\x12p\n\x15GetAdd\
+    itionalEvidence\x12/.attestation_agent.GetAdditionalEvidenceRequest\x1a&\
+    .attestation_agent.GetEvidenceResponse\x12S\n\x08GetToken\x12\".attestat\
+    ion_agent.GetTokenRequest\x1a#.attestation_agent.GetTokenResponse\x12\
+    \x83\x01\n\x18ExtendRuntimeMeasurement\x122.attestation_agent.ExtendRunt\
+    imeMeasurementRequest\x1a3.attestation_agent.ExtendRuntimeMeasurementRes\
+    ponse\x12_\n\x0cBindInitData\x12&.attestation_agent.BindInitDataRequest\
+    \x1a'.attestation_agent.BindInitDataResponse\x12Y\n\nGetTeeType\x12$.att\
+    estation_agent.GetTeeTypeRequest\x1a%.attestation_agent.GetTeeTypeRespon\
+    se\x12n\n\x11GetAdditionalTees\x12+.attestation_agent.GetAdditionalTeesR\
+    equest\x1a,.attestation_agent.GetAdditionalTeesResponseb\x06proto3\
 ";
 
 /// `FileDescriptorProto` object which was a source for this generated file
@@ -1811,7 +1900,8 @@ pub fn file_descriptor() -> &'static ::protobuf::reflect::FileDescriptor {
             messages.push(GetTeeTypeResponse::generated_message_descriptor_data());
             messages.push(GetAdditionalTeesRequest::generated_message_descriptor_data());
             messages.push(GetAdditionalTeesResponse::generated_message_descriptor_data());
-            let mut enums = ::std::vec::Vec::with_capacity(0);
+            let mut enums = ::std::vec::Vec::with_capacity(1);
+            enums.push(RuntimeMeasurementResult::generated_enum_descriptor_data());
             ::protobuf::reflect::GeneratedFileDescriptor::new_generated(
                 file_descriptor_proto(),
                 deps,

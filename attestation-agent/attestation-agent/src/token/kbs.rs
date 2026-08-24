@@ -65,11 +65,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_kbs_token_getter() {
-        let config = KbsConfig {
-            url: "http://127.0.0.1:8080".to_string(),
+        // Construct directly so a process-global TRUSTEE_URL or a service on
+        // the conventional test port cannot make this negative test flaky.
+        let getter = KbsTokenGetter {
+            kbs_host_url: "http://127.0.0.1:0".to_string(),
             cert: None,
         };
-        let getter = KbsTokenGetter::new(&config);
         let token = getter.get_token(None).await;
         assert!(token.is_err());
     }

@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use async_trait::async_trait;
 use attester::{detect_attestable_devices, detect_tee_type, BoxedAttester};
 use kbs_types::Tee;
@@ -25,6 +25,18 @@ use log::{debug, info, warn};
 use token::*;
 
 use crate::{config::Config, eventlog::Event};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RuntimeMeasurement {
+    /// The runtime measurement was extended successfully.
+    Ok,
+
+    /// No detected attester can extend a runtime measurement register.
+    NotSupported,
+
+    /// Runtime measurement/eventlog support is disabled in AA configuration.
+    NotEnabled,
+}
 
 /// Attestation Agent (AA for short) is a rust library crate for attestation procedure
 /// in confidential containers. It provides kinds of service APIs related to attestation,
@@ -75,7 +87,7 @@ pub trait AttestationAPIs {
         operation: &str,
         content: &str,
         register_index: Option<u64>,
-    ) -> Result<()>;
+    ) -> Result<RuntimeMeasurement>;
 
     /// Bind initdata
     async fn bind_init_data(&self, init_data: &[u8]) -> Result<InitDataResult>;
@@ -272,9 +284,13 @@ impl AttestationAPIs for AttestationAgent {
         operation: &str,
         content: &str,
         register_index: Option<u64>,
-    ) -> Result<()> {
+    ) -> Result<RuntimeMeasurement> {
         let Some(ref eventlog) = self.eventlog else {
-            bail!("Extend eventlog not enabled when launching!");
+            return if self.config.read().await.eventlog_config.enable_eventlog {
+                Ok(RuntimeMeasurement::NotSupported)
+            } else {
+                Ok(RuntimeMeasurement::NotEnabled)
+            };
         };
 
         let (pcr, log_entry) = {
@@ -293,7 +309,7 @@ impl AttestationAPIs for AttestationAgent {
 
         eventlog.lock().await.extend_entry(log_entry, pcr).await?;
 
-        Ok(())
+        Ok(RuntimeMeasurement::Ok)
     }
 
     /// Perform the initdata binding. If current platform does not support initdata
@@ -317,6 +333,16 @@ impl AttestationAPIs for AttestationAgent {
 mod tests {
     use super::*;
 
+    #[derive(Debug)]
+    struct UnsupportedMeasurementAttester;
+
+    #[async_trait::async_trait]
+    impl attester::Attester for UnsupportedMeasurementAttester {
+        async fn get_evidence(&self, _report_data: Vec<u8>) -> Result<attester::TeeEvidence> {
+            Ok(serde_json::json!({"tee": "unsupported-measurement-test"}))
+        }
+    }
+
     #[tokio::test]
     async fn test_attestation_agent() {
         let res = AttestationAgent::new(None);
@@ -325,15 +351,26 @@ mod tests {
         assert!(aa.get_token("kbs", None).await.is_err());
         assert!(aa.get_evidence(&[]).await.is_ok());
         assert!(aa.bind_init_data(&[]).await.is_ok());
-        assert!(aa
-            .extend_runtime_measurement("domain", "event", "operation", None)
-            .await
-            .is_err());
+        assert_eq!(
+            aa.extend_runtime_measurement("domain", "event", "operation", None)
+                .await
+                .unwrap(),
+            RuntimeMeasurement::NotEnabled
+        );
     }
 
     #[tokio::test]
     async fn test_attestation_agent_with_aa_instance_config() {
         let mut aa = AttestationAgent::new(Some("tests/aa_instance_info_test.toml")).unwrap();
+        // This test covers instance-info initialization, not the eventlog. Keep
+        // it independent of the process user's permission to write under /run.
+        {
+            let mut config = aa.config.write().await;
+            config.eventlog_config.enable_eventlog = false;
+            // Force the documented failure path without depending on live cloud
+            // metadata or writing an instance-info file below /run.
+            config.aa_instance.instance_type = Some("unsupported-test-instance".to_string());
+        }
         // Test that initialization doesn't fail even if AA instance info retrieval fails
         // (which is expected in test environment without actual cloud metadata)
         aa.init().await.expect("init should not fail");
@@ -346,6 +383,8 @@ mod tests {
     #[tokio::test]
     async fn test_eventlog_without_measurement_backend_degrades_gracefully() {
         let mut aa = AttestationAgent::new(None).unwrap();
+        aa.primary_attester = Arc::new(Box::new(UnsupportedMeasurementAttester));
+        aa.additional_attesters.clear();
         aa.config.write().await.eventlog_config.enable_eventlog = true;
 
         aa.init()
@@ -354,9 +393,11 @@ mod tests {
 
         assert!(aa.eventlog.is_none());
         assert!(aa.get_evidence(&[0; 64]).await.is_ok());
-        assert!(aa
-            .extend_runtime_measurement("domain", "operation", "content", None)
-            .await
-            .is_err());
+        assert_eq!(
+            aa.extend_runtime_measurement("domain", "operation", "content", None)
+                .await
+                .unwrap(),
+            RuntimeMeasurement::NotSupported
+        );
     }
 }

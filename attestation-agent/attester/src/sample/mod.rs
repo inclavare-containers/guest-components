@@ -44,6 +44,15 @@ impl Default for SampleAttester {
     }
 }
 
+#[cfg(test)]
+impl SampleAttester {
+    fn new_with_measure_register_path(path: &str) -> Self {
+        Self {
+            measure_register: Arc::new(Mutex::new(MeasureRegister::new(path))),
+        }
+    }
+}
+
 #[async_trait::async_trait]
 impl Attester for SampleAttester {
     async fn get_evidence(&self, report_data: Vec<u8>) -> Result<TeeEvidence> {
@@ -66,6 +75,10 @@ impl Attester for SampleAttester {
         };
 
         serde_json::to_value(evidence).map_err(|e| anyhow!("Serialize sample evidence failed: {e}"))
+    }
+
+    fn supports_runtime_measurement(&self) -> bool {
+        true
     }
 
     async fn extend_runtime_measurement(
@@ -118,9 +131,22 @@ mod tests {
 
     #[tokio::test]
     async fn test_sample_attester() {
-        let attester = SampleAttester::default();
+        let tempdir = tempfile::tempdir().unwrap();
+        let register_path = tempdir.path().join("sample_measure_register");
+        let attester = SampleAttester::new_with_measure_register_path(
+            register_path.to_str().expect("temporary path is UTF-8"),
+        );
         let report_data = vec![1, 2, 3, 4, 5];
         let evidence = attester.get_evidence(report_data).await.unwrap();
-        println!("{}", evidence);
+        assert!(evidence.is_object());
+        assert!(attester.supports_runtime_measurement());
+
+        let initial = attester.get_runtime_measurement(0).await.unwrap();
+        attester
+            .extend_runtime_measurement(vec![1; MEASURE_DIGEST_LEN], 0)
+            .await
+            .unwrap();
+        let extended = attester.get_runtime_measurement(0).await.unwrap();
+        assert_ne!(initial, extended);
     }
 }

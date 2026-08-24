@@ -49,6 +49,13 @@ impl SystemAttester {
             runtime_register: Arc::new(Mutex::new(MeasureRegister::new(MEASURE_REGISTER_PATH))),
         })
     }
+
+    #[cfg(test)]
+    fn new_with_measure_register_path(path: &str) -> Self {
+        Self {
+            runtime_register: Arc::new(Mutex::new(MeasureRegister::new(path))),
+        }
+    }
 }
 
 #[async_trait::async_trait]
@@ -82,6 +89,10 @@ impl Attester for SystemAttester {
             report_data: base64::engine::general_purpose::STANDARD.encode(report_data),
         };
         serde_json::to_value(evidence).context("Serialize system evidence failed")
+    }
+
+    fn supports_runtime_measurement(&self) -> bool {
+        true
     }
 
     async fn extend_runtime_measurement(
@@ -130,12 +141,26 @@ impl Attester for SystemAttester {
 #[cfg(test)]
 mod tests {
     use crate::{system::SystemAttester, Attester};
+    use kbs_types::HashAlgorithm;
 
     #[tokio::test]
     async fn test_system_get_evidence() {
-        let attester = SystemAttester::new().unwrap(); // Update for sync
+        let tempdir = tempfile::tempdir().unwrap();
+        let register_path = tempdir.path().join("system_measure_register");
+        let attester = SystemAttester::new_with_measure_register_path(
+            register_path.to_str().expect("temporary path is UTF-8"),
+        );
         let report_data: Vec<u8> = vec![0; 48];
-        let evidence = attester.get_evidence(report_data).await;
-        assert!(evidence.is_ok());
+        let evidence = attester.get_evidence(report_data).await.unwrap();
+        assert!(evidence.is_object());
+        assert!(attester.supports_runtime_measurement());
+
+        let initial = attester.get_runtime_measurement(0).await.unwrap();
+        attester
+            .extend_runtime_measurement(vec![1; HashAlgorithm::Sha384.digest_len()], 0)
+            .await
+            .unwrap();
+        let extended = attester.get_runtime_measurement(0).await.unwrap();
+        assert_ne!(initial, extended);
     }
 }
