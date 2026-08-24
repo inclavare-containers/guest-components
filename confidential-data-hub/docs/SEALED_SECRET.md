@@ -140,57 +140,37 @@ BASE64URL(UTF8(JWS Protected Header)) || '.
 We can leverage the ["kid"](https://datatracker.ietf.org/doc/html/rfc7515#section-4.1.4)
 field to specify the public key used to verify this signature.
 
-Signatures for secrets are not yet implemented, but sealed secrets are
-required to have a header and signature. A sealed secret should be of the form
+A public P-256 JWK, identified by a `kid`, must be available to verify the
+ES256 signature. The key can either be provisioned under
+`/run/confidential-containers/cdh/sealed-secret` or retrieved from OpenAnolis
+Trustee when the `kid` is a `kbs://` or `kbs+<plugin>://` Resource URI.
 
-`sealed`.`JWS header`.`JWS body (secret content)`.`signature`
-
-Since signature verification is not yet supported, dummy values
-can be used for the header and signature. A sealed secret could look like this.
-
-```
-secret=sealed.fakejwsheader.ewogICAgInZlcnNpb24iOiAiMC4xLjAiLAogICAgInR5cGUiOiAidmF1bHQiLAogICAgIm5hbWUiOiAia2JzOi8vL2RlZmF1bHQvc2VhbGVkLXNlY3JldC90ZXN0IiwKICAgICJwcm92aWRlciI6ICJrYnMiLAogICAgInByb3ZpZGVyX3NldHRpbmdzIjoge30sCiAgICAiYW5ub3RhdGlvbnMiOiB7fQp9Cg.fakesignature
-```
+Signature verification is enabled by default. During migration only, legacy
+fake-signed values can be accepted by setting
+`skip_sealed_secret_verification = true` in the CDH configuration (or
+`SKIP_SEALED_SECRET_VERIFICATION=true` in the environment). This disables the
+integrity check and should not be used for newly created secrets.
 
 ## Usage in CoCo
 
-You can create a Kubernetes secret from a sealed secret
-and Kata will automatically expose it to your workload.
-
-Start with a sealed secret such as
-```json
-{
-	"version": "0.1.0",
-	"type": "envelope",
-	"provider": "xxx",
-	"key_id": "xxx",
-	"encrypted_key": "ab27dc=",
-	"encrypted_data": "xxx",
-	"wrap_type": "A256GCM",
-	"iv": "xxx",
-	"provider_settings": {
-		...
-	},
-	"annotations": {
-		...
-	}
-}
-```
-
-Encode the payload in BASE64URL
-```
-ewoJInZlcnNpb24iOiAiMC4xLjAiLAoJInR5cGUiOiAiZW52ZWxvcGUiLAoJInByb3ZpZGVyIjogInh4eCIsCgkia2V5X2lkIjogInh4eCIsCgkiZW5jcnlwdGVkX2tleSI6ICJhYjI3ZGM9IiwgCgkiZW5jcnlwdGVkX2RhdGEiOiAieHh4IiwKCSJ3cmFwX3R5cGUiOiAiQTI1NkdDTSIsCgkiaXYiOiAieHh4IiwKCSJhbm5vdGF0aW9ucyI6IHsKCQkiY3J5cHRvX2NvbnRleHQiOiB7CgkJCSJhbGdvcml0aG0iOiAiQTI1NkdDTSIKCQl9LAoJCSJwcm92aWRlcl9zZXR0aW5nIjogewoJCQkia21zX2luc3RhbmNlX2lkIjogInh4eCIKCQl9Cgl9Cn0
-```
-Then add a prefix `sealed.` and JWS header and signature.
-
-```
-sealed.fakejwsheader.ewoJInZlcnNpb24iOiAiMC4xLjAiLAoJInR5cGUiOiAiZW52ZWxvcGUiLAoJInByb3ZpZGVyIjogInh4eCIsCgkia2V5X2lkIjogInh4eCIsCgkiZW5jcnlwdGVkX2tleSI6ICJhYjI3ZGM9IiwgCgkiZW5jcnlwdGVkX2RhdGEiOiAieHh4IiwKCSJ3cmFwX3R5cGUiOiAiQTI1NkdDTSIsCgkiaXYiOiAieHh4IiwKCSJhbm5vdGF0aW9ucyI6IHsKCQkiY3J5cHRvX2NvbnRleHQiOiB7CgkJCSJhbGdvcml0aG0iOiAiQTI1NkdDTSIKCQl9LAoJCSJwcm92aWRlcl9zZXR0aW5nIjogewoJCQkia21zX2luc3RhbmNlX2lkIjogInh4eCIKCQl9Cgl9Cn0.fakesignature
-```
-
-Create a Kubernetes secret
+The `secret` CLI creates signed sealed secrets. For example:
 
 ```bash
-kubectl create secret generic sealed-secret --from-literal='secret=sealed.fakejwsheader.ewoJInZlcnNpb24i...'
+cargo run -p confidential-data-hub --bin secret -- seal \
+    --signing-kid kbs:///default/sealed-signing/my-key \
+    --signing-jwk-path ./my-key-private.json \
+    vault \
+    --resource-uri kbs:///default/secret/my-value \
+    --provider kbs
+```
+
+Provision only the public JWK at the URI in `--signing-kid`. The private JWK
+must remain with the party creating the sealed secret.
+
+Create a Kubernetes secret from the signed output:
+
+```bash
+kubectl create secret generic sealed-secret --from-literal='secret=<sealed-secret>'
 ```
 
 Use this secret in a workload
@@ -213,4 +193,3 @@ Your secret will be provisioned to the `PROTECTED_SECRET` environment variable.
 | aliyun       	     |  [aliyun](kms-providers/alibaba.md)                               	| Alibaba                   |
 | ehsm       	     |  [ehsm](kms-providers/ehsm-kms.md)                              		| Intel                   	|
 | kbs                |                                                                          | CoCo                  |
-

@@ -1,6 +1,9 @@
 # The ttrpc sock of CDH that is used to listen to the requests
 socket = "unix:///run/confidential-containers/cdh.sock"
 
+# Legacy compatibility only. Keep false to verify sealed-secret JWS signatures.
+skip_sealed_secret_verification = false
+
 # The ttrpc socket CDH uses to obtain a passport token from AA.
 # The legacy top-level `aa_socket` setting is also accepted.
 [aa]

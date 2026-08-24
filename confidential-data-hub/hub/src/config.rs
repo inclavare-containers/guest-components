@@ -112,6 +112,11 @@ pub struct CdhConfig {
 
     pub socket: String,
 
+    /// Disable JWS verification only for migration from legacy fake-signed
+    /// sealed secrets. Verification is enabled by default.
+    #[serde(default)]
+    pub skip_sealed_secret_verification: bool,
+
     pub aa_socket: String,
 
     pub log: LogConfig,
@@ -129,6 +134,9 @@ struct RawCdhConfig {
 
     #[serde(default)]
     socket: Option<String>,
+
+    #[serde(default)]
+    skip_sealed_secret_verification: bool,
 
     /// Upstream configuration form.
     #[serde(default)]
@@ -160,6 +168,7 @@ impl From<RawCdhConfig> for CdhConfig {
             socket: raw
                 .socket
                 .unwrap_or_else(|| DEFAULT_CDH_SOCKET_ADDR.to_string()),
+            skip_sealed_secret_verification: raw.skip_sealed_secret_verification,
             aa_socket,
             log: raw.log,
         }
@@ -191,6 +200,7 @@ impl CdhConfig {
                     kbc: KbsConfig::new()?,
                     credentials: Vec::new(),
                     socket: DEFAULT_CDH_SOCKET_ADDR.into(),
+                    skip_sealed_secret_verification: false,
                     aa_socket: DEFAULT_AA_SOCKET_ADDR.into(),
                     image: ImageConfig::from_kernel_cmdline(),
                     log: LogConfig::default(),
@@ -272,6 +282,9 @@ impl CdhConfig {
         if let Some(kbs_cert) = &self.kbc.kbs_cert {
             env::set_var("KBS_CERT", kbs_cert);
         }
+        if self.skip_sealed_secret_verification {
+            env::set_var("SKIP_SEALED_SECRET_VERIFICATION", "true");
+        }
     }
 }
 
@@ -292,6 +305,7 @@ mod tests {
     #[case(
         r#"
 socket = "unix:///run/confidential-containers/cdh.sock"
+skip_sealed_secret_verification = true
 
 [log]
 level = "debug"
@@ -327,6 +341,7 @@ image_pull_proxy = "http://127.0.0.1:8080"
                 ..Default::default()
             },
             socket: "unix:///run/confidential-containers/cdh.sock".to_string(),
+            skip_sealed_secret_verification: true,
             aa_socket: DEFAULT_AA_SOCKET_ADDR.to_string(),
             log: LogConfig {
                 level: "debug".to_string(),
@@ -367,6 +382,7 @@ name = "offline_fs_kbc"
                 ..Default::default()
         },
         socket: DEFAULT_CDH_SOCKET_ADDR.to_string(),
+        skip_sealed_secret_verification: false,
         aa_socket: DEFAULT_AA_SOCKET_ADDR.to_string(),
         log: LogConfig::default(),
     })
@@ -395,6 +411,7 @@ some_undefined_field = "unknown value"
                 ..Default::default()
         },
         socket: DEFAULT_CDH_SOCKET_ADDR.to_string(),
+        skip_sealed_secret_verification: false,
         aa_socket: DEFAULT_AA_SOCKET_ADDR.to_string(),
         log: LogConfig::default(),
     })
@@ -471,8 +488,10 @@ name = "offline_fs_kbc"
     fn set_configuration_envs_sets_defaults_without_overriding_deployment_values() {
         let old_kbc_params = env::var_os("AA_KBC_PARAMS");
         let old_aa_socket = env::var_os("AA_SOCKET");
+        let old_skip_verification = env::var_os("SKIP_SEALED_SECRET_VERIFICATION");
         env::remove_var("AA_KBC_PARAMS");
         env::remove_var("AA_SOCKET");
+        env::remove_var("SKIP_SEALED_SECRET_VERIFICATION");
 
         let config = CdhConfig {
             kbc: KbsConfig {
@@ -483,6 +502,7 @@ name = "offline_fs_kbc"
             credentials: Vec::new(),
             image: ImageConfig::default(),
             socket: DEFAULT_CDH_SOCKET_ADDR.into(),
+            skip_sealed_secret_verification: true,
             aa_socket: "unix:///run/custom/config-aa.sock".into(),
             log: LogConfig::default(),
         };
@@ -496,6 +516,7 @@ name = "offline_fs_kbc"
             env::var("AA_SOCKET").unwrap(),
             "unix:///run/custom/config-aa.sock"
         );
+        assert_eq!(env::var("SKIP_SEALED_SECRET_VERIFICATION").unwrap(), "true");
 
         env::set_var("AA_KBC_PARAMS", "deployment_kbc::http://kbs.example");
         env::set_var("AA_SOCKET", "unix:///run/custom/deployment-aa.sock");
@@ -517,6 +538,10 @@ name = "offline_fs_kbc"
             Some(value) => env::set_var("AA_SOCKET", value),
             None => env::remove_var("AA_SOCKET"),
         }
+        match old_skip_verification {
+            Some(value) => env::set_var("SKIP_SEALED_SECRET_VERIFICATION", value),
+            None => env::remove_var("SKIP_SEALED_SECRET_VERIFICATION"),
+        }
     }
 
     #[test]
@@ -534,6 +559,7 @@ name = "offline_fs_kbc"
             },
             credentials: Vec::new(),
             socket: DEFAULT_CDH_SOCKET_ADDR.into(),
+            skip_sealed_secret_verification: false,
             aa_socket: DEFAULT_AA_SOCKET_ADDR.into(),
             image: ImageConfig::from_kernel_cmdline(),
             log: LogConfig::default(),
