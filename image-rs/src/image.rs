@@ -3,7 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use anyhow::{bail, Context, Result};
-use log::info;
+use log::{info, warn};
+use oci_client::client::{Certificate, CertificateEncoding, ClientConfig, ClientProtocol};
 use oci_client::manifest::{OciDescriptor, OciImageManifest};
 use oci_client::secrets::RegistryAuth;
 use oci_client::Reference;
@@ -21,6 +22,7 @@ use crate::config::{ImageConfig, CONFIGURATION_FILE_NAME, DEFAULT_WORK_DIR};
 use crate::decoder::Compression;
 use crate::meta_store::{MetaStore, METAFILE};
 use crate::pull::PullClient;
+use crate::registry::RegistryHandler;
 use crate::signature::SignatureValidator;
 use crate::snapshots::{SnapshotType, Snapshotter};
 
@@ -73,6 +75,22 @@ pub struct ImageMeta {
     pub layer_metas: Vec<LayerMeta>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum TaskType {
+    Origininal,
+    Remapped,
+    Mirror,
+    UnqualifiedSearch,
+}
+
+/// One concrete source to try for an image pull.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ImagePullTask {
+    pub image_reference: Reference,
+    pub use_http: bool,
+    pub task_type: TaskType,
+}
+
 /// The`image-rs` client will support OCI image
 /// pulling, image signing verfication, image layer
 /// decryption/unpack/store and management.
@@ -84,6 +102,9 @@ pub struct ImageClient {
     /// it is used to filter image pull requests against a
     /// policy
     pub(crate) signature_validator: Option<SignatureValidator>,
+
+    /// Registry blocking, remapping, mirror, and unqualified-search rules.
+    pub(crate) registry_handler: Option<RegistryHandler>,
 
     /// The metadata database for `image-rs` client.
     pub(crate) meta_store: Arc<RwLock<MetaStore>>,
@@ -108,6 +129,7 @@ impl Default for ImageClient {
             meta_store: Arc::new(RwLock::new(meta_store)),
             snapshots,
             signature_validator: None,
+            registry_handler: None,
             config,
         }
     }
@@ -160,6 +182,7 @@ impl ImageClient {
             snapshots,
             registry_auth: None,
             signature_validator: None,
+            registry_handler: None,
             config,
         }
     }
@@ -185,6 +208,46 @@ impl ImageClient {
     ) -> Result<String> {
         let reference = Reference::try_from(image_url)?;
 
+        let tasks = match &self.registry_handler {
+            Some(handler) => handler.process(reference)?,
+            None => vec![ImagePullTask {
+                image_reference: reference,
+                use_http: false,
+                task_type: TaskType::Origininal,
+            }],
+        };
+
+        let mut tried_images_and_errors = Vec::new();
+        for task in tasks {
+            let task_image_url = task.image_reference.to_string();
+            match self
+                .pull_task(task, bundle_dir, auth_info, decrypt_config)
+                .await
+            {
+                Ok(image_id) => return Ok(image_id),
+                Err(error) => {
+                    warn!("failed to pull {image_url} from {task_image_url}: {error:#}");
+                    tried_images_and_errors
+                        .push(format!("image: {task_image_url}, error: {error:#}"));
+                }
+            }
+        }
+
+        bail!(
+            "failed to pull image {image_url} from all configured locations:\n{}",
+            tried_images_and_errors.join("\n")
+        )
+    }
+
+    async fn pull_task(
+        &mut self,
+        task: ImagePullTask,
+        bundle_dir: &Path,
+        auth_info: &Option<&str>,
+        decrypt_config: &Option<&str>,
+    ) -> Result<String> {
+        let image_url = task.image_reference.to_string();
+
         // Try to find a valid registry auth. Logic order
         // 1. the input parameter
         // 2. from self.registry_auth
@@ -197,7 +260,11 @@ impl ImageClient {
                 None => bail!("Invalid authentication info ({:?})", auth_info),
             },
             None => match &self.registry_auth {
-                Some(registry_auth) => registry_auth.credential_for_reference(&reference).await?,
+                Some(registry_auth) => {
+                    registry_auth
+                        .credential_for_reference(&task.image_reference)
+                        .await?
+                }
                 None => {
                     info!("Use Anonymous image registry auth");
                     RegistryAuth::Anonymous
@@ -205,14 +272,31 @@ impl ImageClient {
             },
         };
 
+        let mut client_config = ClientConfig::default();
+        if task.use_http {
+            client_config.protocol = ClientProtocol::Http;
+        }
+        if let Some(proxy) = self.config.effective_proxy_config() {
+            client_config.https_proxy = proxy.https_proxy;
+            client_config.http_proxy = proxy.http_proxy;
+            client_config.no_proxy = proxy.no_proxy;
+        }
+        client_config.extra_root_certificates.extend(
+            self.config
+                .extra_root_certificates
+                .iter()
+                .map(|pem| Certificate {
+                    encoding: CertificateEncoding::Pem,
+                    data: pem.as_bytes().to_vec(),
+                }),
+        );
+
         let mut client = PullClient::new(
-            reference,
+            task.image_reference,
             &self.config.work_dir.join("layers"),
             &auth,
             self.config.max_concurrent_layer_downloads_per_image,
-            self.config.skip_proxy_ips.as_deref(),
-            self.config.image_pull_proxy.as_deref(),
-            self.config.extra_root_certificates.clone(),
+            client_config,
         )?;
         let (image_manifest, image_digest, image_config) = client.pull_manifest().await?;
 
@@ -240,14 +324,14 @@ impl ImageClient {
             #[cfg(feature = "signature")]
             if let Some(signature_validator) = &self.signature_validator {
                 signature_validator
-                    .check_image_signature(image_url, &image_digest, &auth)
+                    .check_image_signature(&image_url, &image_digest, &auth)
                     .await
                     .context("image security validation failed")?;
             }
 
             let (mut image_data, _, _) = create_image_meta(
                 &id,
-                image_url,
+                &image_url,
                 &image_manifest,
                 &image_digest,
                 &image_config,
@@ -275,14 +359,14 @@ impl ImageClient {
         #[cfg(feature = "signature")]
         if let Some(signature_validator) = &self.signature_validator {
             signature_validator
-                .check_image_signature(image_url, &image_digest, &auth)
+                .check_image_signature(&image_url, &image_digest, &auth)
                 .await
                 .context("image security validation failed")?;
         }
 
         let (mut image_data, unique_layers, unique_diff_ids) = create_image_meta(
             &id,
-            image_url,
+            &image_url,
             &image_manifest,
             &image_digest,
             &image_config,

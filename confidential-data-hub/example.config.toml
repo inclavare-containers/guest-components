@@ -97,6 +97,8 @@ max_concurrent_layer_downloads_per_image = 3
 #
 # By default this value is not set.
 sigstore_config_uri = "kbs:///default/sigstore-config/test"
+# The config can alternatively be embedded as a string in `sigstore_config`.
+# If both are set, `sigstore_config_uri` takes precedence.
 
 # If any image security policy would be used to control the image pulling
 # like signature verification, this field is used to set the URI of the
@@ -115,6 +117,8 @@ sigstore_config_uri = "kbs:///default/sigstore-config/test"
 #
 # By default this value is not set.
 image_security_policy_uri = "kbs:///default/security-policy/test"
+# The policy can alternatively be embedded as a JSON string in
+# `image_security_policy`. If both are set, the URI takes precedence.
 
 # If any credential auth (Base) would be used to connect to download
 # image from private registry, this field is used to set the URI of the
@@ -132,20 +136,17 @@ image_security_policy_uri = "kbs:///default/security-policy/test"
 # is set, the value of the environment variable will be used.
 authenticated_registry_credentials_uri = "kbs:///default/credential/test"
 
-# Proxy that will be used to pull image
-#
-# By default this value is not set.
-image_pull_proxy = "http://127.0.0.1:5432"
+# Registry rules can be loaded from a local or KBS resource URI. They support
+# blocking, mirrors, remapping, insecure HTTP registries and unqualified search.
+# An inline `[image.registry_config]` table takes precedence over this URI.
+registry_configuration_uri = "kbs:///default/registries/config"
 
-# No proxy env that will be used to pull image.
-#
-# This will ensure that when we access the image registry with specified
-# IPs, the `image_pull_proxy` will not be used.
-#
-# If `image_pull_proxy` is not set, this field will do nothing.
+# Structured proxy settings used for image and signature registry requests.
+# The old `image_pull_proxy = "http://..."` form remains accepted as an HTTPS
+# proxy, and the old `skip_proxy_ips` field remains accepted as no_proxy.
 #
 # By default this value is not set.
-skip_proxy_ips = "192.168.0.1,localhost"
+image_pull_proxy = { https_proxy = "http://127.0.0.1:5432", http_proxy = "http://127.0.0.1:5432", no_proxy = "192.168.0.1,localhost" }
 
 # To support registries with self signed certs. This config item
 # is used to add extra trusted root certifications. The certificates

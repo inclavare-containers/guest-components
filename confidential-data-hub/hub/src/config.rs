@@ -293,7 +293,7 @@ mod tests {
     use std::{env, io::Write};
 
     use anyhow::anyhow;
-    use image_rs::config::ImageConfig;
+    use image_rs::config::{ImageConfig, ProxyConfig};
     use rstest::rstest;
 
     use crate::{
@@ -335,7 +335,11 @@ image_pull_proxy = "http://127.0.0.1:8080"
                 sigstore_config_uri: Some("kbs:///default/sigstore-config/test".to_string()),
                 image_security_policy_uri: Some("kbs:///default/security-policy/test".to_string()),
                 authenticated_registry_credentials_uri: Some("kbs:///default/credential/test".to_string()),
-                image_pull_proxy: Some("http://127.0.0.1:8080".into()),
+                image_pull_proxy: Some(ProxyConfig {
+                    https_proxy: Some("http://127.0.0.1:8080".into()),
+                    http_proxy: None,
+                    no_proxy: None,
+                }),
                 skip_proxy_ips: None,
                 extra_root_certificates: vec!["cert1".into(), "cert2".into()],
                 ..Default::default()
@@ -428,6 +432,12 @@ some_undefined_field = "unknown value"
             Some(cfg) => assert_eq!(cfg, res.unwrap()),
             None => assert!(res.is_err()),
         }
+    }
+
+    #[test]
+    fn example_config_is_valid() {
+        let path = format!("{}/../example.config.toml", env!("CARGO_MANIFEST_DIR"));
+        CdhConfig::from_file(&path).unwrap();
     }
 
     #[rstest]

@@ -16,7 +16,7 @@ pub use policy::Policy;
 use anyhow::{bail, Context, Result};
 use oci_client::secrets::RegistryAuth;
 
-use crate::resource::ResourceProvider;
+use crate::{config::ProxyConfig, resource::ResourceProvider};
 
 /// Image security config dir contains important information such as
 /// security policy configuration file and signature verification configuration file.
@@ -27,8 +27,7 @@ pub struct SignatureValidator {
 
     resource_provider: Arc<ResourceProvider>,
 
-    no_proxy: Option<String>,
-    https_proxy: Option<String>,
+    proxy_config: Option<ProxyConfig>,
 
     #[cfg(feature = "signature-simple")]
     simple_signing_sigstore_config: Option<policy::SigstoreConfig>,
@@ -112,8 +111,7 @@ impl SignatureValidator {
         policy: &[u8],
         _simple_signing_sigstore_config: Option<Vec<u8>>,
         workdir: &Path,
-        no_proxy: Option<String>,
-        https_proxy: Option<String>,
+        proxy_config: Option<ProxyConfig>,
         certificates: Vec<String>,
         resource_provider: Arc<ResourceProvider>,
     ) -> Result<Self> {
@@ -150,8 +148,7 @@ impl SignatureValidator {
         Ok(Self {
             policy,
             resource_provider,
-            no_proxy,
-            https_proxy,
+            proxy_config,
             certificates,
             #[cfg(feature = "signature-simple")]
             simple_signing_sigstore_config,
