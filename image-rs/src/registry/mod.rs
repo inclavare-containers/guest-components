@@ -189,11 +189,11 @@ impl RegistryHandler {
             };
         }
 
-        let Some(mut pos) = reference.find(prefix) else {
+        if !reference.starts_with(prefix) {
             return MatchResult::Unmatched;
-        };
+        }
 
-        pos += prefix.len();
+        let pos = prefix.len();
         if pos == reference.len() {
             return MatchResult::Matched { length: pos };
         }
@@ -287,7 +287,11 @@ impl RegistryHandler {
             }
             // If no remapping task, original task
             else {
-                tasks.push(task);
+                tasks.push(ImagePullTask {
+                    image_reference: task.image_reference,
+                    use_http: registry_rule.insecure,
+                    task_type: task.task_type,
+                });
             }
         }
 
@@ -364,6 +368,10 @@ location = "example-mirror-1.local/mirrors/foo"
 insecure = true
 
 [[registry]]
+prefix = "http.example.com"
+insecure = true
+
+[[registry]]
 location = "docker.io"
 
 [[registry.mirror]]
@@ -399,6 +407,38 @@ location = "123456.mirror.aliyuncs.com"
         let reference = Reference::from_str(reference).unwrap();
         let result = registry_handler.process(reference);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn registry_prefix_must_match_from_the_start() {
+        let registry_handler = registry_handler();
+        let reference = Reference::from_str("notexample.com/foo/image:tag").unwrap();
+        let result = registry_handler.process(reference.clone()).unwrap();
+
+        assert_eq!(
+            result,
+            vec![ImagePullTask {
+                image_reference: reference,
+                use_http: false,
+                task_type: TaskType::Origininal,
+            }]
+        );
+    }
+
+    #[test]
+    fn insecure_registry_without_remapping_uses_http() {
+        let registry_handler = registry_handler();
+        let reference = Reference::from_str("http.example.com/foo:tag").unwrap();
+        let result = registry_handler.process(reference.clone()).unwrap();
+
+        assert_eq!(
+            result,
+            vec![ImagePullTask {
+                image_reference: reference,
+                use_http: true,
+                task_type: TaskType::Origininal,
+            }]
+        );
     }
 
     #[test]
