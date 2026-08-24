@@ -21,7 +21,11 @@ use log::info;
 use sha2::{Digest, Sha256};
 use tokio::fs;
 
-#[cfg(feature = "keywrap-grpc")]
+#[cfg(all(
+    feature = "keywrap-grpc",
+    not(feature = "keywrap-ttrpc"),
+    not(feature = "keywrap-native")
+))]
 mod grpc;
 
 #[cfg(feature = "keywrap-ttrpc")]

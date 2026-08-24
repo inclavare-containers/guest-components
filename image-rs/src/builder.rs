@@ -12,6 +12,7 @@ use crate::{
     auth::Auth,
     config::{ImageConfig, NydusConfig},
     image::ImageClient,
+    layer_store::LayerStore,
     meta_store::{MetaStore, METAFILE},
     registry::RegistryHandler,
     resource::ResourceProvider,
@@ -84,6 +85,7 @@ impl ClientBuilder {
 
         let registry_auth = match &self.config.authenticated_registry_credentials_uri {
             Some(uri) => {
+                info!("getting registry auth from {uri} ...");
                 let auth_bytes = resource_provider.get_resource(uri).await?;
                 let auth = Auth::new(&auth_bytes)?;
                 Some(auth)
@@ -93,6 +95,7 @@ impl ClientBuilder {
 
         let sigstore_config = match &self.config.sigstore_config_uri {
             Some(uri) => {
+                info!("getting simple-signing sigstore configuration from {uri} ...");
                 let cfg_bytes = resource_provider.get_resource(uri).await?;
                 Some(cfg_bytes)
             }
@@ -105,6 +108,7 @@ impl ClientBuilder {
 
         let policy = match &self.config.image_security_policy_uri {
             Some(uri) => {
+                info!("getting image security policy from {uri} ...");
                 let policy_bytes = resource_provider.get_resource(uri).await?;
                 Some(policy_bytes)
             }
@@ -136,6 +140,7 @@ impl ClientBuilder {
         let registry_handler = if let Some(config) = &self.config.registry_config {
             Some(RegistryHandler::new(config.clone())?)
         } else if let Some(uri) = &self.config.registry_configuration_uri {
+            info!("getting registry configuration from {uri} ...");
             let registry_configuration = resource_provider.get_resource(uri).await?;
             Some(RegistryHandler::from_vec(registry_configuration)?)
         } else {
@@ -154,6 +159,8 @@ impl ClientBuilder {
         };
 
         let snapshots = ImageClient::init_snapshots(&self.config.work_dir, &meta_store);
+        let layer_store = LayerStore::new(self.config.work_dir.clone())?;
+        info!("image work directory: {:?}", self.config.work_dir);
 
         let meta_store = Arc::new(RwLock::new(meta_store));
 
@@ -164,6 +171,7 @@ impl ClientBuilder {
             meta_store,
             snapshots,
             config: self.config,
+            layer_store,
         })
     }
 }

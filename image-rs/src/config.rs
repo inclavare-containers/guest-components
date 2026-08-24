@@ -14,7 +14,7 @@ use crate::snapshots::SnapshotType;
 
 /// By default use a work dir in `/run` because for confidential guests `/run`
 /// is typically in a `tmpfs` which is backed by encrypted memory.
-pub const DEFAULT_WORK_DIR: &str = "/run/image-rs/";
+pub const DEFAULT_WORK_DIR: &str = "/run/kata-containers/image/";
 
 /// Default path to policy file in KBS or locally
 pub const POLICY_FILE_PATH: &str = "kbs:///default/security-policy/test";
@@ -662,7 +662,7 @@ mod tests {
             .unwrap();
 
         let config = ImageConfig::try_from(config_file.as_path()).unwrap();
-        let work_dir = PathBuf::from(DEFAULT_WORK_DIR);
+        let work_dir = PathBuf::from("/run/image-rs/");
 
         assert_eq!(config.work_dir, work_dir);
         assert_eq!(config.default_snapshot, SnapshotType::Overlay);
@@ -737,7 +737,7 @@ mod tests {
             .unwrap();
 
         let config = ImageConfig::try_from(config_file.as_path()).unwrap();
-        let work_dir = PathBuf::from(DEFAULT_WORK_DIR);
+        let work_dir = PathBuf::from("/run/image-rs/");
 
         assert_eq!(config.work_dir, work_dir);
         assert_eq!(config.default_snapshot, SnapshotType::Overlay);

@@ -15,7 +15,6 @@ use sigstore::{
         verification_constraint::{PublicKeyVerifier, VerificationConstraintVec},
         verify_constraints, ClientBuilder, CosignCapabilities,
     },
-    crypto::SigningScheme,
     errors::SigstoreVerifyConstraintsError,
     registry::{Auth, OciReference},
 };
@@ -31,6 +30,25 @@ use crate::{resource::ResourceProvider, signature::SignatureValidator};
 
 use super::CosignParameters;
 
+fn validate_manifest_digest(payload: &SigPayload, image: &Image) -> Result<()> {
+    if payload
+        .validate_signed_docker_manifest_digest(&image.manifest_digest.to_string())
+        .is_ok()
+    {
+        return Ok(());
+    }
+
+    if let Some(manifest_list_digest) = &image.manifest_list_digest {
+        payload.validate_signed_docker_manifest_digest(&manifest_list_digest.to_string())
+    } else {
+        bail!("Manifest digest does not match signature.")
+    }
+}
+
+fn strip_signature_newlines(signature: &str) -> String {
+    signature.replace(['\n', '\r'], "")
+}
+
 impl SignatureValidator {
     /// Judge whether an image is allowed by this SignScheme.
     pub(crate) async fn cosign_allows_image(
@@ -41,11 +59,11 @@ impl SignatureValidator {
     ) -> Result<()> {
         parameter
             .check_image_signature(
-                self.resource_provider.clone(),
+                self._resource_provider.clone(),
                 image,
                 auth,
                 self.certificates.iter().collect(),
-                self.proxy_config.as_ref(),
+                self._proxy_config.as_ref(),
             )
             .await
     }
@@ -82,7 +100,7 @@ impl CosignParameters {
                 payload.validate_signed_docker_reference(&image.reference, rule)?;
             }
 
-            payload.validate_signed_docker_manifest_digest(&image.manifest_digest.to_string())?;
+            validate_manifest_digest(&payload, image)?;
         }
 
         Ok(())
@@ -148,9 +166,20 @@ impl CosignParameters {
             .trusted_signature_layers(&auth, &source_image_digest, &cosign_image)
             .await?;
 
-        // By default, the hashing algorithm is SHA256
-        let pub_key_verifier =
-            PublicKeyVerifier::new(&key, &SigningScheme::ECDSA_P256_SHA256_ASN1)?;
+        // Some cosign implementations leave newlines in the signature. Strip these out.
+        let signature_layers: Vec<sigstore::cosign::SignatureLayer> = signature_layers
+            .iter()
+            .map(|layer| {
+                let mut cleaned = layer.clone();
+                if let Some(signature) = &cleaned.signature {
+                    cleaned.signature = Some(strip_signature_newlines(signature));
+                }
+                cleaned
+            })
+            .collect();
+
+        let pub_key_verifier = PublicKeyVerifier::try_from(key.as_slice())
+            .map_err(|e| anyhow!("failed to build public key verifier: {e}"))?;
 
         let verification_constraints: VerificationConstraintVec = vec![Box::new(pub_key_verifier)];
 
@@ -181,8 +210,12 @@ mod tests {
     };
 
     use oci_client::Reference;
+    use rsa::pkcs8::{EncodePublicKey, LineEnding};
+    use rsa::rand_core::OsRng;
+    use rsa::RsaPrivateKey;
     use rstest::rstest;
     use serial_test::serial;
+    use sigstore::crypto::SigningScheme;
 
     // All the test images are the same image, but different
     // registry and repository
@@ -192,6 +225,66 @@ mod tests {
 
     fn live_cosign_tests_enabled() -> bool {
         std::env::var_os(LIVE_COSIGN_TESTS_ENV).is_some()
+    }
+
+    #[test]
+    fn signature_newlines_are_removed() {
+        assert_eq!(strip_signature_newlines("YWJj\r\nZGVm\n"), "YWJjZGVm");
+    }
+
+    #[test]
+    fn ecdsa_fixture_pubkey_is_detected() {
+        let key = std::fs::read(format!(
+            "{}/test_data/signature/cosign/cosign1.pub",
+            std::env::current_dir().unwrap().display()
+        ))
+        .unwrap();
+        assert!(PublicKeyVerifier::try_from(key.as_slice()).is_ok());
+    }
+
+    #[test]
+    fn rsa_pubkey_is_detected_without_forcing_ecdsa() {
+        let private_key = RsaPrivateKey::new(&mut OsRng, 2048).unwrap();
+        let pem = private_key
+            .to_public_key()
+            .to_public_key_pem(LineEnding::LF)
+            .unwrap();
+
+        assert!(
+            PublicKeyVerifier::new(pem.as_bytes(), &SigningScheme::ECDSA_P256_SHA256_ASN1).is_err()
+        );
+        assert!(PublicKeyVerifier::try_from(pem.as_bytes()).is_ok());
+    }
+
+    #[test]
+    fn manifest_list_digest_is_used_for_multi_arch_signature() {
+        let payload: SigPayload = serde_json::from_str(
+            r#"{
+                "critical": {
+                    "identity": {"docker-reference": "example.com/test:latest"},
+                    "image": {"docker-manifest-digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+                    "type": "cosign container image signature"
+                },
+                "optional": null
+            }"#,
+        )
+        .unwrap();
+        let mut image =
+            Image::default_with_reference(Reference::try_from("example.com/test:latest").unwrap());
+        image
+            .set_manifest_digest(
+                "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            )
+            .unwrap();
+        image
+            .set_manifest_list_digest(
+                "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            )
+            .unwrap();
+
+        assert!(validate_manifest_digest(&payload, &image).is_ok());
+        image.manifest_list_digest = None;
+        assert!(validate_manifest_digest(&payload, &image).is_err());
     }
 
     #[rstest]

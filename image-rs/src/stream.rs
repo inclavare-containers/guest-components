@@ -88,7 +88,7 @@ async fn async_processing(
         tokio::fs::remove_dir_all(destination.as_path())
             .await
             .context("Failed to roll back when unpacking")?;
-        return Err(e);
+        return Err(e.into());
     }
 
     Ok(hash_reader.hasher.digest_finalize())
@@ -114,8 +114,8 @@ mod tests {
         let mut header = Header::new_gnu();
         header.set_size(100000);
         header.set_cksum();
-        header.set_uid(0);
-        header.set_gid(0);
+        header.set_uid(nix::unistd::Uid::effective().as_raw() as u64);
+        header.set_gid(nix::unistd::Gid::effective().as_raw() as u64);
         ar.append_data(&mut header, "file.txt", data.as_slice())
             .await
             .unwrap();
@@ -157,8 +157,8 @@ mod tests {
         let mut header = Header::new_gnu();
         header.set_size(100000);
         header.set_cksum();
-        header.set_uid(0);
-        header.set_gid(0);
+        header.set_uid(nix::unistd::Uid::effective().as_raw() as u64);
+        header.set_gid(nix::unistd::Gid::effective().as_raw() as u64);
         ar.append_data(&mut header, "file.txt", data.as_slice())
             .await
             .unwrap();
@@ -191,5 +191,24 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(layer_digest, layer_digest_new);
+    }
+
+    #[tokio::test]
+    async fn test_stream_processing_propagates_unpack_failure() {
+        let invalid_tar = vec![0xff; 512];
+        let layer_digest = format!(
+            "{}{:x}",
+            DIGEST_SHA256_PREFIX,
+            sha2::Sha256::digest(invalid_tar.as_slice())
+        );
+        let tempdir = tempfile::tempdir().unwrap();
+        let destination = tempdir.path().join("broken-layer");
+
+        let error = stream_processing(invalid_tar.as_slice(), &layer_digest, &destination)
+            .await
+            .unwrap_err();
+
+        assert!(format!("{error:#}").contains("Failed to read entries from the tar"));
+        assert!(!destination.exists(), "failed layer must be rolled back");
     }
 }

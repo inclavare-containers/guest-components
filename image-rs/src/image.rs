@@ -20,6 +20,7 @@ use crate::auth::Auth;
 use crate::bundle::{create_runtime_config, BUNDLE_ROOTFS};
 use crate::config::{ImageConfig, CONFIGURATION_FILE_NAME, DEFAULT_WORK_DIR};
 use crate::decoder::Compression;
+use crate::layer_store::LayerStore;
 use crate::meta_store::{MetaStore, METAFILE};
 use crate::pull::PullClient;
 use crate::registry::RegistryHandler;
@@ -124,6 +125,9 @@ pub struct ImageClient {
 
     /// The config
     pub(crate) config: ImageConfig,
+
+    /// Allocator for unique unpacked-layer locations.
+    pub(crate) layer_store: LayerStore,
 }
 
 impl Default for ImageClient {
@@ -134,6 +138,7 @@ impl Default for ImageClient {
             .unwrap_or_default();
         let meta_store = MetaStore::try_from(work_dir.join(METAFILE).as_path()).unwrap_or_default();
         let snapshots = Self::init_snapshots(&config.work_dir, &meta_store);
+        let layer_store = LayerStore::new(config.work_dir.clone()).unwrap_or_default();
         ImageClient {
             registry_auth: None,
             meta_store: Arc::new(RwLock::new(meta_store)),
@@ -141,6 +146,7 @@ impl Default for ImageClient {
             signature_validator: None,
             registry_handler: None,
             config,
+            layer_store,
         }
     }
 }
@@ -148,14 +154,15 @@ impl Default for ImageClient {
 impl ImageClient {
     ///Initialize metadata database and supported snapshots.
     pub fn init_snapshots(
-        work_dir: &Path,
+        _work_dir: &Path,
         _meta_store: &MetaStore,
     ) -> HashMap<SnapshotType, Box<dyn Snapshotter>> {
+        #[allow(unused_mut)]
         let mut snapshots = HashMap::new();
 
         #[cfg(feature = "snapshot-overlayfs")]
         {
-            let data_dir = work_dir.join(SnapshotType::Overlay.to_string());
+            let data_dir = _work_dir.join(SnapshotType::Overlay.to_string());
             let overlayfs = OverlayFs::new(data_dir);
             snapshots.insert(
                 SnapshotType::Overlay,
@@ -169,7 +176,7 @@ impl ImageClient {
                 .get(&SnapshotType::OcclumUnionfs.to_string())
                 .unwrap_or(&0);
             let occlum_unionfs = Unionfs {
-                data_dir: work_dir.join(SnapshotType::OcclumUnionfs.to_string()),
+                data_dir: _work_dir.join(SnapshotType::OcclumUnionfs.to_string()),
                 index: std::sync::atomic::AtomicUsize::new(*occlum_unionfs_index),
             };
             snapshots.insert(
@@ -186,6 +193,7 @@ impl ImageClient {
             .unwrap_or_else(|_| ImageConfig::new(work_dir.clone()));
         let meta_store = MetaStore::try_from(work_dir.join(METAFILE).as_path()).unwrap_or_default();
         let snapshots = Self::init_snapshots(&config.work_dir, &meta_store);
+        let layer_store = LayerStore::new(config.work_dir.clone()).unwrap_or_default();
 
         Self {
             meta_store: Arc::new(RwLock::new(meta_store)),
@@ -194,6 +202,7 @@ impl ImageClient {
             signature_validator: None,
             registry_handler: None,
             config,
+            layer_store,
         }
     }
 
@@ -303,12 +312,13 @@ impl ImageClient {
 
         let mut client = PullClient::new(
             task.image_reference,
-            &self.config.work_dir.join("layers"),
+            self.layer_store.clone(),
             &auth,
             self.config.max_concurrent_layer_downloads_per_image,
             client_config,
         )?;
-        let (image_manifest, image_digest, image_config) = client.pull_manifest().await?;
+        let (image_manifest, image_digest, image_config, manifest_list_digest) =
+            client.pull_manifest().await?;
 
         let id = image_manifest.config.digest.clone();
 
@@ -336,10 +346,14 @@ impl ImageClient {
                 }
             }
 
-            #[cfg(feature = "signature")]
             if let Some(signature_validator) = &self.signature_validator {
                 signature_validator
-                    .check_image_signature(&image_url, &image_digest, &auth)
+                    .check_image_signature(
+                        &image_url,
+                        &image_digest,
+                        manifest_list_digest.as_deref(),
+                        &auth,
+                    )
                     .await
                     .context("image security validation failed")?;
             }
@@ -379,10 +393,14 @@ impl ImageClient {
             }
         }
 
-        #[cfg(feature = "signature")]
         if let Some(signature_validator) = &self.signature_validator {
             signature_validator
-                .check_image_signature(&image_url, &image_digest, &auth)
+                .check_image_signature(
+                    &image_url,
+                    &image_digest,
+                    manifest_list_digest.as_deref(),
+                    &auth,
+                )
                 .await
                 .context("image security validation failed")?;
         }
@@ -662,6 +680,14 @@ mod tests {
     #[cfg(feature = "nydus")]
     #[tokio::test]
     async fn test_nydus_image() {
+        if !live_image_pull_tests_enabled() {
+            eprintln!(
+                "skipping live image pull test; set {}=1 to run it",
+                LIVE_IMAGE_PULL_TESTS_ENV
+            );
+            return;
+        }
+
         let work_dir = tempfile::tempdir().unwrap();
 
         let nydus_images = [
@@ -695,6 +721,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_image_reuse() {
+        if !live_image_pull_tests_enabled() {
+            eprintln!(
+                "skipping live image pull test; set {}=1 to run it",
+                LIVE_IMAGE_PULL_TESTS_ENV
+            );
+            return;
+        }
+
         let work_dir = tempfile::tempdir().unwrap();
 
         let image = "mcr.microsoft.com/hello-world";
@@ -732,6 +766,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_meta_store_reuse() {
+        if !live_image_pull_tests_enabled() {
+            eprintln!(
+                "skipping live image pull test; set {}=1 to run it",
+                LIVE_IMAGE_PULL_TESTS_ENV
+            );
+            return;
+        }
+
         let work_dir = tempfile::tempdir().unwrap();
 
         let image = "mcr.microsoft.com/hello-world";

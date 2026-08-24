@@ -191,5 +191,5 @@ oLSG2dLCK9mjjraPjau34Q==
 
 # The path to store the pulled image layer data.
 #
-# This value defaults to `/run/image-rs/`.
-work_dir = "/run/image-rs"
+# This value defaults to `/run/kata-containers/image/`.
+work_dir = "/run/kata-containers/image"

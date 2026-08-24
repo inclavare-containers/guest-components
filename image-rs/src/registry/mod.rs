@@ -173,7 +173,7 @@ impl RegistryHandler {
                 return MatchResult::Unmatched;
             };
 
-            if reference[..pos].contains("/") {
+            if reference[..pos].contains('/') {
                 return MatchResult::Unmatched;
             }
 
