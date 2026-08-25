@@ -424,7 +424,7 @@ impl Attester for HygonTpmAttester {
                     }
                 }
                 Result::Err(e) => {
-                    log::warn!("{}; fallback to new AK", e);
+                    log::warn!("{e}; fallback to new AK");
                 }
             }
         }
@@ -442,7 +442,7 @@ impl Attester for HygonTpmAttester {
         let eventlog = match std::fs::read(TPM_EVENTLOG_FILE_PATH) {
             Result::Ok(el) => Some(engine.encode(el)),
             Result::Err(e) => {
-                log::warn!("Read TPM eventlog failed: {:?}", e);
+                log::warn!("Read TPM eventlog failed: {e:?}");
                 None
             }
         };
@@ -458,7 +458,7 @@ impl Attester for HygonTpmAttester {
         };
 
         serde_json::to_value(evidence)
-            .map_err(|e| anyhow!("Serialize Hygon TPM evidence failed: {:?}", e))
+            .map_err(|e| anyhow!("Serialize Hygon TPM evidence failed: {e:?}"))
     }
 
     fn supports_runtime_measurement(&self) -> bool {

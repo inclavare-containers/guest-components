@@ -28,7 +28,7 @@ pub async fn get_instance_info(instance_type: &str) -> Result<String> {
             let aliyun_eas = aliyun_eas::AliyunEasInfo {};
             aliyun_eas.get_instance_info().await
         }
-        _ => bail!("Unsupported instance type: {}", instance_type),
+        _ => bail!("Unsupported instance type: {instance_type}"),
     }
 }
 

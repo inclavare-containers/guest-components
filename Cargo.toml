@@ -45,7 +45,7 @@ jwt-simple = { version = "0.12", default-features = false, features = [
 kbs-types = { git = "https://github.com/inclavare-containers/kbs-types.git", rev = "8e36434" }
 lazy_static = "1.5.0"
 log = "0.4.22"
-nix = "0.29"
+nix = { version = "0.29", default-features = false }
 openssl = "0.10"
 prost = "0.13"
 protobuf = "=3.5.1"

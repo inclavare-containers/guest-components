@@ -53,8 +53,8 @@ async fn main() -> Result<()> {
     let url = cli.url;
     let cert_file = cli.cert_file;
 
-    debug!("url {}", url);
-    debug!("cert_file {:?}", cert_file);
+    debug!("url {url}");
+    debug!("cert_file {cert_file:?}");
 
     // Native evidence provider
     let evidence_provider = Box::new(NativeEvidenceProvider::new()?);

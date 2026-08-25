@@ -116,7 +116,7 @@ impl AttestationAgent {
         if let Some(ref instance_type) = config.aa_instance.instance_type {
             match instance_info::get_instance_info(instance_type).await {
                 Ok(instance_info) => {
-                    info!("AA instance info: {}", instance_info);
+                    info!("AA instance info: {instance_info}");
                     if let Some(parent) = std::path::Path::new(
                         instance_info::instance_heartbeat::AA_INSTANCE_INFO_PATH,
                     )
@@ -128,13 +128,10 @@ impl AttestationAgent {
                         instance_info::instance_heartbeat::AA_INSTANCE_INFO_PATH,
                         instance_info,
                     )?;
-                    info!("AA instance info set for type: {}", instance_type);
+                    info!("AA instance info set for type: {instance_type}");
                 }
                 Err(e) => {
-                    warn!(
-                        "Failed to get AA instance info for type {}: {}",
-                        instance_type, e
-                    );
+                    warn!("Failed to get AA instance info for type {instance_type}: {e}");
                 }
             }
         }

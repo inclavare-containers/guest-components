@@ -82,7 +82,7 @@ impl CoCoASTokenGetter {
             // We need to add the /attestation-service path to the URL.
             // If we want to access the restful attestation service directly,
             // now only support via config file.
-            Result::Ok(env_url) => format!("{}/attestation-service", env_url),
+            Result::Ok(env_url) => format!("{env_url}/attestation-service"),
         };
         Self { as_uri }
     }

@@ -86,7 +86,7 @@ impl MetadataClient {
         let token = match self.get_metadata_token().await {
             Ok(token) => token,
             Err(e) => {
-                debug!("Error getting token: {}, maybe not in ecs", e);
+                debug!("Error getting token: {e}, maybe not in ecs");
                 return Ok(None);
             }
         };
@@ -156,8 +156,7 @@ impl MetadataClient {
             .send()
             .await
             .context(format!(
-                "Failed to send request for instance metadata: {}",
-                metadata_field
+                "Failed to send request for instance metadata: {metadata_field}"
             ))?;
 
         let mut metadata = None;
@@ -274,7 +273,7 @@ fn run_hostname_command(args: &[&str]) -> Option<String> {
             );
         }
         Err(err) => {
-            debug!("Failed to execute hostname command {:?}: {err}", args);
+            debug!("Failed to execute hostname command {args:?}: {err}");
         }
     }
 

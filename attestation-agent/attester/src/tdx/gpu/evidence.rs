@@ -124,7 +124,7 @@ impl GpuEvidenceCollector {
             match self.collect_single_gpu_evidence(i, report_data) {
                 Ok(gpu_evidence) => evidence.add_gpu_evidence(gpu_evidence),
                 Err(e) => {
-                    log::warn!("Failed to collect evidence for GPU {}: {}", i, e);
+                    log::warn!("Failed to collect evidence for GPU {i}: {e}");
                     // Continue with other GPUs, do not terminate due to a single failure
                 }
             }
@@ -149,7 +149,7 @@ impl GpuEvidenceCollector {
         let device_uuid = device.uuid()?;
         let device_name = device.name()?;
         let driver_version = self.nvml.sys_driver_version().map_err(|e| {
-            GpuAttestationError::Other(format!("Failed to get driver version: {}", e))
+            GpuAttestationError::Other(format!("Failed to get driver version: {e}"))
         })?;
         let vbios_version = device.vbios_version()?;
 
@@ -165,7 +165,7 @@ impl GpuEvidenceCollector {
         if let Ok(report) = self.get_attestation_report(&device, report_data) {
             gpu_evidence = gpu_evidence.with_attestation_report(report);
         } else {
-            log::warn!("Failed to get attestation report for GPU {}", device_index);
+            log::warn!("Failed to get attestation report for GPU {device_index}");
         }
 
         // Check confidential computing support
@@ -181,9 +181,7 @@ impl GpuEvidenceCollector {
             }
             Err(e) => {
                 log::warn!(
-                    "Failed to check confidential computing status for GPU {}: {}",
-                    device_index,
-                    e
+                    "Failed to check confidential computing status for GPU {device_index}: {e}"
                 );
             }
         }
@@ -217,7 +215,7 @@ impl GpuEvidenceCollector {
         match device.confidential_compute_gpu_attestation_report(nonce_array) {
             Ok(report) => Ok(report.attestation_report),
             Err(e) => {
-                log::error!("Failed to get gpu attestation report: {}", e);
+                log::error!("Failed to get gpu attestation report: {e}");
                 Err(GpuAttestationError::ConfidentialComputeUnavailable)
             }
         }
@@ -228,7 +226,7 @@ impl GpuEvidenceCollector {
         match device.confidential_compute_gpu_certificate() {
             Ok(cert) => Ok(cert.cert_chain),
             Err(e) => {
-                log::error!("Failed to get GPU certificate: {}", e);
+                log::error!("Failed to get GPU certificate: {e}");
                 Err(GpuAttestationError::GetGpuCertificateFailed)
             }
         }

@@ -28,7 +28,7 @@ fn digest_raw_content(algorithm: &str, content: &[u8]) -> Result<Vec<u8>> {
         "sha256" => Sha256::digest(content).to_vec(),
         "sha384" => Sha384::digest(content).to_vec(),
         "sha512" => Sha512::digest(content).to_vec(),
-        _ => bail!("unsupported hash algorithm {}", algorithm),
+        _ => bail!("unsupported hash algorithm {algorithm}"),
     })
 }
 
@@ -123,19 +123,16 @@ async fn main() -> Result<()> {
     let tee = detect_tee_type();
     let attester = BoxedAttester::try_from(tee).context("instantiate attester")?;
     match attester.bind_init_data(&digest).await {
-        Ok(InitDataResult::Ok) => info!("bind_init_data succeeded for tee {:?}", tee),
+        Ok(InitDataResult::Ok) => info!("bind_init_data succeeded for tee {tee:?}"),
         Ok(InitDataResult::Unsupported) => {
-            warn!(
-                "bind_init_data unsupported for tee {:?}; skipping hardware bind check",
-                tee
-            );
+            warn!("bind_init_data unsupported for tee {tee:?}; skipping hardware bind check");
         }
         Err(e) => bail!("bind_init_data failed: {e:#}"),
     }
 
     tokio::fs::create_dir_all(INITDATA_OUT_DIR)
         .await
-        .with_context(|| format!("create {}", INITDATA_OUT_DIR))?;
+        .with_context(|| format!("create {INITDATA_OUT_DIR}"))?;
 
     for (key, value) in initdata.data() {
         let key = ensure_plain_filename(key)?;

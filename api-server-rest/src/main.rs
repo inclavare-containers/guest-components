@@ -98,7 +98,7 @@ async fn main() -> Result<()> {
     println!("API Server listening on http://{}", config.bind);
 
     if let Err(e) = server.await {
-        eprintln!("API server error: {}", e);
+        eprintln!("API server error: {e}");
     }
 
     Ok(())

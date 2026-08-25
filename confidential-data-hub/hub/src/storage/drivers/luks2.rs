@@ -39,10 +39,7 @@ pub const LUKS2_HEADER_MIN_SIZE_BYTES: u64 = 16 * 1024 * 1024;
 /// Returns the path where the detached LUKS header for the given device is stored.
 pub fn luks_header_path(device_path: &str) -> String {
     let name = b64.encode(device_path.as_bytes());
-    format!(
-        "{}/{}{}",
-        LUKS_HEADERS_STORAGE_DIR, name, LUKS_HEADER_FILE_SUFFIX
-    )
+    format!("{LUKS_HEADERS_STORAGE_DIR}/{name}{LUKS_HEADER_FILE_SUFFIX}")
 }
 
 /// Creates and sizes the LUKS header file at `header_path`.
@@ -155,7 +152,7 @@ impl Luks2Formatter {
         }
 
         run_cryptsetup_stdin(&args, &passphrase).context("cryptsetup luksOpen failed")?;
-        debug!("device activated: {}", name);
+        debug!("device activated: {name}");
         Ok(())
     }
 
@@ -293,7 +290,7 @@ impl Luks2MountParameters {
             }
         }
 
-        let dev_path = format!("/dev/mapper/{}", devmapper_name);
+        let dev_path = format!("/dev/mapper/{devmapper_name}");
         let target_is_device = self.target_type == TargetType::Device;
         let mount_result: Result<()> = async {
             match (self.target_type, source_type) {
@@ -301,13 +298,11 @@ impl Luks2MountParameters {
                 // the device path to the mount point.
                 (TargetType::Device, _) => {
                     info!(
-                        "symlinking device: {} to mount point: {}",
-                        dev_path, mount_point
+                        "symlinking device: {dev_path} to mount point: {mount_point}"
                     );
                     symlink(&dev_path, mount_point).await.with_context(|| {
                         format!(
-                            "Failed to create symlink from {} to {}",
-                            dev_path, mount_point
+                            "Failed to create symlink from {dev_path} to {mount_point}"
                         )
                     })?;
                     debug!("created device symlink at {mount_point}");
@@ -321,8 +316,7 @@ impl Luks2MountParameters {
                     SourceType::Encrypted,
                 ) => {
                     info!(
-                        "mounting device: {} to mount point: {}",
-                        dev_path, mount_point
+                        "mounting device: {dev_path} to mount point: {mount_point}"
                     );
                     mount::<_, _, str, _>(
                         Some(&dev_path[..]),
@@ -333,8 +327,7 @@ impl Luks2MountParameters {
                     )
                     .with_context(|| {
                         format!(
-                            "Failed to mount device {} to mount point {}",
-                            dev_path, mount_point
+                            "Failed to mount device {dev_path} to mount point {mount_point}"
                         )
                     })?;
 
@@ -350,8 +343,7 @@ impl Luks2MountParameters {
                     SourceType::Empty,
                 ) => {
                     info!(
-                        "formatting device: {} and mounting it to mount point: {}",
-                        dev_path, mount_point
+                        "formatting device: {dev_path} and mounting it to mount point: {mount_point}"
                     );
                     let args = mkfs_opts
                         .map(|s| {
@@ -376,8 +368,7 @@ impl Luks2MountParameters {
                     };
                     format_result.with_context(|| {
                         format!(
-                            "Failed to make filesystem {:?} of device {}",
-                            filesystem_type, dev_path
+                            "Failed to make filesystem {filesystem_type:?} of device {dev_path}"
                         )
                     })?;
 
@@ -391,8 +382,7 @@ impl Luks2MountParameters {
                     )
                     .with_context(|| {
                         format!(
-                            "Failed to mount device {} to mount point {}",
-                            dev_path, mount_point
+                            "Failed to mount device {dev_path} to mount point {mount_point}"
                         )
                     })?;
                     debug!("mounted device at {mount_point}");
