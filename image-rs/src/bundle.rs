@@ -207,7 +207,7 @@ pub fn create_runtime_config(
     let bundle_config = bundle_path.join(BUNDLE_CONFIG);
 
     if bundle_config.exists() {
-        bail!("OCI config file already exists: {:?}", bundle_config);
+        bail!("OCI config file already exists: {bundle_config:?}");
     }
 
     spec.save(&bundle_config)?;

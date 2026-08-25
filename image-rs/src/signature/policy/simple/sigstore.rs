@@ -186,9 +186,9 @@ pub async fn get_sigs_from_specific_sigstore(sigstore_uri: url::Url) -> Result<V
                 let path_str = path
                     .to_str()
                     .ok_or_else(|| anyhow!("Unknown error: path parsed failed."))?;
-                let sig = fs::read(path_str).await.map_err(|e| {
-                    anyhow!("Read signature file failed: {:?}, path: {}", e, path_str)
-                })?;
+                let sig = fs::read(path_str)
+                    .await
+                    .map_err(|e| anyhow!("Read signature file failed: {e:?}, path: {path_str}"))?;
                 res.push(sig);
             }
         }

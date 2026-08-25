@@ -57,7 +57,7 @@ fn generate_random_key() -> String {
 
     let formatted_key = key
         .iter()
-        .map(|byte| format!("{:02x}", byte))
+        .map(|byte| format!("{byte:02x}"))
         .collect::<Vec<String>>()
         .join("-");
 
@@ -158,12 +158,7 @@ impl Snapshotter for Unionfs {
             Some(key_mount_options.as_str()),
         )
         .map_err(|e| {
-            anyhow!(
-                "failed to mount {:?} to {:?}, with error: {}",
-                source,
-                keys_mount_path,
-                e
-            )
+            anyhow!("failed to mount {source:?} to {keys_mount_path:?}, with error: {e}")
         })?;
 
         let random_key = generate_random_key();
@@ -183,14 +178,7 @@ impl Snapshotter for Unionfs {
             flags,
             Some(options.as_str()),
         )
-        .map_err(|e| {
-            anyhow!(
-                "failed to mount {:?} to {:?}, with error: {}",
-                source,
-                mount_path,
-                e
-            )
-        })?;
+        .map_err(|e| anyhow!("failed to mount {source:?} to {mount_path:?}, with error: {e}"))?;
 
         // clear the mount_path if there is something
         clear_path(mount_path)?;

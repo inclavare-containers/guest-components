@@ -80,14 +80,7 @@ impl Snapshotter for OverlayFs {
             flags,
             Some(options.as_str()),
         )
-        .map_err(|e| {
-            anyhow!(
-                "failed to mount {:?} to {:?}, with error: {}",
-                source,
-                mount_path,
-                e
-            )
-        })?;
+        .map_err(|e| anyhow!("failed to mount {source:?} to {mount_path:?}, with error: {e}"))?;
 
         Ok(MountPoint {
             r#type: fs_type,

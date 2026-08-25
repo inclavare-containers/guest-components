@@ -186,7 +186,7 @@ async fn convert_whiteout(
 ) -> Result<()> {
     let parent = path
         .parent()
-        .ok_or(anyhow!("Invalid whiteout parent for path: {:?}", path))?;
+        .ok_or(anyhow!("Invalid whiteout parent for path: {path:?}"))?;
 
     let layer_dir = pathrs::Root::open(layer_dir).context("Failed initialize layer dir")?;
 
@@ -196,10 +196,7 @@ async fn convert_whiteout(
 
         // Opaque directory whiteout requires xattr support
         if !attr_available {
-            debug!(
-                "Skipping opaque directory whiteout (xattr unavailable) for: {:?}",
-                opaque_dir
-            );
+            debug!("Skipping opaque directory whiteout (xattr unavailable) for: {opaque_dir:?}");
             return Ok(());
         }
 
@@ -212,7 +209,7 @@ async fn convert_whiteout(
     // Handle whiteout files
     let original_name = name
         .strip_prefix(WHITEOUT_PREFIX)
-        .ok_or(anyhow!("Failed to strip whiteout prefix for: {}", name))?;
+        .ok_or(anyhow!("Failed to strip whiteout prefix for: {name}"))?;
     let original_path = parent.join(original_name);
 
     if let Some(parent) = original_path.parent() {
@@ -344,8 +341,7 @@ pub async fn unpack<R: AsyncRead + Unpin>(input: R, layer_dir: &Path) -> UnpackR
                 root_times = Some(dir_times(mtime));
             } else {
                 warn!(
-                    "skipping layer root tar entry {:?}: not a directory (type {:?})",
-                    entry_path, kind
+                    "skipping layer root tar entry {entry_path:?}: not a directory (type {kind:?})"
                 );
             }
             continue;
@@ -488,15 +484,8 @@ fn path_cstring(path: &Path) -> Result<CString> {
 }
 
 fn fchown_at(fd: BorrowedFd<'_>, uid: u32, gid: u32) -> Result<()> {
-    let ret = unsafe {
-        libc::fchownat(
-            fd.as_raw_fd(),
-            b"\0".as_ptr().cast(),
-            uid,
-            gid,
-            libc::AT_EMPTY_PATH,
-        )
-    };
+    let ret =
+        unsafe { libc::fchownat(fd.as_raw_fd(), c"".as_ptr(), uid, gid, libc::AT_EMPTY_PATH) };
     if ret != 0 {
         bail!("failed to fchownat: {:?}", io::Error::last_os_error());
     }

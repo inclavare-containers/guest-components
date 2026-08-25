@@ -47,10 +47,7 @@ impl Compression {
         match self {
             Self::Gzip => gzip_decode(input, output),
             Self::Zstd => zstd_decode(input, output),
-            Self::Uncompressed => Err(io::Error::new(
-                io::ErrorKind::Other,
-                "uncompressed input data".to_string(),
-            )),
+            Self::Uncompressed => Err(io::Error::other("uncompressed input data".to_string())),
         }
     }
 
@@ -129,7 +126,7 @@ impl TryFrom<&str> for Compression {
             MediaType::ImageLayerZstd | MediaType::ImageLayerNonDistributableZstd => {
                 Compression::Zstd
             }
-            _ => bail!("{}: {}", ERR_BAD_MEDIA_TYPE, media_type),
+            _ => bail!("{ERR_BAD_MEDIA_TYPE}: {media_type}"),
         };
 
         Ok(decoder)
@@ -299,11 +296,11 @@ mod tests {
         ];
 
         for (i, d) in tests.iter().enumerate() {
-            let msg = format!("test[{}]: {:?}", i, d);
+            let msg = format!("test[{i}]: {d:?}");
 
             let result = Compression::try_from(d.media_type_str);
 
-            let msg = format!("{}: result: {:?}", msg, result);
+            let msg = format!("{msg}: result: {result:?}");
 
             assert_result!(d.result, result, msg);
         }

@@ -50,7 +50,7 @@ impl ResourceProvider {
             "file://".to_owned() + uri
         };
 
-        let url = url::Url::parse(&uri).map_err(|e| anyhow!("Failed to parse: {:?}", e))?;
+        let url = url::Url::parse(&uri).map_err(|e| anyhow!("Failed to parse: {e:?}"))?;
         match url.scheme() {
             scheme if is_kbs_scheme(scheme) => {
                 #[cfg(feature = "kbs")]
@@ -60,10 +60,7 @@ impl ResourceProvider {
 
                 #[cfg(not(feature = "kbs"))]
                 {
-                    bail!(
-                        "`kbs` feature not enabled, cannot support fetch resource uri {}",
-                        uri
-                    )
+                    bail!("`kbs` feature not enabled, cannot support fetch resource uri {uri}")
                 }
             }
             "file" => {
@@ -71,7 +68,7 @@ impl ResourceProvider {
                 let content = fs::read(path).await?;
                 Ok(content)
             }
-            others => bail!("not support scheme {}", others),
+            others => bail!("not support scheme {others}"),
         }
     }
 }

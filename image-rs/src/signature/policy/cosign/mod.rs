@@ -117,7 +117,7 @@ impl CosignParameters {
             Some(rule) => match rule {
                 PolicyReqMatchType::MatchRepository
                 | PolicyReqMatchType::ExactRepository { .. } => Ok(()),
-                p => Err(anyhow!("Denied by {:?}", p)),
+                p => Err(anyhow!("Denied by {p:?}")),
             },
             None => Ok(()),
         }
@@ -196,7 +196,7 @@ impl CosignParameters {
             }
             Err(SigstoreVerifyConstraintsError {
                 unsatisfied_constraints,
-            }) => Err(anyhow!("{:?}", unsatisfied_constraints)),
+            }) => Err(anyhow!("{unsatisfied_constraints:?}")),
         }
     }
 }
@@ -311,10 +311,7 @@ mod tests {
         #[case] image_reference: &str,
     ) {
         if !live_cosign_tests_enabled() {
-            eprintln!(
-                "skipping live cosign test; set {}=1 to run it",
-                LIVE_COSIGN_TESTS_ENV
-            );
+            eprintln!("skipping live cosign test; set {LIVE_COSIGN_TESTS_ENV}=1 to run it");
             return;
         }
 
@@ -341,10 +338,7 @@ mod tests {
             .await;
         assert!(
             res.is_ok(),
-            "failed test:\nparameter:  {:?}\nimage reference:  {}\nreason:  {:?}",
-            parameter,
-            image_reference,
-            res,
+            "failed test:\nparameter:  {parameter:?}\nimage reference:  {image_reference}\nreason:  {res:?}",
         );
     }
 
@@ -447,10 +441,7 @@ mod tests {
         #[case] failed_reason: &str,
     ) {
         if !live_cosign_tests_enabled() {
-            eprintln!(
-                "skipping live cosign test; set {}=1 to run it",
-                LIVE_COSIGN_TESTS_ENV
-            );
+            eprintln!("skipping live cosign test; set {LIVE_COSIGN_TESTS_ENV}=1 to run it");
             return;
         }
 
@@ -478,16 +469,13 @@ mod tests {
             assert_eq!(
                 res.is_ok(),
                 allow,
-                "test failed: \nimage: {}\npolicy:{}",
-                image_reference,
-                policy
+                "test failed: \nimage: {image_reference}\npolicy:{policy}"
             );
             if !allow {
                 let err_msg = res.unwrap_err().to_string();
                 assert_eq!(
                     err_msg, failed_reason,
-                    "test failed: failed reason unmatched.\nneed:{}\ngot:{}",
-                    failed_reason, err_msg
+                    "test failed: failed reason unmatched.\nneed:{failed_reason}\ngot:{err_msg}"
                 );
             }
         } else {

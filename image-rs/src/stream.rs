@@ -69,12 +69,12 @@ pub async fn stream_processing(
     } else if diff_id.starts_with(DIGEST_SHA512_PREFIX) {
         LayerDigestHasher::Sha512(sha2::Sha512::new())
     } else {
-        bail!("{}: {:?}", ERR_BAD_UNCOMPRESSED_DIGEST, diff_id);
+        bail!("{ERR_BAD_UNCOMPRESSED_DIGEST}: {diff_id:?}");
     };
 
     async_processing(layer_reader, hasher, dest)
         .await
-        .map_err(|e| anyhow!("hasher {} {:?}", DIGEST_SHA256_PREFIX, e))
+        .map_err(|e| anyhow!("hasher {DIGEST_SHA256_PREFIX} {e:?}"))
 }
 
 async fn async_processing(
