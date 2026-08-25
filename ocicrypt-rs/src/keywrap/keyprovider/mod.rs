@@ -273,8 +273,7 @@ impl KeyProviderKeyWrapper {
         #[cfg(not(feature = "keywrap-keyprovider-grpc"))]
         {
             Err(anyhow!(
-                "keyprovider: no support of keyprovider-grpc, {}",
-                grpc
+                "keyprovider: no support of keyprovider-grpc, {grpc}"
             ))
         }
         #[cfg(feature = "keywrap-keyprovider-grpc")]
@@ -315,8 +314,7 @@ impl KeyProviderKeyWrapper {
         #[cfg(not(feature = "keywrap-keyprovider-ttrpc"))]
         {
             Err(anyhow!(
-                "keyprovider: no support of keyprovider-ttrpc, {}",
-                ttrpc
+                "keyprovider: no support of keyprovider-ttrpc, {ttrpc}"
             ))
         }
         #[cfg(feature = "keywrap-keyprovider-ttrpc")]
@@ -364,8 +362,7 @@ impl KeyProviderKeyWrapper {
     ) -> Result<KeyProviderKeyWrapProtocolOutput> {
         #[cfg(not(feature = "keywrap-keyprovider-grpc"))]
         return Err(anyhow!(
-            "keyprovider: no support of keyprovider-grpc, {}",
-            grpc
+            "keyprovider: no support of keyprovider-grpc, {grpc}"
         ));
         #[cfg(feature = "keywrap-keyprovider-grpc")]
         {
@@ -397,8 +394,7 @@ impl KeyProviderKeyWrapper {
     ) -> Result<KeyProviderKeyWrapProtocolOutput> {
         #[cfg(not(feature = "keywrap-keyprovider-ttrpc"))]
         return Err(anyhow!(
-            "keyprovider: no support of keyprovider-ttrpc, {}",
-            ttrpc
+            "keyprovider: no support of keyprovider-ttrpc, {ttrpc}"
         ));
         #[cfg(feature = "keywrap-keyprovider-ttrpc")]
         {

@@ -65,7 +65,7 @@ pub async fn start_nydus_service(
         })
         .await
         {
-            bail!("Failed to start nydus service, {:?}", e);
+            bail!("Failed to start nydus service, {e:?}");
         };
     } else if nydus_config.is_fscache() {
         let fscache_config = nydus_config
@@ -101,7 +101,7 @@ pub async fn start_nydus_service(
         })
         .await
         {
-            bail!("Failed to start nydus service, {:?}", e);
+            bail!("Failed to start nydus service, {e:?}");
         };
     } else {
         bail!("Only fuse and fscache fs drivers are supported right now");
@@ -212,7 +212,7 @@ pub fn process_fuse_daemon(
             info!("Fuse daemon started!");
         })
         .map_err(|e| {
-            error!("Failed in starting fuse daemon: {}", e);
+            error!("Failed in starting fuse daemon: {e}");
             e
         })?
     };
@@ -304,7 +304,7 @@ pub fn process_fscache_daemon(
         DAEMON_CONTROLLER.alloc_waker(),
     )
     .map_err(|e| {
-        error!("Failed to start fscache daemon: {}", e);
+        error!("Failed to start fscache daemon: {e}");
         e
     })?;
     info!("Start nydus fscache daemon.");
@@ -312,14 +312,14 @@ pub fn process_fscache_daemon(
     DAEMON_CONTROLLER.set_singleton_mode(true);
     if let Some(blob_mgr) = daemon.get_blob_cache_mgr() {
         if let Err(e) = blob_mgr.add_blob_entry(&conf) {
-            bail!("Failed to add blob entry to blob cache mgr {}", e);
+            bail!("Failed to add blob entry to blob cache mgr {e}");
         }
         DAEMON_CONTROLLER.set_blob_cache_mgr(blob_mgr);
     }
 
     DAEMON_CONTROLLER.set_daemon(daemon);
     if let Err(e) = erofs_mount(domain_id, blob_id, mountpoint) {
-        bail!("Failed to mount {}", e);
+        bail!("Failed to mount {e}");
     }
 
     Ok(())
@@ -353,9 +353,9 @@ pub fn erofs_mount(domain_id: &str, fscache_id: &str, mount_path: &Path) -> Resu
 
     let flags = MsFlags::empty();
     let options = if !domain_id.is_empty() && domain_id != fscache_id {
-        format!("domain_id={},fsid={}", domain_id, fscache_id)
+        format!("domain_id={domain_id},fsid={fscache_id}")
     } else {
-        format!("fsid={}", fscache_id)
+        format!("fsid={fscache_id}")
     };
 
     nix::mount::mount(
@@ -367,10 +367,8 @@ pub fn erofs_mount(domain_id: &str, fscache_id: &str, mount_path: &Path) -> Resu
     )
     .map_err(|e| {
         anyhow!(
-            "failed to mount erofs to {:?}, with error: {}. 
-                If using this erofs feature, make sure your Linux kernel version >= 6.1",
-            mount_path,
-            e
+            "failed to mount erofs to {mount_path:?}, with error: {e}.
+                If using this erofs feature, make sure your Linux kernel version >= 6.1"
         )
     })?;
 

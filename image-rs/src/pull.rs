@@ -303,10 +303,7 @@ mod tests {
     #[tokio::test]
     async fn test_async_pull_client() {
         if !live_image_pull_tests_enabled() {
-            eprintln!(
-                "skipping live image pull test; set {}=1 to run it",
-                LIVE_IMAGE_PULL_TESTS_ENV
-            );
+            eprintln!("skipping live image pull test; set {LIVE_IMAGE_PULL_TESTS_ENV}=1 to run it");
             return;
         }
 
@@ -350,10 +347,7 @@ mod tests {
     #[tokio::test]
     async fn test_multiarch_manifest_list_digest() {
         if !live_image_pull_tests_enabled() {
-            eprintln!(
-                "skipping live image pull test; set {}=1 to run it",
-                LIVE_IMAGE_PULL_TESTS_ENV
-            );
+            eprintln!("skipping live image pull test; set {LIVE_IMAGE_PULL_TESTS_ENV}=1 to run it");
             return;
         }
 
@@ -379,10 +373,7 @@ mod tests {
     #[tokio::test]
     async fn test_async_pull_client_encrypted() {
         if !live_image_pull_tests_enabled() {
-            eprintln!(
-                "skipping live image pull test; set {}=1 to run it",
-                LIVE_IMAGE_PULL_TESTS_ENV
-            );
+            eprintln!("skipping live image pull test; set {LIVE_IMAGE_PULL_TESTS_ENV}=1 to run it");
             return;
         }
 
@@ -433,7 +424,7 @@ mod tests {
         )
         .expect("create reference failed");
 
-        let bad_media_err = format!("{}: {}", ERR_BAD_MEDIA_TYPE, IMAGE_CONFIG_MEDIA_TYPE);
+        let bad_media_err = format!("{ERR_BAD_MEDIA_TYPE}: {IMAGE_CONFIG_MEDIA_TYPE}");
 
         let empty_diff_id = "";
 
@@ -498,27 +489,19 @@ mod tests {
                 diff_id: empty_diff_id,
                 decrypt_config: None,
                 layer_data: Vec::<u8>::new(),
-                result: Err(anyhow!(
-                    "{}: {:?}",
-                    ERR_BAD_UNCOMPRESSED_DIGEST,
-                    empty_diff_id
-                )),
+                result: Err(anyhow!("{ERR_BAD_UNCOMPRESSED_DIGEST}: {empty_diff_id:?}")),
             },
             TestData {
                 layer: compressed_layer,
                 diff_id: empty_diff_id,
                 decrypt_config: None,
                 layer_data: gzip_compressed_bytes,
-                result: Err(anyhow!(
-                    "{}: {:?}",
-                    ERR_BAD_UNCOMPRESSED_DIGEST,
-                    empty_diff_id
-                )),
+                result: Err(anyhow!("{ERR_BAD_UNCOMPRESSED_DIGEST}: {empty_diff_id:?}")),
             },
         ];
 
         for (i, d) in tests.iter().enumerate() {
-            let msg = format!("test[{}]: {:?}", i, d);
+            let msg = format!("test[{i}]: {d:?}");
 
             let result = client
                 .async_handle_layer(
@@ -530,7 +513,7 @@ mod tests {
                 )
                 .await;
 
-            let msg = format!("{}: result: {:?}", msg, result);
+            let msg = format!("{msg}: result: {result:?}");
 
             assert_result!(d.result, result, msg);
         }

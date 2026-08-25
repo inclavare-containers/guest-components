@@ -71,7 +71,7 @@ impl SignatureValidator {
         if parameters.key_type != KeyType::Gpg.to_string() {
             bail!(
                 "Unknown key type in policy config: only support {} now.",
-                KeyType::Gpg.to_string()
+                KeyType::Gpg
             );
         }
 
@@ -83,9 +83,7 @@ impl SignatureValidator {
                 ._resource_provider
                 .get_resource(key_path)
                 .await
-                .map_err(|e| {
-                    anyhow!("Read SignedBy keyPath failed: {:?}, path: {}", e, key_path)
-                })?,
+                .map_err(|e| anyhow!("Read SignedBy keyPath failed: {e:?}, path: {key_path}"))?,
         };
 
         let sigs = self.get_signatures(image, auth).await?;
@@ -113,8 +111,7 @@ impl SignatureValidator {
         }
 
         Err(anyhow!(
-            "The signatures do not satisfied! Reject reason: {:?}",
-            reject_reasons
+            "The signatures do not satisfied! Reject reason: {reject_reasons:?}"
         ))
     }
 
@@ -159,7 +156,7 @@ impl SignatureValidator {
 
         let sigstore = format!("{}/{}", &sigstore_base_url, &sigstore_name);
         let sigstore_uri = url::Url::parse(&sigstore)
-            .map_err(|e| anyhow!("Failed to parse sigstore_uri: {:?}", e))?;
+            .map_err(|e| anyhow!("Failed to parse sigstore_uri: {e:?}"))?;
 
         let mut sigstore_sigs = sigstore::get_sigs_from_specific_sigstore(sigstore_uri).await?;
         sigs.append(&mut sigstore_sigs);

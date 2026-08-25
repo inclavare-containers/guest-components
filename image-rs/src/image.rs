@@ -276,7 +276,7 @@ impl ImageClient {
                 Some((username, password)) => {
                     RegistryAuth::Basic(username.to_string(), password.to_string())
                 }
-                None => bail!("Invalid authentication info ({:?})", auth_info),
+                None => bail!("Invalid authentication info ({auth_info:?})"),
             },
             None => match &self.registry_auth {
                 Some(registry_auth) => {
@@ -464,7 +464,7 @@ impl ImageClient {
     }
 
     #[cfg(feature = "nydus")]
-    async fn do_pull_image_with_nydus<'a>(
+    async fn do_pull_image_with_nydus(
         &mut self,
         client: &mut PullClient<'_>,
         image_data: &mut ImageMeta,
@@ -627,10 +627,7 @@ mod tests {
     #[tokio::test]
     async fn test_pull_image() {
         if !live_image_pull_tests_enabled() {
-            eprintln!(
-                "skipping live image pull test; set {}=1 to run it",
-                LIVE_IMAGE_PULL_TESTS_ENV
-            );
+            eprintln!("skipping live image pull test; set {LIVE_IMAGE_PULL_TESTS_ENV}=1 to run it");
             return;
         }
 
@@ -681,10 +678,7 @@ mod tests {
     #[tokio::test]
     async fn test_nydus_image() {
         if !live_image_pull_tests_enabled() {
-            eprintln!(
-                "skipping live image pull test; set {}=1 to run it",
-                LIVE_IMAGE_PULL_TESTS_ENV
-            );
+            eprintln!("skipping live image pull test; set {LIVE_IMAGE_PULL_TESTS_ENV}=1 to run it");
             return;
         }
 
@@ -722,10 +716,7 @@ mod tests {
     #[tokio::test]
     async fn test_image_reuse() {
         if !live_image_pull_tests_enabled() {
-            eprintln!(
-                "skipping live image pull test; set {}=1 to run it",
-                LIVE_IMAGE_PULL_TESTS_ENV
-            );
+            eprintln!("skipping live image pull test; set {LIVE_IMAGE_PULL_TESTS_ENV}=1 to run it");
             return;
         }
 
@@ -740,7 +731,7 @@ mod tests {
             .pull_image(image, bundle1_dir.path(), &None, &None)
             .await
         {
-            panic!("failed to download image: {}", e);
+            panic!("failed to download image: {e}");
         }
 
         // Pull image again.
@@ -749,7 +740,7 @@ mod tests {
             .pull_image(image, bundle2_dir.path(), &None, &None)
             .await
         {
-            panic!("failed to download image: {}", e);
+            panic!("failed to download image: {e}");
         }
 
         // Assert that config is written out.
@@ -767,10 +758,7 @@ mod tests {
     #[tokio::test]
     async fn test_meta_store_reuse() {
         if !live_image_pull_tests_enabled() {
-            eprintln!(
-                "skipping live image pull test; set {}=1 to run it",
-                LIVE_IMAGE_PULL_TESTS_ENV
-            );
+            eprintln!("skipping live image pull test; set {LIVE_IMAGE_PULL_TESTS_ENV}=1 to run it");
             return;
         }
 
@@ -785,7 +773,7 @@ mod tests {
             .pull_image(image, bundle_dir.path(), &None, &None)
             .await
         {
-            panic!("failed to download image: {}", e);
+            panic!("failed to download image: {e}");
         }
 
         // Create a second temporary directory for the second image client
@@ -806,7 +794,7 @@ mod tests {
             .pull_image(image, bundle_dir_2.path(), &None, &None)
             .await
         {
-            panic!("failed to download image: {}", e);
+            panic!("failed to download image: {e}");
         }
 
         // Verify that the "layers" directory does not exist in the second work directory

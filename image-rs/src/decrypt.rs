@@ -65,12 +65,12 @@ mod encryption {
         /// `descriptor` and `decrypt_config` are required for layer data decryption process.
         ///
         /// * `decrypt_config` - decryption key info in following format:\
-        ///           - \<filename> \
-        ///           - \<filename>:file=\<passwordfile> \
-        ///           - \<filename>:pass=\<password> \
-        ///           - \<filename>:fd=\<filedescriptor> \
-        ///           - \<filename>:\<password> \
-        ///           - provider:<cmd/gprc>
+        ///   - \<filename> \
+        ///   - \<filename>:file=\<passwordfile> \
+        ///   - \<filename>:pass=\<password> \
+        ///   - \<filename>:fd=\<filedescriptor> \
+        ///   - \<filename>:\<password> \
+        ///   - provider:<cmd/gprc>
         pub fn get_plaintext_layer(
             &self,
             descriptor: &OciDescriptor,
@@ -123,7 +123,7 @@ mod encryption {
                 descriptor.annotations.as_ref(),
                 priv_opts_data,
             )
-            .map_err(|e| anyhow!("failed to async decrypt layer {}", e.to_string()))?;
+            .map_err(|e| anyhow!("failed to async decrypt layer {e}"))?;
             Ok(layer_decryptor)
         }
     }
@@ -217,14 +217,14 @@ mod encryption {
             ];
 
             for (i, d) in tests.iter().enumerate() {
-                let msg = format!("test[{}]: {:?}", i, d);
+                let msg = format!("test[{i}]: {d:?}");
 
                 let result = Decryptor::from_media_type(d.media_type);
 
-                let msg = format!("{}: result: {:?}", msg, result);
+                let msg = format!("{msg}: result: {result:?}");
 
-                assert_eq!(result.media_type, d.result.media_type, "{:?}", msg);
-                assert_eq!(result.encrypted, d.result.encrypted, "{:?}", msg);
+                assert_eq!(result.media_type, d.result.media_type, "{msg:?}");
+                assert_eq!(result.encrypted, d.result.encrypted, "{msg:?}");
             }
         }
 
@@ -304,7 +304,7 @@ mod encryption {
             );
 
             for (i, d) in tests.iter().enumerate() {
-                let msg = format!("test[{}]: {:?}", i, d);
+                let msg = format!("test[{i}]: {d:?}");
 
                 let decryptor = Decryptor {
                     media_type: d.media_type.to_string(),
@@ -316,7 +316,7 @@ mod encryption {
                     d.encrypted_layer.clone(),
                     d.decrypt_config,
                 );
-                let msg = format!("{}: result: {:?}", msg, result);
+                let msg = format!("{msg}: result: {result:?}");
 
                 test_utils::assert_result!(d.result, result, msg);
             }
