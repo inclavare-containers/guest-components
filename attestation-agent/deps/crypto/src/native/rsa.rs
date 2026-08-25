@@ -39,12 +39,12 @@ impl RSAKeyPair {
             PaddingMode::OAEP => self
                 .private_key
                 .private_decrypt(&cipher_text, &mut plaintext, Padding::PKCS1_OAEP)
-                .map_err(|e| anyhow!("RSA key decrypt OAEP failed: {:?}", e))?,
+                .map_err(|e| anyhow!("RSA key decrypt OAEP failed: {e:?}"))?,
             #[allow(deprecated)]
             PaddingMode::PKCS1v15 => self
                 .private_key
                 .private_decrypt(&cipher_text, &mut plaintext, Padding::PKCS1)
-                .map_err(|e| anyhow!("RSA key pkcs1v15 decrypt failed: {:?}", e))?,
+                .map_err(|e| anyhow!("RSA key pkcs1v15 decrypt failed: {e:?}"))?,
         };
 
         Ok(plaintext[..decrypted_size].to_vec())

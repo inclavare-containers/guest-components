@@ -85,9 +85,7 @@ impl EcKeyPair {
         let group = match self.curve() {
             Curve::P256 => EcGroup::from_curve_name(Nid::X9_62_PRIME256V1)?,
         };
-        let point = group
-            .generator_opt()
-            .context("EC group has no generator")?;
+        let point = group.generator_opt().context("EC group has no generator")?;
         let mut point = point.to_owned(&group)?;
 
         let epk_x = BigNum::from_slice(&epk_x)?;

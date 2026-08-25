@@ -172,7 +172,7 @@ impl<R> LayerBlockCipherHandler<R> {
         match self {
             LayerBlockCipherHandler::Aes256Ctr(block_cipher) => {
                 if typ != AES256CTR {
-                    return Err(anyhow!("unsupported cipher type {}", typ));
+                    return Err(anyhow!("unsupported cipher type {typ}"));
                 }
                 opts.private.symmetric_key = block_cipher.generate_key()?;
                 opts.public.cipher_type = AES256CTR.to_string();
@@ -194,7 +194,7 @@ impl<R> LayerBlockCipherHandler<R> {
         match self {
             LayerBlockCipherHandler::Aes256Ctr(block_cipher) => {
                 if typ != AES256CTR {
-                    return Err(anyhow!("unsupported cipher type {}", typ));
+                    return Err(anyhow!("unsupported cipher type {typ}"));
                 }
                 block_cipher.decrypt(enc_data_reader, opts)?;
             }

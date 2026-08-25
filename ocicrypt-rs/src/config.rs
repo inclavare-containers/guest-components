@@ -93,7 +93,7 @@ impl DecryptConfig {
     /// Update DecryptConfig param with key and value
     fn update_param(&mut self, key: &str, value: Vec<Vec<u8>>) -> Result<()> {
         if value.is_empty() {
-            return Err(anyhow!("decrypt config: value of {} is None", key));
+            return Err(anyhow!("decrypt config: value of {key} is None"));
         }
 
         self.param
@@ -192,7 +192,7 @@ impl EncryptConfig {
     /// Update EncryptConfig param with key and value
     fn update_param(&mut self, key: &str, value: Vec<Vec<u8>>) -> Result<()> {
         if value.is_empty() {
-            return Err(anyhow!("encrypt config: value of {} is None", key));
+            return Err(anyhow!("encrypt config: value of {key} is None"));
         }
 
         self.param
