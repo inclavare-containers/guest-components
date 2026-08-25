@@ -86,14 +86,14 @@ jobs:
       - name: Run rust lint check (all platforms)
         run: |
           cargo clippy -p image-rs --all-targets --features=default -- -D warnings
-          cargo clippy -p image-rs --all-targets --features=kata-cc-rustls-tls --no-default-features -- -D warnings
-          cargo clippy -p image-rs --all-targets --features=kata-cc-native-tls --no-default-features -- -D warnings
-          cargo clippy -p image-rs --all-targets --features=kata-cc-native-tls,signature-simple-xrss --no-default-features -- -D warnings
+          cargo clippy -p image-rs --all-targets --features=kata-cc-rustls-tls,keywrap-jwe --no-default-features -- -D warnings
+          cargo clippy -p image-rs --all-targets --features=kata-cc-native-tls,keywrap-jwe --no-default-features -- -D warnings
+          cargo clippy -p image-rs --all-targets --features=kata-cc-native-tls,keywrap-jwe,signature-simple-xrss --no-default-features -- -D warnings
 
       - name: Run rust lint check (x86_64 only)
         run: |
-            cargo clippy -p image-rs --all-targets --features=enclave-cc-cckbc-native-tls --no-default-features -- -D warnings
-            cargo clippy -p image-rs --all-targets --features=kata-cc-native-tls,nydus --no-default-features -- -D warnings
+            cargo clippy -p image-rs --all-targets --features=enclave-cc-cckbc-native-tls,keywrap-jwe --no-default-features -- -D warnings
+            cargo clippy -p image-rs --all-targets --features=kata-cc-native-tls,keywrap-jwe,nydus --no-default-features -- -D warnings
         if: matrix.instance == 'ubuntu-24.04'
 
       - name: Run cargo build
@@ -111,18 +111,41 @@ jobs:
         run: |
           sudo -E PATH=$PATH -s cargo test -p image-rs --features default
 
-      # TODO: Add key-wrap-jwe back
-      # We temporarily deprecate the keywrap-jwe feature because it is not stable for 1.76.0
-      - name: Run cargo test - kata-cc (rust-tls version) with keywrap-ttrpc (default)
+      - name: Run cargo test - kata-cc (rust-tls version) with keywrap-grpc and JWE
         run: |
-          sudo -E PATH=$PATH -s cargo test -p image-rs --no-default-features --features=kata-cc-rustls-tls
-      
+          sudo -E PATH=$PATH -s cargo test -p image-rs --no-default-features --features=encryption-ring,keywrap-grpc,snapshot-overlayfs,signature-cosign-rustls,signature-simple,kbs,oci-client/rustls-tls,keywrap-jwe
+
+      - name: Run cargo test - kata-cc (native-tls version) with keywrap-grpc and JWE
+        run: |
+          sudo -E PATH=$PATH -s cargo test -p image-rs --no-default-features --features=encryption-openssl,keywrap-grpc,snapshot-overlayfs,signature-cosign-native,signature-simple,kbs,oci-client/native-tls,keywrap-jwe
+
+      - name: Run cargo test - kata-cc (rust-tls version) with keywrap-ttrpc and JWE
+        run: |
+          sudo -E PATH=$PATH -s cargo test -p image-rs --no-default-features --features=kata-cc-rustls-tls,keywrap-jwe
+
+      - name: Run cargo test - kata-cc (native-tls version) with keywrap-ttrpc and JWE
+        run: |
+          sudo -E PATH=$PATH -s cargo test -p image-rs --no-default-features --features=kata-cc-native-tls,keywrap-jwe
+
+      - name: Run cargo test - enclave-cc (rust-tls version) with keywrap-native and JWE
+        run: |
+          sudo -E PATH=$PATH -s cargo test -p image-rs --no-default-features --features=enclave-cc-cckbc-rustls-tls,keywrap-jwe
+
       - name: Clean test cache
         run: |
           sudo -E PATH=$PATH -s cargo clean
 
-      - name: Run cargo test - kata-cc (native-tls version) with keywrap-ttrpc (default) and with signatures from XRSS registry extension
+      - name: Run cargo test - kata-cc (native-tls version) with keywrap-ttrpc, JWE, and XRSS
         env:
           AUTH_PASSWORD: ${{ secrets.SH_ICR_API_KEY }}
         run: |
-          sudo -E PATH=$PATH -s cargo test -p image-rs --no-default-features --features=kata-cc-native-tls,signature-simple-xrss
+          sudo -E PATH=$PATH -s cargo test -p image-rs --no-default-features --features=kata-cc-native-tls,keywrap-jwe,signature-simple-xrss
+
+      - name: Run cargo test - enclave-cc (native-tls version) with keywrap-native and JWE
+        run: |
+          sudo -E PATH=$PATH -s cargo test -p image-rs --no-default-features --features=enclave-cc-cckbc-native-tls,keywrap-jwe
+
+      - name: Run cargo test - kata-cc (native-tls version) with JWE and Nydus
+        run: |
+          sudo -E PATH=$PATH -s cargo test -p image-rs --no-default-features --features=kata-cc-native-tls,keywrap-jwe,nydus
+        if: matrix.instance == 'ubuntu-24.04'

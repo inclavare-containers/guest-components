@@ -9,6 +9,7 @@ use oci_client::Reference;
 use oci_spec::image::Os;
 use std::convert::TryInto;
 use std::path::Path;
+use std::sync::LazyLock;
 use std::{fs, thread};
 
 use tokio::task;
@@ -27,10 +28,8 @@ use crate::snapshots::Snapshotter;
 
 pub const NYDUS_ROOTFS: &str = "nydus_rootfs";
 
-lazy_static::lazy_static! {
-    static ref DAEMON_CONTROLLER: DaemonController = DaemonController::default();
-    static ref BTI: BuildTimeInfo = get_build_time_info();
-}
+static DAEMON_CONTROLLER: LazyLock<DaemonController> = LazyLock::new(DaemonController::default);
+static BTI: LazyLock<BuildTimeInfo> = LazyLock::new(get_build_time_info);
 
 pub async fn start_nydus_service(
     image_data: &ImageMeta,
