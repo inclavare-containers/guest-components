@@ -39,11 +39,11 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Install Rust toolchain (stable)
+      - name: Install Rust toolchain (1.88.0)
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: 1.76.0
+          toolchain: 1.88.0
           override: true
           components: rustfmt, clippy
 

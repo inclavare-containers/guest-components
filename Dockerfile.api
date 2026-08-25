@@ -4,6 +4,7 @@ FROM registry.openanolis.cn/openanolis/anolisos:23.2 AS builder
 ARG ALL_PROXY
 ARG NO_PROXY
 ARG CARGO_JOBS
+ARG RUST_VERSION=1.88.0
 ENV ALL_PROXY=$ALL_PROXY
 ENV NO_PROXY=$NO_PROXY
 
@@ -28,7 +29,7 @@ RUN yum install -y --disablerepo=kernel-6 yum-utils && \
 # Install Rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
-RUN rustup toolchain install 1.79.0-x86_64-unknown-linux-gnu
+RUN rustup toolchain install ${RUST_VERSION}-x86_64-unknown-linux-gnu
 
 # Optional cargo jobs
 RUN if [ -n "${CARGO_JOBS}" ]; then \
@@ -43,7 +44,7 @@ RUN if [ -n "${ALL_PROXY}" ]; then \
     fi
 
 # Build
-RUN cargo +1.79.0 build -p api-server-rest --release --locked
+RUN cargo +${RUST_VERSION} build -p api-server-rest --release --locked
 
 FROM registry.openanolis.cn/openanolis/anolisos:23.2
 RUN yum install -y --disablerepo=kernel-6 --setopt=install_weak_deps=False --nogpgcheck ca-certificates && \
