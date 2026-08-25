@@ -20,7 +20,7 @@ pub fn encrypt_with_aad_detached_tag(
     let mut ciphertext = data.to_vec();
     let tag = cipher
         .encrypt_in_place_detached(nonce, aad, &mut ciphertext)
-        .map_err(|e| anyhow!("aes-256-gcm encrypt failed: {:?}", e))?
+        .map_err(|e| anyhow!("aes-256-gcm encrypt failed: {e:?}"))?
         .to_vec();
     Ok(AeadCipher { tag, ciphertext })
 }
@@ -38,7 +38,7 @@ pub fn decrypt_with_aad_detached_tag(
     let mut plaintext = encrypted_data.to_vec();
     cipher
         .decrypt_in_place_detached(nonce, aad, &mut plaintext, tag.into())
-        .map_err(|e| anyhow!("aes-256-gcm decrypt failed: {:?}", e))?;
+        .map_err(|e| anyhow!("aes-256-gcm decrypt failed: {e:?}"))?;
 
     Ok(plaintext)
 }
@@ -49,7 +49,7 @@ pub fn decrypt(key: &[u8], encrypted_data: &[u8], iv: &[u8]) -> Result<Vec<u8>> 
     let nonce = Nonce::from_slice(iv);
     let plain_text = cipher
         .decrypt(nonce, encrypted_data)
-        .map_err(|e| anyhow!("aes-256-gcm decrypt failed: {:?}", e))?;
+        .map_err(|e| anyhow!("aes-256-gcm decrypt failed: {e:?}"))?;
 
     Ok(plain_text)
 }
@@ -60,7 +60,7 @@ pub fn encrypt(key: &[u8], data: &[u8], iv: &[u8]) -> Result<Vec<u8>> {
     let nonce = Nonce::from_slice(iv);
     let ciphertext = cipher
         .encrypt(nonce, data)
-        .map_err(|e| anyhow!("aes-256-gcm encrypt failed: {:?}", e))?;
+        .map_err(|e| anyhow!("aes-256-gcm encrypt failed: {e:?}"))?;
 
     Ok(ciphertext)
 }

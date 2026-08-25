@@ -345,14 +345,14 @@ M9QaC1mzQ/OStg==
     fn test_config_default() {
         let config = super::Config::new().expect("failed to create config");
         assert_eq!(config.eventlog_config.init_pcr, super::DEFAULT_PCR_INDEX);
-        assert_eq!(config.eventlog_config.enable_eventlog, false);
+        assert!(!config.eventlog_config.enable_eventlog);
     }
 
     #[cfg(feature = "instance_info")]
     #[test]
     fn test_aa_instance_config_default() {
         let config = super::Config::new().expect("failed to create config");
-        assert_eq!(config.aa_instance.heartbeat.enabled, false);
+        assert!(!config.aa_instance.heartbeat.enabled);
         assert_eq!(config.aa_instance.heartbeat.trustee_url, None);
         assert_eq!(config.aa_instance.heartbeat.interval_minutes, None);
         assert_eq!(config.aa_instance.instance_type, None);

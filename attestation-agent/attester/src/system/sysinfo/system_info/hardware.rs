@@ -283,7 +283,7 @@ fn get_mac_addresses() -> Result<String> {
 
     for iface in interfaces {
         if let Some(mac) = iface.mac {
-            mac_addresses.push(format!("{}", mac));
+            mac_addresses.push(format!("{mac}"));
         }
     }
 

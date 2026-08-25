@@ -55,7 +55,7 @@ pub fn load_config(path: &str) -> Result<ApiServerConfig> {
     let settings = ::config::Config::builder()
         .add_source(::config::File::with_name(path).required(false))
         .build()
-        .context(format!("failed to load api server config: {}", path))?;
+        .context(format!("failed to load api server config: {path}"))?;
 
     let cfg: ApiServerConfig = settings
         .try_deserialize()

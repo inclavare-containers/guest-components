@@ -130,9 +130,9 @@ impl ApiHandler for AAClient {
                 }
                 let body_bytes = body::to_bytes(req.into_body())
                     .await
-                    .map_err(|e| anyhow!("Failed to read request body: {}", e))?;
+                    .map_err(|e| anyhow!("Failed to read request body: {e}"))?;
                 let payload: AaelRequest = serde_json::from_slice(&body_bytes)
-                    .map_err(|e| anyhow!("Failed to parse request body as JSON: {}", e))?;
+                    .map_err(|e| anyhow!("Failed to parse request body as JSON: {e}"))?;
                 match self
                     .extend_runtime_measurement(
                         payload.register_index,
@@ -169,7 +169,7 @@ impl AAClient {
         allow_remote_get_evidence: bool,
     ) -> Result<Self> {
         let inner = ttrpc::asynchronous::Client::connect(aa_addr)
-            .context(format!("ttrpc connect to AA addr: {} failed!", aa_addr))?;
+            .context(format!("ttrpc connect to AA addr: {aa_addr} failed!"))?;
         let client = AttestationAgentServiceClient::new(inner);
 
         Ok(Self {

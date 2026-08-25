@@ -72,10 +72,10 @@ impl InstanceHeartbeat {
         let response = request_builder
             .send()
             .await
-            .with_context(|| format!("Failed to send heartbeat to {}", heartbeat_url))?;
+            .with_context(|| format!("Failed to send heartbeat to {heartbeat_url}"))?;
 
         if response.status().is_success() {
-            debug!("Heartbeat sent successfully to {}", heartbeat_url);
+            debug!("Heartbeat sent successfully to {heartbeat_url}");
             Ok(())
         } else {
             bail!(

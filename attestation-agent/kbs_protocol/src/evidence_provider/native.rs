@@ -93,6 +93,6 @@ mod tests {
             .get_additional_evidence(vec![])
             .await
             .expect("failed to get evidence");
-        println!("evidence: {}", evidence);
+        println!("evidence: {evidence}");
     }
 }

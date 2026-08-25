@@ -55,7 +55,7 @@ impl SealedSecretService for Cdh {
             .map_err(|e| {
                 let detailed_error = format_error!(e);
                 error!("[gRPC CDH] Call CDH to unseal secret failed:\n{detailed_error}");
-                Status::internal(format!("[ERROR] CDH unseal secret failed: {}", e))
+                Status::internal(format!("[ERROR] CDH unseal secret failed: {e}"))
             })?;
 
         debug!("[gRPC CDH] Unseal secret successfully!");
@@ -82,7 +82,7 @@ impl GetResourceService for Cdh {
             .map_err(|e| {
                 let detailed_error = format_error!(e);
                 error!("[gRPC CDH] Call CDH to get resource failed:\n{detailed_error}");
-                Status::internal(format!("[ERROR] CDH get resource failed: {}", e))
+                Status::internal(format!("[ERROR] CDH get resource failed: {e}"))
             })?;
 
         debug!("[gRPC CDH] Get resource successfully!");
@@ -108,8 +108,7 @@ impl GetResourceService for Cdh {
                     "[gRPC CDH] Call CDH to prepare resource injection failed:\n{detailed_error}"
                 );
                 Status::internal(format!(
-                    "[ERROR] CDH prepare resource injection failed: {}",
-                    e
+                    "[ERROR] CDH prepare resource injection failed: {e}"
                 ))
             })?;
 
@@ -141,10 +140,7 @@ impl GetResourceService for Cdh {
                 error!(
                     "[gRPC CDH] Call CDH to commit resource injection failed:\n{detailed_error}"
                 );
-                Status::internal(format!(
-                    "[ERROR] CDH commit resource injection failed: {}",
-                    e
-                ))
+                Status::internal(format!("[ERROR] CDH commit resource injection failed: {e}"))
             })?;
 
         Result::Ok(Response::new(CommitResourceInjectionResponse {}))
@@ -169,7 +165,7 @@ impl SecureMountService for Cdh {
         let mount_path = self.inner.secure_mount(storage).await.map_err(|e| {
             let detailed_error = format_error!(e);
             error!("[gRPC CDH] Call CDH to secure mount failed:\n{detailed_error}");
-            Status::internal(format!("[ERROR] CDH secure mount failed: {}", e))
+            Status::internal(format!("[ERROR] CDH secure mount failed: {e}"))
         })?;
 
         debug!("[gRPC CDH] Secure mount successfully!");
@@ -200,7 +196,7 @@ impl ImagePullService for Cdh {
             .map_err(|e| {
                 let detailed_error = format_error!(e);
                 error!("[gRPC CDH] Call CDH to pull image failed:\n{detailed_error}");
-                Status::internal(format!("[ERROR] CDH image pulling failed: {}", e))
+                Status::internal(format!("[ERROR] CDH image pulling failed: {e}"))
             })?;
 
         debug!("[gRPC CDH] Pull image successfully!");
@@ -233,13 +229,13 @@ impl KeyProviderService for Cdh {
         .map_err(|e| {
             let detailed_error = format_error!(e);
             error!("[gRPC CDH] Call CDH to Unwrap Key failed:\n{detailed_error}");
-            Status::internal(format!("[ERROR] CDH Unwrap Key failed: {}", e))
+            Status::internal(format!("[ERROR] CDH Unwrap Key failed: {e}"))
         })?;
 
         let annotation_packet = key_provider_input.get_annotation().map_err(|e| {
             let detailed_error = format_error!(e);
             error!("[gRPC CDH] Call CDH to Unwrap Key failed:\n{detailed_error}");
-            Status::internal(format!("[ERROR] CDH Unwrap Key failed: {}", e))
+            Status::internal(format!("[ERROR] CDH Unwrap Key failed: {e}"))
         })?;
 
         let decrypted_optsdata = self
@@ -249,7 +245,7 @@ impl KeyProviderService for Cdh {
             .map_err(|e| {
                 let detailed_error = format_error!(e);
                 error!("[gRPC CDH] Call CDH to Unwrap Key failed:\n{detailed_error}");
-                Status::internal(format!("[ERROR] CDH Unwrap Key failed: {}", e))
+                Status::internal(format!("[ERROR] CDH Unwrap Key failed: {e}"))
             })?;
 
         // Construct output structure and serialize it as the return value of gRPC
@@ -262,7 +258,7 @@ impl KeyProviderService for Cdh {
             serde_json::to_vec(&output_struct).map_err(|e| {
                 let detailed_error = format_error!(e);
                 error!("[gRPC CDH] Call CDH to Unwrap Key failed:\n{detailed_error}");
-                Status::internal(format!("[ERROR] CDH Unwrap Key failed: {}", e))
+                Status::internal(format!("[ERROR] CDH Unwrap Key failed: {e}"))
             })?;
 
         debug!("[gRPC CDH] Unwrap Key successfully!");

@@ -161,7 +161,7 @@ pub async fn main() -> Result<()> {
             let heartbeat = match InstanceHeartbeat::new_from_config_path(config_file.as_deref()) {
                 Result::Ok(h) => h,
                 Result::Err(e) => {
-                    warn!("Failed to create heartbeat instance: {}", e);
+                    warn!("Failed to create heartbeat instance: {e}");
                     return;
                 }
             };
@@ -170,7 +170,7 @@ pub async fn main() -> Result<()> {
             loop {
                 timer.tick().await;
                 if let Err(e) = heartbeat.send_heartbeat().await {
-                    warn!("Heartbeat failed: {}", e);
+                    warn!("Heartbeat failed: {e}");
                 } else {
                     debug!("Heartbeat sent successfully");
                 }

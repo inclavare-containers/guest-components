@@ -18,7 +18,7 @@ pub fn decrypt(key: &[u8], encrypted_data: &[u8], iv: &[u8]) -> Result<Vec<u8>> 
     buf.resize(encrypted_data.len(), b' ');
     decryptor
         .apply_keystream_b2b(encrypted_data, &mut buf)
-        .map_err(|e| anyhow!("aes-256-ctr decrypt failed: {:?}", e))?;
+        .map_err(|e| anyhow!("aes-256-ctr decrypt failed: {e:?}"))?;
     Ok(buf)
 }
 

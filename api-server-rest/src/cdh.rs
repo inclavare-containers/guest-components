@@ -167,7 +167,7 @@ impl CDHClient {
         allow_remote_resource_injection: bool,
     ) -> Result<Self> {
         let inner = ttrpc::asynchronous::Client::connect(cdh_addr)
-            .context(format!("ttrpc connect to CDH addr: {} failed!", cdh_addr))?;
+            .context(format!("ttrpc connect to CDH addr: {cdh_addr} failed!"))?;
         let client = GetResourceServiceClient::new(inner);
 
         Ok(Self {

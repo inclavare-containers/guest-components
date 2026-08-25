@@ -524,7 +524,7 @@ async fn load_kms_ca_cert(settings: &AliAttestationProviderSettings) -> Result<S
 
     let key_path = env::var("ALIYUN_IN_GUEST_KEY_PATH")
         .unwrap_or_else(|_| ALIYUN_IN_GUEST_DEFAULT_KEY_PATH.to_owned());
-    info!("ALIYUN_IN_GUEST_KEY_PATH = {}", key_path);
+    info!("ALIYUN_IN_GUEST_KEY_PATH = {key_path}");
 
     let cert_path = format!("{}/PrivateKmsCA_{}.pem", key_path, settings.kms_instance_id);
     fs::read_to_string(&cert_path).await.map_err(|e| {

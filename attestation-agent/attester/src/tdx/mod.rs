@@ -42,8 +42,7 @@ fn get_quote_ioctl(report_data: &[u8]) -> Result<Vec<u8>> {
     match tdx_attest_rs::tdx_att_get_quote(Some(&tdx_report_data), None, None, 0) {
         (tdx_attest_rs::tdx_attest_error_t::TDX_ATTEST_SUCCESS, Some(q)) => Ok(q),
         (error_code, _) => Err(anyhow!(
-            "TDX DCAP get_quote: failed with error code: {:?}",
-            error_code
+            "TDX DCAP get_quote: failed with error code: {error_code:?}"
         )),
     }
 }
@@ -74,10 +73,9 @@ fn extend_rtmr_via_ioctl(rtmr_index: u64, extend_data: &[u8; 48]) -> Result<()> 
             log::debug!("TDX extend runtime measurement via ioctl succeeded.");
             Ok(())
         }
-        error_code => bail!(
-            "TDX Attester: Failed to extend RTMR via ioctl. Error code: {:?}",
-            error_code
-        ),
+        error_code => {
+            bail!("TDX Attester: Failed to extend RTMR via ioctl. Error code: {error_code:?}")
+        }
     }
 }
 
@@ -178,7 +176,7 @@ impl Attester for TdxAttester {
                         gpu_evidence = Some(gpu_evidence_list);
                     }
                     Result::Err(e) => {
-                        log::warn!("Failed to collect GPU evidence: {}", e);
+                        log::warn!("Failed to collect GPU evidence: {e}");
                         gpu_evidence = None;
                     }
                 },
@@ -227,10 +225,7 @@ impl Attester for TdxAttester {
         );
 
         extend_rtmr_via_ioctl(rtmr_index, &extend_data).or_else(|e| {
-            log::warn!(
-                "TDX Attester: ioctl RTMR extend failed ({}), attempting sysfs fallback",
-                e
-            );
+            log::warn!("TDX Attester: ioctl RTMR extend failed ({e}), attempting sysfs fallback");
             extend_rtmr_via_sysfs(rtmr_index, &extend_data)
         })?;
 

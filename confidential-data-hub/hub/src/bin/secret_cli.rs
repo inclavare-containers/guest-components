@@ -255,10 +255,7 @@ async fn unseal_secret(unseal_args: &UnsealArgs) {
         .await
         .expect("failed to write unsealed secret");
 
-    println!(
-        "unseal success, secret is saved in newly generated file: '{:?}'",
-        output_file_name
-    );
+    println!("unseal success, secret is saved in newly generated file: '{output_file_name:?}'");
 }
 
 async fn seal_secret(seal_args: &SealArgs) {

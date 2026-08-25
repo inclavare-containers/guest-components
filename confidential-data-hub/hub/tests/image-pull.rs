@@ -22,18 +22,12 @@ const LIVE_COSIGN_TESTS_ENV: &str = "RUN_LIVE_COSIGN_TESTS";
 #[serial_test::serial]
 async fn test_pull_image(#[case] image_ref: &str) {
     if std::env::var_os(LIVE_IMAGE_PULL_TESTS_ENV).is_none() {
-        eprintln!(
-            "skipping live image pull test; set {}=1 to run it",
-            LIVE_IMAGE_PULL_TESTS_ENV
-        );
+        eprintln!("skipping live image pull test; set {LIVE_IMAGE_PULL_TESTS_ENV}=1 to run it");
         return;
     }
 
     if image_ref == COSIGN_SIGNED_IMAGE && std::env::var_os(LIVE_COSIGN_TESTS_ENV).is_none() {
-        eprintln!(
-            "skipping live cosign image pull test; set {}=1 to run it",
-            LIVE_COSIGN_TESTS_ENV
-        );
+        eprintln!("skipping live cosign image pull test; set {LIVE_COSIGN_TESTS_ENV}=1 to run it");
         return;
     }
 

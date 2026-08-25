@@ -208,7 +208,7 @@ impl BlockDevice {
                     .map_err(|source| BlockDeviceError::ZfsError { source })?;
             }
         }
-        info!("Target path {} mounted successfully", mount_point);
+        info!("Target path {mount_point} mounted successfully");
         Ok(())
     }
 
@@ -334,13 +334,13 @@ fn parse_device_id(device_id: &str) -> Result<(u32, u32)> {
 }
 
 async fn get_device_path(major: u32, minor: u32) -> Result<String> {
-    let uevent_path = format!("/sys/dev/block/{}:{}/uevent", major, minor);
+    let uevent_path = format!("/sys/dev/block/{major}:{minor}/uevent");
     let file = File::open(uevent_path).await?;
     let reader = BufReader::new(file);
     let mut lines = reader.lines();
     while let Ok(Some(line)) = lines.next_line().await {
         if let Some(line) = line.strip_prefix("DEVNAME=") {
-            return Ok(format!("/dev/{}", line));
+            return Ok(format!("/dev/{line}"));
         }
     }
     Err(BlockDeviceError::NoDeviceFound { major, minor })

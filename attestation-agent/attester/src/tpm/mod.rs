@@ -139,7 +139,7 @@ impl Attester for TpmAttester {
                     }
                 }
                 Result::Err(e) => {
-                    log::warn!("{}; fallback to new AK", e);
+                    log::warn!("{e}; fallback to new AK");
                 }
             }
         }
@@ -160,7 +160,7 @@ impl Attester for TpmAttester {
         let eventlog = match std::fs::read(TPM_EVENTLOG_FILE_PATH) {
             Result::Ok(el) => Some(engine.encode(el)),
             Result::Err(e) => {
-                log::warn!("Read TPM Eventlog failed: {:?}", e);
+                log::warn!("Read TPM Eventlog failed: {e:?}");
                 None
             }
         };
@@ -181,8 +181,7 @@ impl Attester for TpmAttester {
             aa_eventlog,
         };
 
-        serde_json::to_value(evidence)
-            .map_err(|e| anyhow!("Serialize TPM evidence failed: {:?}", e))
+        serde_json::to_value(evidence).map_err(|e| anyhow!("Serialize TPM evidence failed: {e:?}"))
     }
 
     fn supports_runtime_measurement(&self) -> bool {
