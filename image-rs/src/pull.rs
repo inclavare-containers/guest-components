@@ -409,13 +409,9 @@ mod tests {
             let diff_ids = image_config.rootfs().diff_ids();
 
             let config_dir = std::env!("CARGO_MANIFEST_DIR");
-            let keyprovider_config =
-                format!("{}/{}", config_dir, "test_data/ocicrypt_keyprovider.conf");
             let decrypt_config = Path::new(config_dir)
                 .join("test_data")
                 .join("private_key_for_tests.pem:test");
-
-            std::env::set_var("OCICRYPT_KEYPROVIDER_CONFIG", keyprovider_config);
 
             assert_retry!(
                 5,
