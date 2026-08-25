@@ -41,14 +41,12 @@ RUN if [ "$TARGETARCH" != "arm64" ]; then \
 WORKDIR /usr/src/guest-components
 COPY . .
 
-# Install Rust
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+# Install the pinned Rust toolchain directly. Avoid resolving the moving
+# `stable` channel before installing the requested version.
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+    sh -s -- -y --default-toolchain ${RUST_VERSION} --profile minimal
 
 ENV PATH="/root/.cargo/bin:${PATH}"
-
-# Install Rust toolchain for target architecture
-RUN RUST_TARGET=$(cat /tmp/rust_target) && \
-    rustup toolchain install ${RUST_VERSION}-${RUST_TARGET}
 
 RUN if [ -n "${CARGO_JOBS}" ]; then \
     [ ! -d /root/.cargo ] && mkdir /root/.cargo; \
