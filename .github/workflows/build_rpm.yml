@@ -8,6 +8,11 @@ on:
       - "v*.*.*"
   pull_request:
 
+env:
+  RUST_VERSION: 1.88.0
+  RUST_ARCHIVE: rust-1.88.0-x86_64-unknown-linux-gnu.tar.xz
+  RUST_ARCHIVE_SHA256: 7b5437c1d18a174faae253a18eac22c32288dccfc09ff78d5ee99b7467e21bca
+
 jobs:
   create-tarball:
     runs-on: ubuntu-latest
@@ -45,7 +50,14 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "RELEASE=$RELEASE" >> $GITHUB_OUTPUT
 
-      - uses: dtolnay/rust-toolchain@1.75.0
+      - uses: dtolnay/rust-toolchain@1.88.0
+
+      - name: Download pinned Rust distribution
+        run: |
+          curl --fail --location --retry 3 \
+            --output "/tmp/${RUST_ARCHIVE}" \
+            "https://static.rust-lang.org/dist/${RUST_ARCHIVE}"
+          echo "${RUST_ARCHIVE_SHA256}  /tmp/${RUST_ARCHIVE}" | sha256sum --check
 
       - name: Create tarball
         run: make create-tarball
@@ -58,6 +70,7 @@ jobs:
           path: |
             /tmp/v*.tar.gz
             /tmp/guest-components-*-vendor.tar.gz
+            /tmp/rust-1.88.0-x86_64-unknown-linux-gnu.tar.xz
 
   build:
     strategy:
@@ -103,8 +116,8 @@ jobs:
           echo "Using DIST_SUFFIX: $DIST_SUFFIX"
 
           # Create buildspec for release
-          export GITHUB_RELEASE GITHUB_REPO_URL VERSION RELEASE
-          envsubst '$GITHUB_RELEASE $GITHUB_REPO_URL $VERSION $RELEASE' \
+          export GITHUB_RELEASE GITHUB_REPO_URL VERSION RELEASE RUST_VERSION
+          envsubst '$GITHUB_RELEASE $GITHUB_REPO_URL $VERSION $RELEASE $RUST_VERSION' \
             < ${{ matrix.buildspec_template }} \
             > ./trustiflux-${VERSION}-${RELEASE}.${DIST_SUFFIX}.${{ matrix.arch }}.buildspec.yaml
 
@@ -121,6 +134,7 @@ jobs:
           # Replace URL with local path for local build
           yq -i ".inputs.source.url = \"file://${GITHUB_WORKSPACE}/v${VERSION}.tar.gz\"" "${LOCAL_BUILDSPEC}"
           yq -i ".inputs.rustVendor.url = \"file://${GITHUB_WORKSPACE}/guest-components-v${VERSION}-vendor.tar.gz\"" "${LOCAL_BUILDSPEC}"
+          yq -i ".inputs.rustToolchain.url = \"file://${GITHUB_WORKSPACE}/${RUST_ARCHIVE}\"" "${LOCAL_BUILDSPEC}"
 
       - name: Upload build input artifact
         uses: actions/upload-artifact@v4
@@ -130,6 +144,7 @@ jobs:
           path: |
             ./v*.tar.gz
             ./guest-components-*-vendor.tar.gz
+            ./rust-1.88.0-x86_64-unknown-linux-gnu.tar.xz
             ./trustiflux-*.${{ matrix.dist_suffix }}.${{ matrix.arch }}.buildspec.yaml
 
       - name: Build RPM package

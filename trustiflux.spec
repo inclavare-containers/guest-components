@@ -55,8 +55,13 @@ export CC=clang
 export CXX=clang++
 %endif
 
+# RPM builds use the distribution OpenSSL from openssl-devel. Apply this to
+# every Cargo invocation so optional dependency features cannot accidentally
+# switch later components back to a vendored OpenSSL build.
+export OPENSSL_NO_VENDOR=1
+
 # building the attestation-agent
-OPENSSL_NO_VENDOR=1 cargo build -p attestation-agent --bin ttrpc-aa --release --no-default-features --features bin,ttrpc,rust-crypto,coco_as,kbs,tdx-attester,system-attester,tpm-attester,instance_info,csv-attester,hygon-dcu-attester --target x86_64-unknown-linux-gnu
+cargo build -p attestation-agent --bin ttrpc-aa --release --no-default-features --features bin,ttrpc,rust-crypto,coco_as,kbs,tdx-attester,system-attester,tpm-attester,instance_info,csv-attester,hygon-dcu-attester --target x86_64-unknown-linux-gnu
 cargo build -p attestation-agent --bin ttrpc-aa-client --release --no-default-features --features bin,ttrpc,eventlog --target x86_64-unknown-linux-gnu
 
 # building the confidential-data-hub
