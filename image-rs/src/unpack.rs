@@ -161,7 +161,13 @@ fn is_dir<R: AsyncRead + Unpin>(
     kind: &tokio_tar::EntryType,
     file: &Entry<R>,
 ) -> UnpackResult<bool> {
-    Ok(kind.is_dir() || file.header().as_ustar().is_none() && file.path_bytes().ends_with(b"/"))
+    let is_dir = kind.is_dir()
+        || file.header().as_ustar().is_none()
+            && file
+                .path_bytes()
+                .map_err(|source| UnpackError::ReadTarEntriesFailed { source })?
+                .ends_with(b"/");
+    Ok(is_dir)
 }
 
 /// Converts a whiteout file or opaque directory.

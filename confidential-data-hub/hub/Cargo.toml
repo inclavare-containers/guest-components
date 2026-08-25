@@ -123,7 +123,7 @@ aliyun = [
     "hex",
     "p12",
     "prost",
-    "reqwest/rustls-tls",
+    "reqwest/rustls",
     "dep:rsa",
     "sha2",
     "tempfile",
