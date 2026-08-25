@@ -26,10 +26,11 @@ RUN yum install -y --disablerepo=kernel-6 yum-utils && \
     yum clean all && \
     rm -rf /tmp/*
 
-# Install Rust
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+# Install the pinned Rust toolchain directly. Avoid resolving the moving
+# `stable` channel before installing the requested version.
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+    sh -s -- -y --default-toolchain ${RUST_VERSION} --profile minimal
 ENV PATH="/root/.cargo/bin:${PATH}"
-RUN rustup toolchain install ${RUST_VERSION}-x86_64-unknown-linux-gnu
 
 # Optional cargo jobs
 RUN if [ -n "${CARGO_JOBS}" ]; then \
