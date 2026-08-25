@@ -10,6 +10,7 @@ ENV ALL_PROXY=$ALL_PROXY
 ENV NO_PROXY=$NO_PROXY
 
 ARG CARGO_JOBS
+ARG RUST_VERSION=1.88.0
 # TARGETARCH is auto-set by BuildKit/buildx (no --platform needed when building for host arch)
 ARG TARGETARCH
 
@@ -47,18 +48,14 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Install Rust toolchain for target architecture
 RUN RUST_TARGET=$(cat /tmp/rust_target) && \
-    rustup toolchain install 1.79.0-${RUST_TARGET}
+    rustup toolchain install ${RUST_VERSION}-${RUST_TARGET}
 
 RUN if [ -n "${CARGO_JOBS}" ]; then \
     [ ! -d /root/.cargo ] && mkdir /root/.cargo; \
     printf '[build]\njobs = %s\n' "${CARGO_JOBS}" >> /root/.cargo/config.toml; \
     fi
 
-# Cargo 1.79 uses libgit2 to download the git source,
-# so it doesn't support related proxy environment variables.
-# To work around this, enable git-fetch-with-cli to call
-# git command with awareness of proxy environment variables
-# to download the source.
+# Use the git CLI so repository dependencies honor proxy configuration.
 RUN if [ -n "${ALL_PROXY}" ]; then \
     [ ! -d /root/.cargo ] && mkdir /root/.cargo; \
     printf "[net]\ngit-fetch-with-cli = true" >> /root/.cargo/config.toml; \
@@ -67,11 +64,11 @@ RUN if [ -n "${ALL_PROXY}" ]; then \
 # Build attestation-agent. Notice that libc version is not enough thus --release cannot pass
 RUN RUST_TARGET=$(cat /tmp/rust_target) && \
     if [ "$TARGETARCH" != "arm64" ]; then \
-    cargo +1.79.0 build -p attestation-agent --bin ttrpc-aa --no-default-features \
+    cargo +${RUST_VERSION} build -p attestation-agent --bin ttrpc-aa --no-default-features \
     --features bin,ttrpc,rust-crypto,coco_as,kbs,tdx-attester,system-attester,csv-attester,hygon-dcu-attester \
     --target ${RUST_TARGET}; \
     else \
-    cargo +1.79.0 build -p attestation-agent --bin ttrpc-aa --no-default-features \
+    cargo +${RUST_VERSION} build -p attestation-agent --bin ttrpc-aa --no-default-features \
     --features bin,ttrpc,rust-crypto,coco_as,kbs,system-attester,csv-attester,hygon-dcu-attester \
     --target ${RUST_TARGET}; \
     fi

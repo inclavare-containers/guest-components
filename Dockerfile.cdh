@@ -14,6 +14,7 @@ ENV AR=llvm-ar
 ENV RANLIB=llvm-ranlib
 
 ARG CARGO_JOBS
+ARG RUST_VERSION=1.88.0
 # TARGETARCH is auto-set by BuildKit/buildx (no --platform needed when building for host arch)
 ARG TARGETARCH
 
@@ -30,24 +31,21 @@ RUN apt update -y && apt install -y clang protobuf-compiler git curl musl-tools 
     esac
 
 # Install Rust
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+    sh -s -- -y --default-toolchain ${RUST_VERSION} --profile minimal
 
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Add Rust target for target architecture
 RUN RUST_TARGET=$(cat /tmp/rust_target) && \
-    rustup target add ${RUST_TARGET}
+    rustup target add --toolchain ${RUST_VERSION} ${RUST_TARGET}
 
 RUN if [ -n "${CARGO_JOBS}" ]; then \
     mkdir -p /root/.cargo; \
     printf '[build]\njobs = %s\n' "${CARGO_JOBS}" > /root/.cargo/config.toml; \
     fi
 
-# Cargo 1.79 uses libgit2 to download the git source,
-# so it doesn't support related proxy environment variables.
-# To work around this, enable git-fetch-with-cli to call
-# git command with awareness of proxy environment variables
-# to download the source.
+# Use the git CLI so repository dependencies honor proxy configuration.
 RUN if [ -n "${ALL_PROXY}" ]; then \
     [ ! -d /root/.cargo ] && mkdir /root/.cargo; \
     printf "[net]\ngit-fetch-with-cli = true" >> /root/.cargo/config.toml; \
