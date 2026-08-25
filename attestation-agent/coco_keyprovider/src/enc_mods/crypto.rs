@@ -40,7 +40,7 @@ pub fn encrypt(data: &[u8], key: &[u8], iv: &[u8], algorithm: &Algorithm) -> Res
             let nonce = Nonce::from_slice(iv);
             cipher
                 .encrypt(nonce, data.as_ref())
-                .map_err(|e| anyhow!("Decrypt failed: {:?}", e))
+                .map_err(|e| anyhow!("Decrypt failed: {e:?}"))
         }
         Algorithm::A256CTR => {
             use ctr::cipher::{KeyIvInit, StreamCipher};

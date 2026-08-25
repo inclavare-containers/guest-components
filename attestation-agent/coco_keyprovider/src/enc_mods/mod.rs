@@ -217,7 +217,7 @@ pub async fn enc_optsdata_gen_anno(
 
     let algorithm = input_params.algorithm;
     let encrypt_optsdata = crypto::encrypt(optsdata, &key, &iv, &algorithm)
-        .map_err(|e| anyhow!("Encrypt failed: {:?}", e))?;
+        .map_err(|e| anyhow!("Encrypt failed: {e:?}"))?;
 
     if let (Some(addr), Some(private_key)) = kbs_parameter {
         if !input_params.sample {

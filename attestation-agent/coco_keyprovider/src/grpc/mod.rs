@@ -56,7 +56,7 @@ impl KeyProviderService for KeyProvider {
             ))
         })?;
 
-        debug!("WrapKey API Request Input: {}", input_string);
+        debug!("WrapKey API Request Input: {input_string}");
         let input: KeyProviderInput = serde_json::from_str::<KeyProviderInput>(&input_string)
             .map_err(|e| {
                 Status::invalid_argument(format!("parse key provider input failed: {e:?}"))
