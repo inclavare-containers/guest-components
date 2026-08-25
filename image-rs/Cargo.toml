@@ -32,15 +32,12 @@ lazy_static = { workspace = true, optional = true }
 log = "0.4.22"
 loopdev = { git = "https://github.com/mdaffin/loopdev", rev = "c9f91e8f0326ce8a3364ac911e81eb32328a5f27" }
 nix = { workspace = true, features = ["mount", "fs"] }
-# oci-client 0.15 does not compile without one reqwest TLS backend. Keep the
-# Rustls backend available even for the minimal feature set; higher-level
-# features still select native roots or native-tls as needed.
-oci-client = { version = "0.15", default-features = false, features = ["rustls-tls"] }
+oci-client = { version = "0.17", default-features = false }
 oci-spec = "0.7.1"
 ocicrypt-rs = { path = "../ocicrypt-rs", default-features = false, features = [
     "async-io",
 ], optional = true }
-pathrs = "=0.2.4"
+pathrs = "0.2.4"
 protos = { path = "../protos", optional = true, default-features = false }
 reqwest = { workspace = true, features = ["json"], optional = true }
 resource_uri = { path = "../attestation-agent/deps/resource_uri", optional = true }
@@ -55,10 +52,10 @@ serde_json.workspace = true
 toml.workspace = true
 serde_yaml = { version = "0.9", optional = true }
 sha2.workspace = true
-sigstore = { version = "0.12.1", default-features = false, optional = true }
+sigstore = { version = "0.13.0", default-features = false, optional = true }
 strum.workspace = true
 strum_macros = "0.26"
-krata-tokio-tar = "0.4.2"
+astral-tokio-tar = "0.6.2"
 thiserror.workspace = true
 tokio.workspace = true
 tokio-util = { version = "0.7.13", features = ["io-util"] }
@@ -77,7 +74,7 @@ anyhow.workspace = true
 
 [dev-dependencies]
 cfg-if.workspace = true
-criterion = "0.5"
+criterion = "0.8.2"
 nix = { workspace = true, features = ["user"] }
 ring.workspace = true
 rsa.workspace = true
@@ -107,7 +104,7 @@ kata-cc-rustls-tls = [
     "signature-simple",
     "kbs",
     "oci-client/rustls-tls",
-    "reqwest?/rustls-tls",
+    "reqwest?/rustls",
 ]
 enclave-cc-cckbc-rustls-tls = [
     "encryption-ring",
@@ -117,7 +114,7 @@ enclave-cc-cckbc-rustls-tls = [
     "kbs",
     "signature-cosign-rustls",
     "oci-client-rustls",
-    "reqwest?/rustls-tls",
+    "reqwest?/rustls",
 ]
 
 # This will be based on `openssl` dependency
@@ -129,7 +126,7 @@ kata-cc-native-tls = [
     "signature-simple",
     "kbs",
     "oci-client/native-tls",
-    "reqwest?/default-tls",
+    "reqwest?/native-tls",
 ]
 enclave-cc-cckbc-native-tls = [
     "encryption-openssl",
@@ -139,7 +136,7 @@ enclave-cc-cckbc-native-tls = [
     "kbs",
     "signature-cosign-native",
     "oci-client-native",
-    "reqwest?/default-tls",
+    "reqwest?/native-tls",
 ]
 
 encryption = ["ocicrypt-rs/block-cipher"]
@@ -182,10 +179,10 @@ signature-cosign-rustls = [
 ]
 signature-cosign-native = ["signature-cosign", "sigstore/native-tls"]
 
-oci-client-rustls = ["oci-client/rustls-tls", "oci-client/rustls-tls-native-roots"]
+oci-client-rustls = ["oci-client/rustls-tls"]
 oci-client-native = ["oci-client/native-tls"]
 
-signature-simple-xrss = ["signature-simple", "dep:reqwest"]
+signature-simple-xrss = ["signature-simple", "reqwest/query"]
 signature-simple = ["signature", "sequoia-openpgp", "serde_yaml"]
 
 snapshot-overlayfs = []
