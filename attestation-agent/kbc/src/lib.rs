@@ -128,10 +128,7 @@ impl KbcModuleList {
     pub fn get_func(&self, kbc_name: &str) -> Result<&KbcInstantiateFunc> {
         let instantiate_func: &KbcInstantiateFunc =
             self.mod_list.get(kbc_name).ok_or_else(|| {
-                anyhow!(
-                    "AA does not support the given KBC module! Module: {}",
-                    kbc_name
-                )
+                anyhow!("AA does not support the given KBC module! Module: {kbc_name}")
             })?;
         Ok(instantiate_func)
     }

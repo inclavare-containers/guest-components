@@ -111,7 +111,7 @@ impl TeeKeyPair {
             };
 
             if crv != key.curve().as_ref() {
-                bail!("Unmatched curve: {}", crv);
+                bail!("Unmatched curve: {crv}");
             }
 
             let cek = key.unwrap_key(wrapped_cek, x, y, KeyWrapAlgorithm::EcdhEsA256Kw)?;

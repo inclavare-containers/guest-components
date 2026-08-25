@@ -189,12 +189,12 @@ fn process_private_keyfiles(keyfiles_and_pwds: &[String]) -> Result<[Vec<Vec<u8>
 ///
 /// # Arguments
 /// * `keys` - decryption key info in following format:\
-///           - \<filename> \
-///           - \<filename>:file=\<passwordfile> \
-///           - \<filename>:pass=\<password> \
-///           - \<filename>:fd=\<filedescriptor> \
-///           - \<filename>:\<password> \
-///           - provider:<cmd/gprc/native>
+///   - \<filename> \
+///   - \<filename>:file=\<passwordfile> \
+///   - \<filename>:pass=\<password> \
+///   - \<filename>:fd=\<filedescriptor> \
+///   - \<filename>:\<password> \
+///   - provider:<cmd/gprc/native>
 /// * `dec_recipients` - contains x509 cert for PKCS7 decryption.
 pub fn create_decrypt_config(
     keys: Vec<String>,
@@ -243,11 +243,11 @@ pub fn create_decrypt_config(
 ///
 /// # Arguments
 /// * `recipients` - encryption key info in format protocol:value.\
-///           - jwe:\<keyfile> \
-///           - pkcs7:\<keyfile> \
-///           - pkcs11:\<keyfile> \
-///           - pgp: \<address> \
-///           - provider:<cmd/grpc/native>
+///   - jwe:\<keyfile> \
+///   - pkcs7:\<keyfile> \
+///   - pkcs11:\<keyfile> \
+///   - pgp: \<address> \
+///   - provider:<cmd/grpc/native>
 /// * `keys` - private keys potential needs for encryption.
 pub fn create_encrypt_config(recipients: Vec<String>, keys: Vec<String>) -> Result<CryptoConfig> {
     let mut ec = EncryptConfig::default();

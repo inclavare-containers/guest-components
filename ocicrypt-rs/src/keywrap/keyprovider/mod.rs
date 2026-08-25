@@ -172,7 +172,7 @@ impl KeyProviderKeyWrapProtocolOutput {
         let args = command.args.as_ref().unwrap_or(&default_args);
         let resp_bytes: Vec<u8> = runner
             .exec(cmd_name, args, input)
-            .map_err(|e| anyhow!("keyprovider: error from command executor: {}", e))?;
+            .map_err(|e| anyhow!("keyprovider: error from command executor: {e}"))?;
 
         serde_json::from_slice(&resp_bytes)
             .map_err(|_| anyhow!("keyprovider: failed to deserialize message from binary executor"))
@@ -878,7 +878,7 @@ mod tests {
                             .unwrap(),
                         unsafe { self::cmd_grpc::ENC_KEY },
                     )
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+                    .map_err(|e| std::io::Error::other(e.to_string()))?;
                     let ap = AnnotationPacket {
                         key_url: "https://key-provider/key-uuid".to_string(),
                         wrapped_key,
@@ -905,7 +905,7 @@ mod tests {
                     let unwrapped_key = super::cmd_grpc::decrypt_key(&wrapped_key, unsafe {
                         super::cmd_grpc::DEC_KEY
                     })
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+                    .map_err(|e| std::io::Error::other(e.to_string()))?;
                     key_wrap_output = KeyProviderKeyWrapProtocolOutput {
                         key_wrap_results: None,
                         key_unwrap_results: Some(KeyUnwrapResults {

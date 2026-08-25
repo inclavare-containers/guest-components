@@ -252,10 +252,7 @@ impl KbsClient<Box<dyn EvidenceProvider>> {
             }
             reqwest::StatusCode::UNAUTHORIZED => {
                 let error_info = resp.json::<ErrorInformation>().await?;
-                bail!(
-                    "KBS request unauthorized, ErrorInformation: {:?}",
-                    error_info
-                );
+                bail!("KBS request unauthorized, ErrorInformation: {error_info:?}");
             }
             _ => {
                 bail!(
@@ -325,7 +322,7 @@ impl KbsClient<Box<dyn EvidenceProvider>> {
             }
             reqwest::StatusCode::UNAUTHORIZED => {
                 let error_info = attest_response.json::<ErrorInformation>().await?;
-                bail!("KBS attest unauthorized, Error Info: {:?}", error_info);
+                bail!("KBS attest unauthorized, Error Info: {error_info:?}");
             }
             _ => {
                 bail!(
