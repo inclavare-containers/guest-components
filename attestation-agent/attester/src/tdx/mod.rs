@@ -16,7 +16,7 @@ use kbs_types::HashAlgorithm;
 use report::TdReport;
 use scroll::Pread;
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 mod report;
 mod rtmr;
@@ -24,6 +24,7 @@ mod rtmr;
 mod gpu;
 
 const TDX_REPORT_DATA_SIZE: usize = 64;
+const TDX_MEASUREMENT_SIZE: usize = 48;
 
 const TDX_RTMR_PATH: &str = "/sys/devices/virtual/misc/tdx_guest/measurements";
 const TDX_GUEST_IOCTL: &str = "/dev/tdx_guest";
@@ -47,22 +48,40 @@ fn get_quote_ioctl(report_data: &[u8]) -> Result<Vec<u8>> {
     }
 }
 
-// Return true if the TD environment can extend runtime measurement.
-fn runtime_measurement_extend_available() -> bool {
-    Path::new(TDX_GUEST_IOCTL).exists() || Path::new(TDX_RTMR_PATH).exists()
+fn rtmr_sysfs_path(measurement_dir: &Path, rtmr_index: u64) -> PathBuf {
+    measurement_dir.join(format!("rtmr{rtmr_index}:sha384"))
 }
 
-fn extend_rtmr_via_sysfs(rtmr_index: u64, extend_data: &[u8; 48]) -> Result<()> {
-    std::fs::write(
-        Path::new(TDX_RTMR_PATH).join(format!("rtmr{rtmr_index}:sha384")),
-        extend_data,
-    )
-    .context("TDX Attester: failed to extend RTMR via sysfs")?;
+fn sysfs_runtime_measurements_available(measurement_dir: &Path) -> bool {
+    (0..4).all(|index| rtmr_sysfs_path(measurement_dir, index).is_file())
+}
+
+// Return true if the TD environment can extend and read runtime measurements.
+fn runtime_measurement_available() -> bool {
+    sysfs_runtime_measurements_available(Path::new(TDX_RTMR_PATH))
+        || Path::new(TDX_GUEST_IOCTL).exists()
+}
+
+fn read_measurement_via_sysfs(path: &Path) -> Result<Vec<u8>> {
+    let measurement = std::fs::read(path)
+        .with_context(|| format!("TDX Attester: failed to read measurement from {path:?}"))?;
+    ensure!(
+        measurement.len() == TDX_MEASUREMENT_SIZE,
+        "TDX Attester: measurement from {path:?} has invalid size {}, expected {TDX_MEASUREMENT_SIZE}",
+        measurement.len()
+    );
+    Ok(measurement)
+}
+
+fn extend_rtmr_via_sysfs(rtmr_index: u64, extend_data: &[u8; TDX_MEASUREMENT_SIZE]) -> Result<()> {
+    let path = rtmr_sysfs_path(Path::new(TDX_RTMR_PATH), rtmr_index);
+    std::fs::write(&path, extend_data)
+        .with_context(|| format!("TDX Attester: failed to extend RTMR via {path:?}"))?;
     log::debug!("TDX extend runtime measurement via sysfs succeeded.");
     Ok(())
 }
 
-fn extend_rtmr_via_ioctl(rtmr_index: u64, extend_data: &[u8; 48]) -> Result<()> {
+fn extend_rtmr_via_ioctl(rtmr_index: u64, extend_data: &[u8; TDX_MEASUREMENT_SIZE]) -> Result<()> {
     let event: Vec<u8> = rtmr::TdxRtmrEvent::default()
         .with_extend_data(*extend_data)
         .with_rtmr_index(rtmr_index)
@@ -202,7 +221,7 @@ impl Attester for TdxAttester {
     }
 
     fn supports_runtime_measurement(&self) -> bool {
-        runtime_measurement_extend_available()
+        runtime_measurement_available()
     }
 
     async fn extend_runtime_measurement(
@@ -210,32 +229,38 @@ impl Attester for TdxAttester {
         event_digest: Vec<u8>,
         register_index: u64,
     ) -> Result<()> {
-        if !runtime_measurement_extend_available() {
+        if !runtime_measurement_available() {
             bail!("TDX Attester: runtime measurement extend is not available");
         }
 
         let ccmr_index = self.pcr_to_ccmr(register_index);
         let rtmr_index = ccmr_index - 1;
 
-        let extend_data: [u8; 48] = pad(&event_digest);
+        let extend_data: [u8; TDX_MEASUREMENT_SIZE] = pad(&event_digest);
 
         log::debug!(
             "TDX Attester: extend RTMR{rtmr_index}: {}",
             hex::encode(extend_data)
         );
 
-        extend_rtmr_via_ioctl(rtmr_index, &extend_data).or_else(|e| {
-            log::warn!("TDX Attester: ioctl RTMR extend failed ({e}), attempting sysfs fallback");
-            extend_rtmr_via_sysfs(rtmr_index, &extend_data)
-        })?;
+        if rtmr_sysfs_path(Path::new(TDX_RTMR_PATH), rtmr_index).is_file() {
+            extend_rtmr_via_sysfs(rtmr_index, &extend_data)?;
+        } else {
+            extend_rtmr_via_ioctl(rtmr_index, &extend_data)?;
+        }
 
         Ok(())
     }
 
     async fn bind_init_data(&self, init_data_digest: &[u8]) -> Result<InitDataResult> {
-        let td_report = Self::get_report()?;
-        let init_data: [u8; 48] = pad(init_data_digest);
-        if init_data != td_report.tdinfo.mrconfigid {
+        let mrconfigid_path = Path::new(TDX_RTMR_PATH).join("mrconfigid");
+        let mrconfigid = if mrconfigid_path.is_file() {
+            read_measurement_via_sysfs(&mrconfigid_path)?
+        } else {
+            Self::get_report()?.tdinfo.mrconfigid.to_vec()
+        };
+        let init_data: [u8; TDX_MEASUREMENT_SIZE] = pad(init_data_digest);
+        if init_data.as_slice() != mrconfigid.as_slice() {
             bail!("Init data does not match!");
         }
 
@@ -243,10 +268,15 @@ impl Attester for TdxAttester {
     }
 
     async fn get_runtime_measurement(&self, pcr_index: u64) -> Result<Vec<u8>> {
-        let td_report = Self::get_report()?;
         let ccmr = self.pcr_to_ccmr(pcr_index) as usize;
+        let rtmr_index = ccmr - 1;
+        let rtmr_path = rtmr_sysfs_path(Path::new(TDX_RTMR_PATH), rtmr_index as u64);
 
-        Ok(td_report.get_rtmr(ccmr - 1))
+        if rtmr_path.is_file() {
+            return read_measurement_via_sysfs(&rtmr_path);
+        }
+
+        Ok(Self::get_report()?.get_rtmr(rtmr_index))
     }
 
     fn pcr_to_ccmr(&self, pcr_index: u64) -> u64 {
@@ -268,6 +298,33 @@ impl Attester for TdxAttester {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_sysfs_runtime_measurements_available() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(!sysfs_runtime_measurements_available(dir.path()));
+
+        for index in 0..4 {
+            std::fs::write(rtmr_sysfs_path(dir.path(), index), [0_u8; 48]).unwrap();
+        }
+        assert!(sysfs_runtime_measurements_available(dir.path()));
+
+        std::fs::remove_file(rtmr_sysfs_path(dir.path(), 2)).unwrap();
+        assert!(!sysfs_runtime_measurements_available(dir.path()));
+    }
+
+    #[test]
+    fn test_read_measurement_via_sysfs_validates_size() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("measurement");
+        let expected = vec![0x5a; TDX_MEASUREMENT_SIZE];
+
+        std::fs::write(&path, &expected).unwrap();
+        assert_eq!(read_measurement_via_sysfs(&path).unwrap(), expected);
+
+        std::fs::write(&path, [0_u8; TDX_MEASUREMENT_SIZE - 1]).unwrap();
+        assert!(read_measurement_via_sysfs(&path).is_err());
+    }
 
     #[ignore]
     #[tokio::test]
