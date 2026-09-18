@@ -174,7 +174,11 @@ impl KbsClient<Box<dyn EvidenceProvider>> {
     ) -> anyhow::Result<CompositeEvidence> {
         let device_runtime_data = serialize_json_canonically(&runtime_data)?;
 
-        let device_runtime_data_hash = hash_algorithm.digest(&device_runtime_data);
+        // KBS verifies additional evidence with the protocol's default SHA-384
+        // algorithm.  The algorithm negotiated for the primary TEE can differ
+        // (Hygon TPM selects SM3), so reusing it here makes an otherwise valid
+        // Hygon DCU report fail its nonce binding check.
+        let device_runtime_data_hash = DEFAULT_HASH_ALGORITHM.digest(&device_runtime_data);
         let additional_evidence = self
             .provider
             .get_additional_evidence(device_runtime_data_hash)
@@ -414,7 +418,12 @@ mod test {
     use kbs_types::HashAlgorithm;
     use rstest::rstest;
     use serde_json::{json, Value};
-    use std::{env, path::PathBuf, time::Duration};
+    use std::{
+        env,
+        path::PathBuf,
+        sync::{Arc, Mutex},
+        time::Duration,
+    };
     use testcontainers::{
         core::{IntoContainerPort, Mount},
         runners::AsyncRunner,
@@ -424,17 +433,67 @@ mod test {
     use tokio::io::AsyncBufReadExt;
 
     use crate::{
-        evidence_provider::NativeEvidenceProvider, Error, KbsClientBuilder, KbsClientCapabilities,
+        evidence_provider::{EvidenceProvider, NativeEvidenceProvider},
+        Error, KbsClientBuilder, KbsClientCapabilities,
     };
 
     use crate::client::rcar_client::{
-        build_request, get_hash_algorithm, get_request_extra_params, Result,
-        DEFAULT_HASH_ALGORITHM, KBS_PROTOCOL_VERSION, SELECTED_HASH_ALGORITHM_JSON_KEY,
-        SUPPORTED_HASH_ALGORITHMS_JSON_KEY,
+        build_request, get_hash_algorithm, get_request_extra_params, serialize_json_canonically,
+        Result, RuntimeData, DEFAULT_HASH_ALGORITHM, KBS_PROTOCOL_VERSION,
+        SELECTED_HASH_ALGORITHM_JSON_KEY, SUPPORTED_HASH_ALGORITHMS_JSON_KEY,
     };
     use kbs_types::Tee;
 
     const CONTENT: &[u8] = b"test content";
+
+    struct RecordingEvidenceProvider {
+        additional_runtime_data: Arc<Mutex<Option<Vec<u8>>>>,
+    }
+
+    #[async_trait::async_trait]
+    impl EvidenceProvider for RecordingEvidenceProvider {
+        async fn primary_evidence(&self, _runtime_data: Vec<u8>) -> Result<Value> {
+            Ok(json!({}))
+        }
+
+        async fn get_additional_evidence(&self, runtime_data: Vec<u8>) -> Result<String> {
+            *self.additional_runtime_data.lock().unwrap() = Some(runtime_data);
+            Ok("{}".to_string())
+        }
+
+        async fn get_tee_type(&self) -> Result<Tee> {
+            Ok(Tee::HygonTpm)
+        }
+    }
+
+    #[tokio::test]
+    async fn additional_evidence_uses_default_hash_for_hygon_tpm_composite() {
+        let additional_runtime_data = Arc::new(Mutex::new(None));
+        let provider = RecordingEvidenceProvider {
+            additional_runtime_data: Arc::clone(&additional_runtime_data),
+        };
+        let client =
+            KbsClientBuilder::with_evidence_provider(Box::new(provider), "http://127.0.0.1:8080")
+                .build()
+                .unwrap();
+        let runtime_data = RuntimeData {
+            nonce: "challenge".to_string(),
+            tee_pubkey: client.tee_key.export_pubkey().unwrap(),
+        };
+        let canonical_runtime_data = serialize_json_canonically(&runtime_data).unwrap();
+
+        client
+            .get_composite_evidence(runtime_data, HashAlgorithm::Sm3, Tee::HygonTpm)
+            .await
+            .unwrap();
+
+        let actual = additional_runtime_data.lock().unwrap().clone().unwrap();
+        assert_eq!(
+            actual,
+            DEFAULT_HASH_ALGORITHM.digest(&canonical_runtime_data)
+        );
+        assert_ne!(actual, HashAlgorithm::Sm3.digest(&canonical_runtime_data));
+    }
 
     #[tokio::test]
     #[serial_test::serial]

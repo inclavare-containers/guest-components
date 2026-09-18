@@ -1,9 +1,9 @@
-%define release 1
+%define release alpha
 %global config_dir /etc/trustiflux
 %global libdir /usr/lib
 
 Name:		trustiflux
-Version:	1.7.0
+Version:	1.7.1
 Release:	%{release}%{?dist}
 Summary:	A daemon service running inside TEE (Trusted Execution Environment) to confidential resource related APIs
 
@@ -150,6 +150,12 @@ rm -rf %{buildroot}
 %{libdir}/dracut/modules.d/99confidential-data-hub/module-setup.sh
 
 %changelog
+* Thu Sep 17 2026 Jiale Zhang <zhangjiale@linux.alibaba.com> - 1.7.1-alpha
+- Attestation: use the hardware-validated csv-rs revision for mixed Hygon DCU
+  systems and current driver ioctl ABI
+- Attestation: keep Hygon TPM primary evidence on SM3 while hashing additional
+  device evidence with the protocol-default SHA-384 algorithm
+
 * Mon Sep 14 2026 Jiale Zhang <zhangjiale@linux.alibaba.com> - 1.7.0-1
 - Attestation Agent/TDX: prefer sysfs runtime measurements and report runtime
   measurement capability
