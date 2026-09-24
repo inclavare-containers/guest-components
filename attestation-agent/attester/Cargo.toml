@@ -43,7 +43,7 @@ strum.workspace = true
 tdx-attest-rs = { git = "https://github.com/intel/SGXDataCenterAttestationPrimitives", tag = "DCAP_1.22", optional = true }
 thiserror.workspace = true
 # TODO: change it to "0.1", once released.
-csv-rs = { git = "https://github.com/jialez0/csv-rs.git", rev = "1c6fa975f1c74fefbea63739c91feb23efae7186", optional = true }
+csv-rs = { git = "https://github.com/openanolis/csv-rs.git", rev = "86d68fd4e1b51c788fc18222269a12db1262ff0c", optional = true }
 codicon = { version = "3.0", optional = true }
 hyper = { version = "0.14", features = ["full"], optional = true }
 hyper-tls = { version = "0.5", optional = true }
