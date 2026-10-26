@@ -13,10 +13,18 @@ Source0:	https://github.com/inclavare-containers/guest-components/archive/refs/t
 Source1:	https://github.com/inclavare-containers/guest-components/releases/download/v%{version}/guest-components-v%{version}-vendor.tar.gz
 BuildRoot:  %{_tmppath}/%{name}-%{version}-build
 
-ExclusiveArch:	x86_64
+ExclusiveArch:	x86_64 aarch64
+%global rust_target %{_arch}-unknown-linux-gnu
+%ifarch aarch64
+%global attester_features cca-attester,system-attester,tpm-attester
+%else
+%global attester_features tdx-attester,system-attester,tpm-attester,csv-attester,hygon-dcu-attester
+BuildRequires: libtdx-attest-devel
+Requires: libtdx-attest tee-primitives
+%endif
 
-BuildRequires:	cargo clang perl protobuf-devel git libtdx-attest-devel libgudev-devel tpm2-tss-devel
-Requires: tpm2-tss libtdx-attest tee-primitives
+BuildRequires:	cargo clang perl protobuf-devel git libgudev-devel tpm2-tss-devel openssl-devel
+Requires: tpm2-tss
 
 %description
 A daemon service running inside TEE (Trusted Execution Environment) to confidential resource related APIs
@@ -67,16 +75,16 @@ rust_path_remap_flags="--remap-path-prefix=${HOME}=/usr/src --remap-path-prefix=
 export RUSTFLAGS="${RUSTFLAGS:+${RUSTFLAGS} }${rust_path_remap_flags}"
 
 # building the attestation-agent
-cargo build -p attestation-agent --bin ttrpc-aa --release --no-default-features --features bin,ttrpc,rust-crypto,coco_as,kbs,tdx-attester,system-attester,tpm-attester,instance_info,csv-attester,hygon-dcu-attester --target x86_64-unknown-linux-gnu
-cargo build -p attestation-agent --bin ttrpc-aa-client --release --no-default-features --features bin,ttrpc,eventlog --target x86_64-unknown-linux-gnu
+cargo build -p attestation-agent --bin ttrpc-aa --release --no-default-features --features bin,ttrpc,rust-crypto,coco_as,kbs,instance_info,%{attester_features} --target %{rust_target}
+cargo build -p attestation-agent --bin ttrpc-aa-client --release --no-default-features --features bin,ttrpc,eventlog --target %{rust_target}
 
 # building the confidential-data-hub
-cargo build -p confidential-data-hub --release --bin cdh-oneshot --no-default-features --features "bin,aliyun,kbs" --target x86_64-unknown-linux-gnu
-cargo build -p confidential-data-hub --release --bin ttrpc-cdh --no-default-features --features "bin,aliyun,kbs,resource_injection,ttrpc" --target x86_64-unknown-linux-gnu
-cargo build -p confidential-data-hub --release --bin ttrpc-cdh-tool --no-default-features --features "bin,ttrpc" --target x86_64-unknown-linux-gnu
+cargo build -p confidential-data-hub --release --bin cdh-oneshot --no-default-features --features "bin,aliyun,kbs" --target %{rust_target}
+cargo build -p confidential-data-hub --release --bin ttrpc-cdh --no-default-features --features "bin,aliyun,kbs,resource_injection,ttrpc" --target %{rust_target}
+cargo build -p confidential-data-hub --release --bin ttrpc-cdh-tool --no-default-features --features "bin,ttrpc" --target %{rust_target}
 
 # building the api-server-rest
-cargo build -p api-server-rest --release --target x86_64-unknown-linux-gnu
+cargo build -p api-server-rest --release --target %{rust_target}
 
 
 %install
@@ -89,8 +97,8 @@ install -m 644 dist/rpm/attestation-agent.service %{buildroot}%{libdir}/systemd/
 install -d -p %{buildroot}/etc/trustiflux
 install -m 644 dist/rpm/attestation-agent.toml %{buildroot}%{config_dir}/attestation-agent.toml
 install -d -p %{buildroot}%{_prefix}/bin
-install -m 755 target/x86_64-unknown-linux-gnu/release/ttrpc-aa %{buildroot}%{_prefix}/bin/attestation-agent
-install -m 755 target/x86_64-unknown-linux-gnu/release/ttrpc-aa-client %{buildroot}%{_prefix}/bin/attestation-agent-client
+install -m 755 target/%{rust_target}/release/ttrpc-aa %{buildroot}%{_prefix}/bin/attestation-agent
+install -m 755 target/%{rust_target}/release/ttrpc-aa-client %{buildroot}%{_prefix}/bin/attestation-agent-client
 
 # install dracut modules
 install -d -p %{buildroot}%{libdir}/dracut/modules.d/99attestation-agent
@@ -106,9 +114,9 @@ install -m 644 dist/rpm/confidential-data-hub.toml %{buildroot}%{config_dir}/con
 install -d -p %{buildroot}%{libdir}/systemd/system
 install -m 644 dist/rpm/confidential-data-hub-daemon.service %{buildroot}%{libdir}/systemd/system/confidential-data-hub-daemon.service
 install -d -p %{buildroot}%{_prefix}/bin
-install -m 755 target/x86_64-unknown-linux-gnu/release/cdh-oneshot %{buildroot}%{_prefix}/bin/confidential-data-hub
-install -m 755 target/x86_64-unknown-linux-gnu/release/ttrpc-cdh %{buildroot}%{_prefix}/bin/confidential-data-hub-daemon
-install -m 755 target/x86_64-unknown-linux-gnu/release/ttrpc-cdh-tool %{buildroot}%{_prefix}/bin/confidential-data-hub-client
+install -m 755 target/%{rust_target}/release/cdh-oneshot %{buildroot}%{_prefix}/bin/confidential-data-hub
+install -m 755 target/%{rust_target}/release/ttrpc-cdh %{buildroot}%{_prefix}/bin/confidential-data-hub-daemon
+install -m 755 target/%{rust_target}/release/ttrpc-cdh-tool %{buildroot}%{_prefix}/bin/confidential-data-hub-client
 
 # installing the api-server-rest
 install -d -p %{buildroot}%{libdir}/systemd/system
@@ -116,7 +124,7 @@ install -m 644 dist/rpm/trustiflux-api-server.service %{buildroot}%{libdir}/syst
 install -d -p %{buildroot}%{config_dir}
 install -m 644 dist/rpm/trustiflux-api-server.toml %{buildroot}%{config_dir}/trustiflux-api-server.toml
 install -d -p %{buildroot}%{_prefix}/bin
-install -m 755 target/x86_64-unknown-linux-gnu/release/api-server-rest %{buildroot}%{_prefix}/bin/trustiflux-api-server
+install -m 755 target/%{rust_target}/release/api-server-rest %{buildroot}%{_prefix}/bin/trustiflux-api-server
 
 # install dracut modules
 install -d -p %{buildroot}%{libdir}/dracut/modules.d/99confidential-data-hub

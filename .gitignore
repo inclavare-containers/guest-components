@@ -8,3 +8,4 @@ confidential-data-hub/secret/tests/envelope_secret_aliyun_config/
 confidential-data-hub/secret/tests/envelope_secret_ehsm_config/
 shell.nix
 vendor
+/rpm-output/
