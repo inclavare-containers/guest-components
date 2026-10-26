@@ -8,7 +8,7 @@ arch=$(rpm --eval '%{_arch}')
 version=$(awk '/^Version:/ {print $2; exit}' trustiflux.spec)
 make create-tarball
 cp "/tmp/v${version}.tar.gz" "/tmp/guest-components-v${version}-vendor.tar.gz" /build/SOURCES/
-rpmbuild -ba trustiflux.spec --define '_topdir /build' --define 'debug_package %{nil}' --define 'debugsource_package %{nil}'
+rpmbuild -ba trustiflux.spec --define '_topdir /build' --define 'with_rustup 1' --define 'debug_package %{nil}' --define 'debugsource_package %{nil}'
 
 # Check package metadata and executable dependencies on the actual build platform.
 for package in /build/RPMS/"$arch"/*.rpm; do

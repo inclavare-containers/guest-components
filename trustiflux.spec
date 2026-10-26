@@ -23,7 +23,10 @@ BuildRequires: libtdx-attest-devel
 Requires: libtdx-attest tee-primitives
 %endif
 
-BuildRequires:	cargo clang perl protobuf-devel git libgudev-devel tpm2-tss-devel openssl-devel
+%if 0%{!?with_rustup:1}
+BuildRequires: cargo
+%endif
+BuildRequires:	clang perl protobuf-devel git libgudev-devel tpm2-tss-devel openssl-devel
 Requires: tpm2-tss
 
 %description
