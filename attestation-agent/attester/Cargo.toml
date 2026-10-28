@@ -18,7 +18,7 @@ az-tdx-vtpm = { version = "0.7.0", default-features = false, features = [
 base64.workspace = true
 bincode.workspace = true
 clap = { workspace = true, features = ["derive"], optional = true }
-eventlog-rs = { git = "https://github.com/inclavare-containers/eventlog-rs", rev = "832215c6aa22bb79924da6d5de6be5fb6d89e285", optional = true }
+eventlog-rs = { git = "https://github.com/inclavare-containers/eventlog-rs", rev = "bc342f0534f2e2ef3a9c4a34a4838b88fdf81725", optional = true }
 hex.workspace = true
 iocuddle = { version = "0.1.1", optional = true }
 kbs-types.workspace = true

@@ -33,7 +33,7 @@ config.workspace = true
 const_format.workspace = true
 env_logger = { workspace = true, optional = true }
 eventlog = { git = "https://github.com/openanolis/trustee.git", rev = "5f5f0b4ab6499d0e4738b5dee3ae26888f514fe8", optional = true }
-eventlog-rs = { git = "https://github.com/inclavare-containers/eventlog-rs", rev = "832215c6aa22bb79924da6d5de6be5fb6d89e285" }
+eventlog-rs = { git = "https://github.com/inclavare-containers/eventlog-rs", rev = "bc342f0534f2e2ef3a9c4a34a4838b88fdf81725" }
 flate2 = { workspace = true, optional = true }
 hex.workspace = true
 kbs_protocol = { path = "../kbs_protocol", default-features = false, optional = true }
