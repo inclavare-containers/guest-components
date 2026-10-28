@@ -18,7 +18,7 @@ az-tdx-vtpm = { version = "0.7.0", default-features = false, features = [
 base64.workspace = true
 bincode.workspace = true
 clap = { workspace = true, features = ["derive"], optional = true }
-eventlog-rs = { version = "0.1.8", optional = true }
+eventlog-rs = { git = "https://github.com/inclavare-containers/eventlog-rs", rev = "832215c6aa22bb79924da6d5de6be5fb6d89e285", optional = true }
 hex.workspace = true
 iocuddle = { version = "0.1.1", optional = true }
 kbs-types.workspace = true
@@ -40,7 +40,7 @@ sev = { version = "4.0.0", default-features = false, features = [
 ], optional = true }
 sha2.workspace = true
 strum.workspace = true
-tdx-attest-rs = { git = "https://github.com/intel/SGXDataCenterAttestationPrimitives", tag = "DCAP_1.22", optional = true }
+tdx-attest-rs = { git = "https://github.com/intel/confidential-computing.tee.dcap", tag = "DCAP_1.23", optional = true }
 thiserror.workspace = true
 # TODO: change it to "0.1", once released.
 csv-rs = { git = "https://github.com/openanolis/csv-rs.git", rev = "86d68fd4e1b51c788fc18222269a12db1262ff0c", optional = true }

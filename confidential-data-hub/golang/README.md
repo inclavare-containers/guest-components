@@ -7,6 +7,8 @@ This offers a streamlined client interface for engaging with Confidential Data H
 
 ### Install dependencies
 
+Use Go 1.26.10 or later for the security fixes in the client dependencies and Go standard library.
+
 ```bash
 $ go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 $ go install github.com/containerd/ttrpc/cmd/protoc-gen-go-ttrpc@latest

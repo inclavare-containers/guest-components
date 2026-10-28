@@ -1,0 +1,58 @@
+name: Confidential Data Hub Go client
+
+on:
+  pull_request:
+    paths:
+      - 'confidential-data-hub/golang/**'
+      - 'protos/protos/confidential-data-hub/api.proto'
+      - '.github/workflows/cdh-go.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'confidential-data-hub/golang/**'
+      - 'protos/protos/confidential-data-hub/api.proto'
+      - '.github/workflows/cdh-go.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        rpc: [grpc, ttrpc]
+    defaults:
+      run:
+        working-directory: confidential-data-hub/golang
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: confidential-data-hub/golang/go.mod
+          cache-dependency-path: confidential-data-hub/golang/go.sum
+      - name: Install protobuf generators
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
+          go install github.com/containerd/ttrpc/cmd/protoc-gen-go-ttrpc@v1.2.4
+      - name: Generate client bindings
+        env:
+          RPC: ${{ matrix.rpc }}
+        run: |
+          module=github.com/confidential-containers/guest-components/confidential-data-hub/golang
+          opts="module=$module"
+          if [ "$RPC" = grpc ]; then
+            opts="$opts,require_unimplemented_servers=false"
+          fi
+          protoc -I ../../protos/protos/confidential-data-hub \
+            --go_out=. --go_opt=module=$module \
+            --go-${RPC}_out=. --go-${RPC}_opt=$opts \
+            ../../protos/protos/confidential-data-hub/api.proto
+      - name: Test clients
+        env:
+          RPC: ${{ matrix.rpc }}
+        run: go test -mod=readonly -race ./pkg/$RPC/... ./cmd/$RPC-client ./pkg/core
