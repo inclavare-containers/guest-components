@@ -52,7 +52,8 @@ jobs:
 
       - name: Install nettle-sys building dependence
         run: |
-          sudo apt install -y clang llvm pkg-config nettle-dev protobuf-compiler libprotobuf-dev
+          sudo apt-get update
+          sudo apt-get install -y clang llvm pkg-config nettle-dev protobuf-compiler libprotobuf-dev
 
       - uses: ./.github/actions/install-intel-dcap
         with:
