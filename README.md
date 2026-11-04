@@ -107,3 +107,4 @@ cargo llvm-cov --ignore-filename-regex='(image-rs|ocicrypt-rs|confidential-data-
 
 ## License
 [![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fconfidential-containers%2Fimage-rs.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fconfidential-containers%2Fimage-rs?ref=badge_large)
+
