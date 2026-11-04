@@ -1,0 +1,54 @@
+name: trigger T-one test
+
+on:
+  push:
+    branches:
+      - "main"
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  tone_user_name: ${{ secrets.TONE_USER_NAME }}
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: trigger T-one test
+        if: ${{ env.tone_user_name != '' }}
+        env:
+          TONE_USER_NAME: ${{ secrets.TONE_USER_NAME }}
+          TONE_USER_TOKEN: ${{ secrets.TONE_USER_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            REPO_URL="${{ github.event.pull_request.head.repo.clone_url }}"
+            BRANCH="${{ github.event.pull_request.head.ref }}"
+          else
+            REPO_URL="https://github.com/${{ github.repository }}.git"
+            BRANCH="${{ github.ref_name }}"
+          fi
+
+          ENV_INFO="repo=guest-components branch=${BRANCH} repo_url=${REPO_URL}"
+          REPO_NAME=$(echo "${{ github.repository }}" | cut -d/ -f2)
+          JOB_NAME="cai-ci-${REPO_NAME}-${{ github.event.pull_request.number || github.ref_name }}-$(echo ${{ github.sha }} | cut -c1-12)"
+
+          signature="${TONE_USER_NAME}|${TONE_USER_TOKEN}|$(python3 -c "import time;print(time.time())")"
+          signature="$(python3 -c "import base64;print(base64.b64encode(\"$signature\".encode('utf-8')).decode('utf-8'))")"
+          curl -s -H 'Content-Type: application/json' -X POST -d "{\"workspace\":\"cai_test\",\"template\":\"cai_ci_test\",\"name\":\"${JOB_NAME}\",\"username\":\"${TONE_USER_NAME}\",\"env_ifs\":\" \",\"env_info\":\"${ENV_INFO}\",\"signature\":\"$signature\"}" https://tone.openanolis.cn/api/job/create/ > job.json
+
+          if [ "$(jq .code job.json)" == 200 ]; then
+            echo "job created: ${JOB_NAME}"
+          else
+            echo "job create failed"
+            cat job.json
+            exit 1
+          fi
+          job_id=$(jq .data.id job.json)
+          echo "check job status here and remember to cancel it before restart the job !"
+          echo "job_url: https://tone.openanolis.cn/test_result/${job_id}?tab=4"
+          echo "job_id=${job_id}" >> $GITHUB_ENV
+        shell: bash
