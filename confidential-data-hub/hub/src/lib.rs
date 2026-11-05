@@ -10,6 +10,7 @@ pub mod api;
 pub use api::*;
 
 pub mod hub;
+mod resource;
 #[cfg(feature = "resource_injection")]
 mod resource_injection;
 

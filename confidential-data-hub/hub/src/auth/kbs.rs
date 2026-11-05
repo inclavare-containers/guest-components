@@ -11,7 +11,6 @@ use std::path::PathBuf;
 use log::debug;
 use tokio::fs;
 
-use crate::kms::{plugins::kbs::KbcClient, Annotations, Getter};
 use crate::{hub::Hub, Error, Result};
 
 /// This directory is used to store all the kbs resources get by CDH's init
@@ -20,6 +19,9 @@ pub const KBS_RESOURCE_STORAGE_DIR: &str = "/run/confidential-containers/cdh";
 
 impl Hub {
     pub(crate) async fn init_kbs_resources(&self) -> Result<()> {
+        if self.credentials.is_empty() {
+            return Ok(());
+        }
         // check the validity of the credential paths.
         for k in self.credentials.keys() {
             if !is_path_valid(k) {
@@ -28,10 +30,6 @@ impl Hub {
                 )));
             }
         }
-
-        let kbs_client = KbcClient::new().await.map_err(|e| {
-            Error::InitializationFailed(format!("kbs client creation failed: {e:?}"))
-        })?;
 
         fs::create_dir_all(KBS_RESOURCE_STORAGE_DIR)
             .await
@@ -42,17 +40,14 @@ impl Hub {
             })?;
 
         for (k, v) in &self.credentials {
-            let content = kbs_client
-                .get_secret(v, &Annotations::default())
-                .await
-                .map_err(|e| {
-                    Error::InitializationFailed(format!("kbs client get resource failed: {e:?}"))
-                })?;
+            let content = self.resources.get_resource(v).await.map_err(|e| {
+                Error::InitializationFailed(format!("initial resource fetch failed: {e:?}"))
+            })?;
 
             let target_path = PathBuf::from(k);
 
             debug!(
-                "Get config item {v} from KBS and put to {}",
+                "Get config item {v} from the resource backend and put to {}",
                 target_path.as_os_str().to_string_lossy()
             );
 
@@ -63,7 +58,7 @@ impl Hub {
             }
 
             fs::write(target_path, content).await.map_err(|e| {
-                Error::InitializationFailed(format!("write kbs initialization file failed: {e:?}"))
+                Error::InitializationFailed(format!("write initialization resource failed: {e:?}"))
             })?;
         }
 
