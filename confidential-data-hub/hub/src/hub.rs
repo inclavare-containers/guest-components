@@ -17,14 +17,14 @@ use protos::ttrpc::aa::attestation_agent::{
 #[cfg(feature = "ttrpc")]
 use protos::ttrpc::aa::attestation_agent_ttrpc::AttestationAgentServiceClient;
 
-use crate::kms;
-use crate::kms::{Annotations, ProviderSettings};
+use crate::resource::ResourceResolver;
 #[cfg(feature = "resource_injection")]
 use crate::resource_injection::ResourceInjection;
 use crate::storage::volume_type::Storage;
 use crate::{image, secret, CdhConfig, DataHub, Error, PrepareResourceInjectionResult, Result};
 
 pub struct Hub {
+    pub(crate) resources: ResourceResolver,
     #[allow(dead_code)]
     pub(crate) credentials: HashMap<String, String>,
     image_client: OnceCell<Mutex<ImageClient>>,
@@ -37,6 +37,8 @@ pub struct Hub {
 
 impl Hub {
     pub async fn new(config: CdhConfig) -> Result<Self> {
+        let resources = ResourceResolver::new(&config)
+            .map_err(|error| Error::InitializationFailed(format!("resource backend: {error:#}")))?;
         config.set_configuration_envs().map_err(|error| {
             Error::InitializationFailed(format!("set configuration envs: {error:#}"))
         })?;
@@ -49,6 +51,7 @@ impl Hub {
         let resource_injection = ResourceInjection::new(config.aa_socket.clone());
 
         let mut hub = Self {
+            resources,
             credentials,
             config,
             image_client: OnceCell::const_new(),
@@ -82,14 +85,9 @@ impl DataHub for Hub {
 
     async fn get_resource(&self, uri: String) -> Result<Vec<u8>> {
         info!("get resource called: {uri}");
-        // to initialize a get_resource_provider client we do not need the ProviderSettings.
-        let client = kms::new_getter("kbs", ProviderSettings::default())
-            .await
-            .map_err(|e| Error::KbsClient { source: e })?;
-
-        // to get resource using a get_resource_provider client we do not need the Annotations.
-        let res = client
-            .get_secret(&uri, &Annotations::default())
+        let res = self
+            .resources
+            .get_resource(&uri)
             .await
             .map_err(|e| Error::GetResource { source: e })?;
         Ok(res)

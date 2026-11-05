@@ -50,7 +50,7 @@ enum Operation {
     /// Unwrap the image encryption key
     UnwrapKey(UnwrapKeyArgs),
 
-    /// Get Resource from KBS
+    /// Get a resource from CDH's configured backend (KBS or attested Aliyun KMS)
     GetResource(GetResourceArgs),
 
     /// Secure mount
@@ -79,7 +79,7 @@ struct UnwrapKeyArgs {
 #[derive(Args)]
 #[command(author, version, about, long_about = None)]
 struct GetResourceArgs {
-    /// KBS Resource URI to the target resource
+    /// Resource URI (kbs:/// path; interpreted by CDH's configured backend)
     #[arg(short, long)]
     resource_uri: String,
 }

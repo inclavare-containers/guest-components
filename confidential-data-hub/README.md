@@ -3,6 +3,10 @@
 Confidential Data Hub (`CDH`) is a service running inside the guest to provide resource related
 APIs.
 
+For an attestation-enabled Aliyun KMS instance, configure the explicit
+`aliyun_kms_kbc` GetResource backend. See
+[KMS GetResource configuration and usage](docs/aliyun-kms-get-resource.md).
+
 CDH supports decryption of encrypted images. When
 `OCICRYPT_KEYPROVIDER_CONFIG` is unset, CDH creates
 `/run/confidential-containers/cdh/ocicrypt_config.json`, maps the historical

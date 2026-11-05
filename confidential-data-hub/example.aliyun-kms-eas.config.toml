@@ -1,0 +1,14 @@
+# Requires the aliyun feature and an EAS role bound by the platform.
+socket = "unix:///run/confidential-containers/cdh.sock"
+
+[aa]
+aa_socket = "unix:///run/confidential-containers/attestation-agent/attestation-agent.sock"
+
+[kbc]
+name = "aliyun_kms_kbc"
+instance_id = "kst-example"
+region_id = "cn-beijing"
+credential_source = "credentials_uri"
+# Normally inherited from the CDH process's ALIBABA_CLOUD_CREDENTIALS_URI.
+# credentials_uri = "http://<trusted-platform-endpoint>/credentials"
+# Do not set ecs_ram_role_name in URI mode; the EAS platform selects the role.

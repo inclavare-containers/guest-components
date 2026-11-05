@@ -10,6 +10,9 @@ use serde_json::json;
 use sts_token_client::StsTokenClient;
 
 mod attestation_client;
+mod automatic;
+mod session;
+pub use automatic::AutomaticKmsClient;
 mod client_key_client;
 mod ecs_ram_role_client;
 pub mod oidc_with_ram;
