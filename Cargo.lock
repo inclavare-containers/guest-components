@@ -1361,6 +1361,7 @@ dependencies = [
  "ring",
  "rsa",
  "rstest",
+ "rustls",
  "serde",
  "serde_json",
  "serial_test",

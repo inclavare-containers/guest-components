@@ -131,6 +131,24 @@ impl fmt::Debug for AttestationClient {
 }
 
 impl AttestationClient {
+    /// Typed entry point for GetResource: no files or process-global AA settings.
+    pub(super) fn from_session(
+        kms_instance_id: String,
+        credential: StsCredential,
+        http_client: reqwest::Client,
+        aa_socket: String,
+    ) -> Self {
+        Self {
+            endpoint: format!("{kms_instance_id}.cryptoservice.kms.aliyuncs.com"),
+            kms_instance_id,
+            credential_source: CredentialSource::StsToken(credential),
+            kms_ca_cert: None,
+            tee: default_tee(),
+            aa_socket,
+            http_client,
+        }
+    }
+
     pub fn new(settings: AliAttestationProviderSettings, cert_pem: &str) -> Result<Self> {
         let credential_source = credential_source(&settings)?;
         let endpoint = format!(
@@ -192,14 +210,9 @@ impl AttestationClient {
             kms_ca_cert: self.kms_ca_cert.clone(),
             tee: self.tee.clone(),
         };
-        let provider_settings = serde_json::to_value(settings)
-            .map_err(|e| {
-                Error::AliyunKmsError(format!("serialize ProviderSettings failed: {e:?}"))
-            })?
-            .as_object()
-            .expect("must be an object")
-            .to_owned();
-        Ok(provider_settings)
+        serde_json::to_value(settings)
+            .and_then(serde_json::from_value)
+            .map_err(|e| Error::AliyunKmsError(format!("serialize ProviderSettings failed: {e:?}")))
     }
 
     pub async fn get_secret(&self, name: &str, annotations: &Annotations) -> Result<Vec<u8>> {
@@ -210,16 +223,27 @@ impl AttestationClient {
                 ))
             })?;
 
-        self.get_secret_inner(name, &secret_settings)
+        // Preserve the existing Vault provider's KMS wire representation.
+        self.get_secret_value(name, &secret_settings)
             .await
+            .map(|(value, _)| value)
             .map_err(|e| Error::AliyunKmsError(format!("attestation get_secret failed: {e:#}")))
     }
 
-    async fn get_secret_inner(
+    pub(super) async fn get_secret_bytes(
         &self,
         name: &str,
         secret_settings: &AliSecretAnnotations,
     ) -> anyhow::Result<Vec<u8>> {
+        let (value, data_type) = self.get_secret_value(name, secret_settings).await?;
+        decode_resource_bytes(value, data_type.as_deref())
+    }
+
+    async fn get_secret_value(
+        &self,
+        name: &str,
+        secret_settings: &AliSecretAnnotations,
+    ) -> anyhow::Result<(Vec<u8>, Option<String>)> {
         let credential = self.get_session_credential().await?;
 
         let challenge = self
@@ -227,7 +251,9 @@ impl AttestationClient {
             .await
             .context("GetChallenge")?;
 
-        let keypair = RsaPrivateKey::new(&mut OsRng, RSA_KEY_BITS)
+        let keypair = tokio::task::spawn_blocking(|| RsaPrivateKey::new(&mut OsRng, RSA_KEY_BITS))
+            .await
+            .context("ephemeral key generation task")?
             .context("generate ephemeral RSA key pair")?;
         let recipient = self
             .build_recipient(&challenge, &keypair)
@@ -263,7 +289,11 @@ impl AttestationClient {
             .decrypt(Oaep::new::<Sha256>(), &ciphertext)
             .map_err(|e| anyhow!("RSA-OAEP decrypt CiphertextForRecipient failed: {e:?}"))?;
 
-        Ok(plaintext)
+        let data_type = response
+            .get("SecretDataType")
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+        Ok((plaintext, data_type))
     }
 
     /// A `Challenge` is a fresh nonce plus a short-lived token signed by the AS, both
@@ -385,6 +415,23 @@ impl AttestationClient {
         action: &str,
         biz_params: BTreeMap<String, String>,
     ) -> anyhow::Result<Value> {
+        Self::call_api_to(
+            &self.http_client,
+            &self.endpoint,
+            credential,
+            action,
+            biz_params,
+        )
+        .await
+    }
+
+    pub(super) async fn call_api_to(
+        http_client: &reqwest::Client,
+        endpoint: &str,
+        credential: &StsCredential,
+        action: &str,
+        biz_params: BTreeMap<String, String>,
+    ) -> anyhow::Result<Value> {
         let mut params = biz_params;
         params.insert("Action".to_string(), action.to_string());
         params.insert("Version".to_string(), Self::API_VERSION.to_string());
@@ -439,10 +486,9 @@ impl AttestationClient {
             .join("&");
 
         debug!("aliyun kms attestation: calling {action}");
-        let response = self
-            .http_client
-            .post(format!("https://{}/", self.endpoint))
-            .header("Host", &self.endpoint)
+        let response = http_client
+            .post(format!("https://{endpoint}/"))
+            .header("Host", endpoint)
             .header("Content-Type", "application/x-www-form-urlencoded")
             .body(body)
             .send()
@@ -450,28 +496,63 @@ impl AttestationClient {
 
         let status = response.status();
         let text = response.text().await?;
+        // An upstream response can contain secrets or echo signed inputs. Never
+        // include its body or free-form Message in an error returned to REST.
         let value: Value = serde_json::from_str(&text)
-            .with_context(|| format!("parse {action} response as JSON: {text}"))?;
+            .with_context(|| format!("parse {action} response as JSON (HTTP {status})"))?;
 
         if !status.is_success() {
-            bail!(
-                "{action} failed, http status: {}, code: {}, message: {}, request id: {}",
-                status,
-                value.get("Code").and_then(Value::as_str).unwrap_or("-"),
-                value.get("Message").and_then(Value::as_str).unwrap_or("-"),
-                value
-                    .get("RequestId")
-                    .and_then(Value::as_str)
-                    .unwrap_or("-"),
-            );
+            return Err(ApiError {
+                action: action.to_owned(),
+                status: status.as_u16(),
+                code: public_error_field(&value, "Code"),
+                request_id: public_error_field(&value, "RequestId"),
+            }
+            .into());
         }
         Ok(value)
+    }
+}
+
+// KMS wraps binary SecretData's standard-base64 representation. GetResource
+// returns original resource bytes, whereas the legacy Vault entry point above
+// deliberately retains its existing wire-value behavior.
+fn decode_resource_bytes(value: Vec<u8>, data_type: Option<&str>) -> anyhow::Result<Vec<u8>> {
+    match data_type {
+        Some(kind) if kind.eq_ignore_ascii_case("binary") => STANDARD
+            .decode(value)
+            .context("decode KMS binary secret resource"),
+        Some(kind) if kind.eq_ignore_ascii_case("text") => Ok(value),
+        None => Ok(value),
+        Some(_) => bail!("unsupported KMS SecretDataType"),
     }
 }
 
 struct Challenge {
     nonce: String,
     challenge_token: String,
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("{action} failed, HTTP {status}, code: {code}, request id: {request_id}")]
+pub(super) struct ApiError {
+    action: String,
+    pub(super) status: u16,
+    pub(super) code: String,
+    request_id: String,
+}
+
+fn public_error_field(value: &Value, field: &str) -> String {
+    value
+        .get(field)
+        .and_then(Value::as_str)
+        .filter(|s| {
+            s.len() <= 128
+                && s.bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
+        })
+        .unwrap_or("-")
+        .to_owned()
 }
 
 fn credential_source(settings: &AliAttestationProviderSettings) -> Result<CredentialSource> {
@@ -547,6 +628,44 @@ fn sha384_canonical(value: &Value) -> anyhow::Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn export_settings_preserves_the_vault_provider_shape() {
+        let client = AttestationClient::from_session(
+            "kst-test".into(),
+            StsCredential {
+                ak: "test-ak".into(),
+                sk: "test-sk".into(),
+                sts: "test-sts".into(),
+            },
+            reqwest::Client::new(),
+            DEFAULT_AA_SOCKET.into(),
+        );
+        let settings = client.export_provider_settings().unwrap();
+        assert_eq!(settings["kms_instance_id"], "kst-test");
+        assert_eq!(settings["sts_token"], "test-ak:test-sk:test-sts");
+        assert!(!settings.contains_key("ecs_ram_role_name"));
+    }
+
+    #[test]
+    fn get_resource_decodes_only_binary_wire_values() {
+        let bytes = vec![0, 255, 1, 254];
+        let encoded = STANDARD.encode(&bytes).into_bytes();
+        assert_eq!(
+            decode_resource_bytes(encoded.clone(), Some("binary")).unwrap(),
+            bytes
+        );
+        assert_eq!(
+            decode_resource_bytes(encoded.clone(), Some("text")).unwrap(),
+            encoded
+        );
+        assert_eq!(
+            decode_resource_bytes(encoded.clone(), None).unwrap(),
+            encoded
+        );
+        assert!(decode_resource_bytes(b"not-base64!".to_vec(), Some("binary")).is_err());
+        assert!(decode_resource_bytes(vec![], Some("unknown")).is_err());
+    }
 
     #[test]
     fn canonical_hash_is_order_independent() {

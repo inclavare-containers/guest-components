@@ -32,24 +32,180 @@ const CDH_DEFAULT_IMAGE_AUTHENTICATED_REGISTRY_CREDENTIALS: &str =
 
 #[derive(Clone, Deserialize, Debug, PartialEq)]
 pub struct KbsConfig {
-    pub name: String,
-
+    #[serde(default)]
     pub url: String,
 
     pub kbs_cert: Option<String>,
 }
 
-impl KbsConfig {
+pub const ALIYUN_KMS_KBC: &str = "aliyun_kms_kbc";
+
+/// The selected backend and its parameters share one `[kbc]` table.
+/// Existing KBS configurations retain their `name`, `url`, and `kbs_cert` fields.
+#[derive(Clone, Deserialize, Debug, PartialEq)]
+#[serde(tag = "name")]
+pub enum KbcConfig {
+    #[serde(rename = "cc_kbc")]
+    Cc(KbsConfig),
+    #[serde(rename = "offline_fs_kbc")]
+    OfflineFs(KbsConfig),
+    #[serde(rename = "online_sev_kbc")]
+    OnlineSev(KbsConfig),
+    #[serde(rename = "aliyun_kms_kbc")]
+    AliyunKms(KmsConfig),
+}
+
+impl KbcConfig {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Cc(_) => "cc_kbc",
+            Self::OfflineFs(_) => "offline_fs_kbc",
+            Self::OnlineSev(_) => "online_sev_kbc",
+            Self::AliyunKms(_) => ALIYUN_KMS_KBC,
+        }
+    }
+
+    fn kbs_config(&self) -> Option<&KbsConfig> {
+        match self {
+            Self::Cc(config) | Self::OfflineFs(config) | Self::OnlineSev(config) => Some(config),
+            Self::AliyunKms(_) => None,
+        }
+    }
+
+    pub(crate) fn validate(&self) -> Result<()> {
+        match self {
+            Self::Cc(config) => ensure!(
+                config.url.starts_with("http://") || config.url.starts_with("https://"),
+                "cc_kbc requires a Trustee HTTP(S) kbc.url"
+            ),
+            Self::OfflineFs(_) | Self::OnlineSev(_) => {}
+            Self::AliyunKms(config) => {
+                config.validate()?;
+                #[cfg(not(feature = "aliyun"))]
+                bail!("aliyun_kms_kbc requires the aliyun build feature");
+            }
+        }
+        Ok(())
+    }
+
     fn new() -> Result<Self> {
         debug!("Try to get kbc and url from env and kernel commandline.");
-        let aa_kbc_params =
-            AaKbcParams::new().context("failed to read aa_kbc_params to initialize KbsConfig")?;
-        Ok(KbsConfig {
-            name: aa_kbc_params.kbc,
-            url: aa_kbc_params.uri,
+        let params = AaKbcParams::new().context("read aa_kbc_params to initialize KbcConfig")?;
+        let config = KbsConfig {
+            url: params.uri,
             kbs_cert: None,
-        })
+        };
+        match params.kbc.as_str() {
+            "cc_kbc" => Ok(Self::Cc(config)),
+            "offline_fs_kbc" => Ok(Self::OfflineFs(config)),
+            "online_sev_kbc" => Ok(Self::OnlineSev(config)),
+            ALIYUN_KMS_KBC => bail!("aliyun_kms_kbc requires a CDH configuration file"),
+            other => bail!("unsupported resource backend: {other}"),
+        }
     }
+}
+
+/// Explicit configuration for the KMS GetResource backend. Identity selection
+/// belongs to the control plane: there is deliberately no default RAM role.
+#[derive(Clone, Copy, Default, Deserialize, Debug, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum KmsCredentialSource {
+    #[default]
+    EcsRamRole,
+    CredentialsUri,
+}
+
+#[derive(Clone, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct KmsConfig {
+    pub instance_id: String,
+    #[serde(default)]
+    pub credential_source: KmsCredentialSource,
+    pub ecs_ram_role_name: Option<String>,
+    /// Trusted platform-provided URI. Defaults to ALIBABA_CLOUD_CREDENTIALS_URI.
+    /// Never obtain this value from a GetResource request.
+    pub credentials_uri: Option<String>,
+    /// KMS region. If omitted, use the running instance's IMDS region.
+    #[serde(default)]
+    pub region_id: Option<String>,
+}
+
+impl std::fmt::Debug for KmsConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("KmsConfig")
+            .field("instance_id", &self.instance_id)
+            .field("credential_source", &self.credential_source)
+            .field("ecs_ram_role_name", &self.ecs_ram_role_name)
+            .field(
+                "credentials_uri",
+                &self.credentials_uri.as_ref().map(|_| "<redacted>"),
+            )
+            .field("region_id", &self.region_id)
+            .finish()
+    }
+}
+
+impl KmsConfig {
+    pub(crate) fn validate(&self) -> Result<()> {
+        ensure!(
+            self.instance_id.starts_with("kst-")
+                && self.instance_id.len() > 4
+                && self
+                    .instance_id
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-'),
+            "kbc.instance_id must be a bare KMS instance ID (kst-...)"
+        );
+        match self.credential_source {
+            KmsCredentialSource::EcsRamRole => {
+                ensure!(
+                    self.ecs_ram_role_name
+                        .as_deref()
+                        .is_some_and(valid_identifier),
+                    "kbc.ecs_ram_role_name must be a nonempty RAM role name, not an ARN or URL"
+                );
+                ensure!(
+                    self.credentials_uri.is_none(),
+                    "credentials_uri requires kbc.credential_source = credentials_uri"
+                );
+            }
+            KmsCredentialSource::CredentialsUri => {
+                ensure!(
+                    self.ecs_ram_role_name.is_none(),
+                    "credentials_uri cannot be combined with ecs_ram_role_name"
+                );
+                ensure!(
+                    self.region_id.is_some(),
+                    "kbc.region_id is required for credentials_uri; ECS IMDS is not used"
+                );
+                if let Some(uri) = &self.credentials_uri {
+                    ensure!(
+                        !uri.trim().is_empty(),
+                        "kbc.credentials_uri must not be empty"
+                    );
+                }
+            }
+        }
+        if let Some(region) = &self.region_id {
+            ensure!(
+                !region.is_empty()
+                    && region
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b == b'-'),
+                "kbc.region_id is invalid"
+            );
+        }
+        Ok(())
+    }
+}
+
+fn valid_identifier(value: &str) -> bool {
+    !value.is_empty()
+        && value != "."
+        && value != ".."
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
 }
 
 #[derive(Clone, Deserialize, Debug, PartialEq)]
@@ -102,7 +258,7 @@ impl Default for LogConfig {
 #[derive(Clone, Deserialize, Debug, PartialEq)]
 #[serde(from = "RawCdhConfig")]
 pub struct CdhConfig {
-    pub kbc: KbsConfig,
+    pub kbc: KbcConfig,
 
     #[serde(default)]
     pub credentials: Vec<Credential>,
@@ -127,7 +283,7 @@ pub struct CdhConfig {
 
 #[derive(Deserialize)]
 struct RawCdhConfig {
-    kbc: KbsConfig,
+    kbc: KbcConfig,
 
     #[serde(default)]
     credentials: Vec<Credential>,
@@ -200,7 +356,7 @@ impl CdhConfig {
             None => {
                 info!("No config path specified, use a default config (some parts will read from kernel cmdline).");
                 Self {
-                    kbc: KbsConfig::new()?,
+                    kbc: KbcConfig::new()?,
                     credentials: Vec::new(),
                     socket: DEFAULT_CDH_SOCKET_ADDR.into(),
                     skip_sealed_secret_verification: false,
@@ -219,6 +375,7 @@ impl CdhConfig {
         }
 
         config.extend_credentials_from_kernel_cmdline()?;
+        config.kbc.validate()?;
         Ok(config)
     }
 
@@ -226,7 +383,6 @@ impl CdhConfig {
     /// `config` crate.
     fn from_file(config_path: &str) -> Result<Self> {
         let c = Config::builder()
-            .set_default("kbc.url", "")?
             .add_source(File::with_name(config_path))
             .build()?;
 
@@ -253,10 +409,8 @@ impl CdhConfig {
         let cmdline = fs::read_to_string("/proc/cmdline").context("read kernel cmdline failed")?;
         let kbs_resources = cmdline
             .split_ascii_whitespace()
-            .find(|para| para.starts_with("cdh.kbs_resources="))
-            .unwrap_or("cdh.kbs_resources=")
-            .strip_prefix("cdh.kbs_resources=")
-            .expect("must have one")
+            .find_map(|para| para.strip_prefix("cdh.kbs_resources="))
+            .unwrap_or_default()
             .split(',')
             .filter(|s| !s.is_empty())
             .filter_map(|it| it.split_once("::"))
@@ -272,18 +426,19 @@ impl CdhConfig {
 
 impl CdhConfig {
     pub fn set_configuration_envs(&self) -> Result<()> {
-        if env::var("AA_KBC_PARAMS").is_err() {
-            env::set_var(
-                "AA_KBC_PARAMS",
-                format!("{}::{}", self.kbc.name, self.kbc.url),
-            );
+        if let Some(config) = self.kbc.kbs_config() {
+            if env::var("AA_KBC_PARAMS").is_err() {
+                env::set_var(
+                    "AA_KBC_PARAMS",
+                    format!("{}::{}", self.kbc.name(), config.url),
+                );
+            }
+            if let Some(kbs_cert) = &config.kbs_cert {
+                env::set_var("KBS_CERT", kbs_cert);
+            }
         }
         if env::var("AA_SOCKET").is_err() {
             env::set_var("AA_SOCKET", &self.aa_socket);
-        }
-        // KBS configurations
-        if let Some(kbs_cert) = &self.kbc.kbs_cert {
-            env::set_var("KBS_CERT", kbs_cert);
         }
         if self.skip_sealed_secret_verification {
             env::set_var("SKIP_SEALED_SECRET_VERIFICATION", "true");
@@ -305,7 +460,7 @@ mod tests {
 
     use crate::{
         config::{DEFAULT_AA_SOCKET_ADDR, DEFAULT_CDH_SOCKET_ADDR},
-        CdhConfig, KbsConfig, LogConfig,
+        CdhConfig, KbcConfig, KbsConfig, LogConfig,
     };
 
     #[rstest]
@@ -331,11 +486,10 @@ extra_root_certificates = ["cert1", "cert2"]
 image_pull_proxy = "http://127.0.0.1:8080"
     "#,
         Some(CdhConfig {
-            kbc: KbsConfig {
-                name: "offline_fs_kbc".to_string(),
+            kbc: KbcConfig::OfflineFs(KbsConfig {
                 url: "".to_string(),
                 kbs_cert: Some("".to_string()),
-            },
+            }),
             credentials: vec![],
             image: ImageConfig {
                 max_concurrent_layer_downloads_per_image: 3,
@@ -378,11 +532,10 @@ kbs_cert = ""
 name = "offline_fs_kbc"
 "#,
     Some(CdhConfig {
-        kbc: KbsConfig {
-            name: "offline_fs_kbc".to_string(),
+        kbc: KbcConfig::OfflineFs(KbsConfig {
             url: "".to_string(),
             kbs_cert: None,
-        },
+        }),
         credentials: vec![],
         image: ImageConfig {
                 sigstore_config_uri: None,
@@ -407,11 +560,10 @@ name = "offline_fs_kbc"
 some_undefined_field = "unknown value"
 "#,
     Some(CdhConfig {
-        kbc: KbsConfig {
-            name: "offline_fs_kbc".to_string(),
+        kbc: KbcConfig::OfflineFs(KbsConfig {
             url: "".to_string(),
             kbs_cert: None,
-        },
+        }),
         credentials: vec![],
         image: ImageConfig {
                 sigstore_config_uri: None,
@@ -445,6 +597,119 @@ some_undefined_field = "unknown value"
     fn example_config_is_valid() {
         let path = format!("{}/../example.config.toml", env!("CARGO_MANIFEST_DIR"));
         CdhConfig::from_file(&path).unwrap();
+    }
+
+    #[cfg(feature = "aliyun")]
+    #[test]
+    fn kms_configuration_has_explicit_required_identity_and_no_url() {
+        let config: CdhConfig = toml::from_str(
+            r#"
+[kbc]
+name = "aliyun_kms_kbc"
+instance_id = "kst-test"
+ecs_ram_role_name = "product-role"
+"#,
+        )
+        .unwrap();
+        config.kbc.validate().unwrap();
+        let KbcConfig::AliyunKms(settings) = config.kbc else {
+            panic!("expected KMS variant")
+        };
+        assert_eq!(settings.ecs_ram_role_name.as_deref(), Some("product-role"));
+
+        for role in ["", " ", "../role", "acs:ram::123:role/role", "role?query"] {
+            let mut invalid = settings.clone();
+            invalid.ecs_ram_role_name = Some(role.into());
+            assert!(invalid.validate().is_err(), "{role}");
+        }
+        for instance in [
+            "",
+            "kst-",
+            "https://kst-test",
+            "kst-test/path",
+            "kst-test?query",
+        ] {
+            let mut invalid = settings.clone();
+            invalid.instance_id = instance.into();
+            assert!(invalid.validate().is_err(), "{instance}");
+        }
+        // KMS has no KBS-only fields, and an unknown backend is rejected on decode.
+        for extra in ["url='kst-test'", "url=''", "kbs_cert='pem'"] {
+            assert!(toml::from_str::<CdhConfig>(&format!(
+                "[kbc]\nname='aliyun_kms_kbc'\ninstance_id='kst-test'\necs_ram_role_name='role'\n{extra}"
+            )).is_err());
+        }
+        assert!(toml::from_str::<CdhConfig>("[kbc]\nname='unknown_kbc'").is_err());
+    }
+
+    #[test]
+    fn kms_template_cannot_omit_role_or_instance() {
+        for settings in ["instance_id = 'kst-test'", "ecs_ram_role_name = 'role'"] {
+            let config =
+                toml::from_str::<CdhConfig>(&format!("[kbc]\nname='aliyun_kms_kbc'\n{settings}"));
+            assert!(config.is_err() || config.unwrap().kbc.validate().is_err());
+        }
+    }
+
+    #[test]
+    fn eas_credentials_uri_requires_region_and_no_ecs_role() {
+        let config: CdhConfig = toml::from_str("[kbc]\nname='aliyun_kms_kbc'\ninstance_id='kst-test'\ncredential_source='credentials_uri'\nregion_id='cn-beijing'\ncredentials_uri='http://127.0.0.1:8080/private-path?token=do-not-log'").unwrap();
+        assert!(!format!("{config:?}").contains("do-not-log"));
+        let KbcConfig::AliyunKms(settings) = config.kbc else {
+            panic!("expected KMS variant")
+        };
+        settings.validate().unwrap();
+        let mut missing_region = settings.clone();
+        missing_region.region_id = None;
+        assert!(missing_region.validate().is_err());
+        let mut mixed = settings;
+        mixed.ecs_ram_role_name = Some("role".into());
+        assert!(mixed.validate().is_err());
+    }
+
+    #[test]
+    fn backend_examples_load_through_the_config_file_loader() {
+        for example in [
+            "example.config.toml",
+            "example.aliyun-kms.config.toml",
+            "example.aliyun-kms-eas.config.toml",
+        ] {
+            let path = format!("{}/../{example}", env!("CARGO_MANIFEST_DIR"));
+            let config = CdhConfig::from_file(&path).unwrap();
+            if cfg!(feature = "aliyun") || !matches!(config.kbc, KbcConfig::AliyunKms(_)) {
+                config.kbc.validate().unwrap();
+            } else {
+                assert!(config.kbc.validate().is_err());
+            }
+        }
+    }
+
+    #[test]
+    fn legacy_kbs_backends_keep_the_same_configuration_shape() {
+        for (name, url) in [
+            ("cc_kbc", "https://trustee.example/api"),
+            ("offline_fs_kbc", ""),
+            ("online_sev_kbc", "http://sev.example"),
+        ] {
+            let config: CdhConfig = toml::from_str(&format!(
+                "[kbc]\nname='{name}'\nurl='{url}'\nkbs_cert='pem'"
+            ))
+            .unwrap();
+            config.kbc.validate().unwrap();
+            assert_eq!(config.kbc.name(), name);
+            assert_eq!(
+                config.kbc.kbs_config(),
+                Some(&KbsConfig {
+                    url: url.into(),
+                    kbs_cert: Some("pem".into())
+                })
+            );
+            let json_config: CdhConfig = serde_json::from_value(serde_json::json!({
+                "kbc": {"name": name, "url": url, "kbs_cert": "pem"}
+            }))
+            .unwrap();
+            assert_eq!(json_config.kbc, config.kbc);
+        }
     }
 
     #[rstest]
@@ -516,11 +781,10 @@ name = "offline_fs_kbc"
         );
 
         let config = CdhConfig {
-            kbc: KbsConfig {
-                name: "cc_kbc".into(),
+            kbc: KbcConfig::Cc(KbsConfig {
                 url: "http://127.0.0.1:8080".into(),
                 kbs_cert: None,
-            },
+            }),
             credentials: Vec::new(),
             image: ImageConfig::default(),
             socket: DEFAULT_CDH_SOCKET_ADDR.into(),
@@ -552,6 +816,22 @@ name = "offline_fs_kbc"
             "unix:///run/custom/deployment-aa.sock"
         );
 
+        // The KMS backend neither consumes nor exports legacy AA_KBC_PARAMS.
+        let mut managed = config.clone();
+        managed.kbc = toml::from_str::<CdhConfig>(
+            "[kbc]\nname='aliyun_kms_kbc'\ninstance_id='kst-test'\necs_ram_role_name='role'",
+        )
+        .unwrap()
+        .kbc;
+        managed.set_configuration_envs().unwrap();
+        assert_eq!(
+            env::var("AA_KBC_PARAMS").unwrap(),
+            "deployment_kbc::http://kbs.example"
+        );
+        env::remove_var("AA_KBC_PARAMS");
+        managed.set_configuration_envs().unwrap();
+        assert!(env::var_os("AA_KBC_PARAMS").is_none());
+
         match old_kbc_params {
             Some(value) => env::set_var("AA_KBC_PARAMS", value),
             None => env::remove_var("AA_KBC_PARAMS"),
@@ -578,11 +858,10 @@ name = "offline_fs_kbc"
 
         let config = CdhConfig::new(None).expect("Must be successful");
         let expected = CdhConfig {
-            kbc: KbsConfig {
-                name: "offline_fs_kbc".into(),
+            kbc: KbcConfig::OfflineFs(KbsConfig {
                 url: "".into(),
                 kbs_cert: None,
-            },
+            }),
             credentials: Vec::new(),
             socket: DEFAULT_CDH_SOCKET_ADDR.into(),
             skip_sealed_secret_verification: false,
