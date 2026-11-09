@@ -1,9 +1,9 @@
-%define release 1
+%define release alpha
 %global config_dir /etc/trustiflux
 %global libdir /usr/lib
 
 Name:		trustiflux
-Version:	1.7.1
+Version:	1.7.2
 Release:	%{release}%{?dist}
 Summary:	A daemon service running inside TEE (Trusted Execution Environment) to confidential resource related APIs
 
@@ -167,6 +167,11 @@ rm -rf %{buildroot}
 %{libdir}/dracut/modules.d/99confidential-data-hub/module-setup.sh
 
 %changelog
+* Mon Nov 09 2026 Jiale Zhang <zhangjiale@linux.alibaba.com> - 1.7.2-alpha
+- Attestation: allow disabling additional device attestation through AA
+  configuration, including Hygon DCU/HCU evidence in KBS token requests
+- Preserve primary platform attestation and enable device attestation by default
+
 * Mon Oct 12 2026 Jiale Zhang <zhangjiale@linux.alibaba.com> - 1.7.1-1
 - Attestation: publish mixed Hygon DCU adapter support using public
   openanolis/csv-rs and normalize chip IDs for local certificate lookup

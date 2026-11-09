@@ -107,6 +107,32 @@ ttRPC AA now only support Unix Socket, for example:
 attestation-agent --attestation_sock unix:///tmp/attestation.sock
 ```
 
+### Device attestation configuration
+
+AA discovers and attests additional devices by default. To skip their evidence
+(including Hygon DCU/HCU evidence), add this table to the AA configuration file:
+
+```toml
+[device_attestation]
+enabled = false
+```
+
+The setting applies when AA starts. Restart AA after editing the file. RPM
+installations use `/etc/trustiflux/attestation-agent.toml`; restart with
+`sudo systemctl restart attestation-agent`. Existing configuration files are
+preserved on RPM upgrades, so add the table explicitly to disable device
+attestation. For standalone AA, select the file with `--config-file`.
+
+When disabled, AA skips additional device discovery and attester initialization,
+reports no additional TEE types, and returns empty additional evidence. This
+also applies to AA's KBS token requests and clients collecting evidence through
+AA over ttRPC. Primary platform evidence (for example, Hygon TPM) remains enabled.
+An omitted table or `enabled` field defaults to `true` for compatibility.
+
+This switch also disables additional SVSM vTPM evidence and its use as a runtime
+measurement backend. It does not change verifier policy: a policy requiring
+device evidence can still reject the resulting attestation.
+
 ### Supported Platforms
 
 AA supports different kinds of hardware TEE attesters, now

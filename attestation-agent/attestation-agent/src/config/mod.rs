@@ -30,10 +30,27 @@ pub struct Config {
     /// configs about eventlog
     pub eventlog_config: EventlogConfig,
 
+    /// Control attestation of additional devices. Applied when AA starts.
+    #[serde(default)]
+    pub device_attestation: DeviceAttestationConfig,
+
     /// configs about aa instance
     #[cfg(feature = "instance_info")]
     #[serde(default)]
     pub aa_instance: AAInstanceConfig,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct DeviceAttestationConfig {
+    /// Discover and attest additional devices, such as Hygon DCUs.
+    pub enabled: bool,
+}
+
+impl Default for DeviceAttestationConfig {
+    fn default() -> Self {
+        Self { enabled: true }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize)]
@@ -84,6 +101,7 @@ impl Config {
         Ok(Self {
             token_configs: TokenConfigs::from_kernel_cmdline(),
             eventlog_config: EventlogConfig::default(),
+            device_attestation: DeviceAttestationConfig::default(),
             #[cfg(feature = "instance_info")]
             aa_instance: AAInstanceConfig::default(),
         })
@@ -178,6 +196,7 @@ M9QaC1mzQ/OStg==
 ".to_string()),
             })
         },
+        device_attestation: crate::config::DeviceAttestationConfig::default(),
         eventlog_config: EventlogConfig {
             init_pcr: 17,
             enable_eventlog: false,
@@ -220,6 +239,7 @@ M9QaC1mzQ/OStg==
 ".to_string()),
             })
         },
+        device_attestation: crate::config::DeviceAttestationConfig::default(),
         eventlog_config: EventlogConfig {
             init_pcr: 17,
             enable_eventlog: false,
@@ -241,6 +261,7 @@ M9QaC1mzQ/OStg==
                 cert: Some("cert".to_string()),
             })
         },
+        device_attestation: crate::config::DeviceAttestationConfig::default(),
         eventlog_config: EventlogConfig {
             init_pcr: 17,
             enable_eventlog: false,
@@ -260,6 +281,7 @@ M9QaC1mzQ/OStg==
                 cert: Some("cert".to_string()),
             })
         },
+        device_attestation: crate::config::DeviceAttestationConfig::default(),
         eventlog_config: EventlogConfig {
             init_pcr: 17,
             enable_eventlog: false,
@@ -281,6 +303,7 @@ M9QaC1mzQ/OStg==
                 cert: None,
             })
         },
+        device_attestation: crate::config::DeviceAttestationConfig::default(),
         eventlog_config: EventlogConfig {
             init_pcr: 17,
             enable_eventlog: false,
@@ -297,6 +320,7 @@ M9QaC1mzQ/OStg==
             #[cfg(feature = "kbs")]
             kbs: None,
         },
+        device_attestation: crate::config::DeviceAttestationConfig::default(),
         eventlog_config: EventlogConfig {
             init_pcr: 17,
             enable_eventlog: false,
@@ -313,6 +337,7 @@ M9QaC1mzQ/OStg==
             #[cfg(feature = "kbs")]
             kbs: None,
         },
+        device_attestation: crate::config::DeviceAttestationConfig::default(),
         eventlog_config: EventlogConfig {
             init_pcr: 17,
             enable_eventlog: false,
@@ -329,6 +354,7 @@ M9QaC1mzQ/OStg==
                 #[cfg(feature = "kbs")]
                 kbs: None,
             },
+            device_attestation: crate::config::DeviceAttestationConfig::default(),
             eventlog_config: EventlogConfig {
                 init_pcr: 17,
                 enable_eventlog: false,
@@ -346,6 +372,37 @@ M9QaC1mzQ/OStg==
         let config = super::Config::new().expect("failed to create config");
         assert_eq!(config.eventlog_config.init_pcr, super::DEFAULT_PCR_INDEX);
         assert!(!config.eventlog_config.enable_eventlog);
+        assert!(config.device_attestation.enabled);
+    }
+
+    #[rstest::rstest]
+    #[case("toml", "", true)]
+    #[case("toml", "[device_attestation]", true)]
+    #[case("toml", "[device_attestation]\nenabled = true", true)]
+    #[case("toml", "[device_attestation]\nenabled = false", false)]
+    #[case("json", "{}", true)]
+    #[case("json", r#"{"device_attestation": {}}"#, true)]
+    #[case("json", r#"{"device_attestation": {"enabled": true}}"#, true)]
+    #[case("json", r#"{"device_attestation": {"enabled": false}}"#, false)]
+    fn parse_device_attestation(
+        #[case] format: &str,
+        #[case] contents: &str,
+        #[case] expected: bool,
+    ) {
+        let file = tempfile::Builder::new()
+            .suffix(&format!(".{format}"))
+            .tempfile()
+            .unwrap();
+        std::fs::write(file.path(), contents).unwrap();
+        let config = Config::try_from(file.path().to_str().unwrap()).unwrap();
+        assert_eq!(config.device_attestation.enabled, expected);
+    }
+
+    #[test]
+    fn reject_invalid_device_attestation_setting() {
+        let file = tempfile::Builder::new().suffix(".toml").tempfile().unwrap();
+        std::fs::write(file.path(), "[device_attestation]\nenabled = 'invalid'").unwrap();
+        assert!(Config::try_from(file.path().to_str().unwrap()).is_err());
     }
 
     #[cfg(feature = "instance_info")]

@@ -1,3 +1,8 @@
+[device_attestation]
+# Set false to skip additional device evidence, including Hygon DCU/HCU.
+# Primary platform attestation remains enabled. Restart AA after changing.
+enabled = true
+
 [token_configs]
 
 [token_configs.coco_as]

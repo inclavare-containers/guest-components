@@ -21,11 +21,23 @@ pub struct NativeEvidenceProvider {
 
 impl NativeEvidenceProvider {
     pub fn new() -> Result<Self> {
+        Self::new_with_device_attestation(true)
+    }
+
+    /// Create a provider, optionally skipping additional device discovery and evidence.
+    /// Primary platform attestation is always enabled.
+    pub fn new_with_device_attestation(enabled: bool) -> Result<Self> {
         let primary_tee = detect_tee_type();
         let primary_attester = BoxedAttester::try_from(primary_tee).map_err(|e| {
             Error::NativeEvidenceProvider(format!("failed to initialize primary attester: {e}"))
         })?;
-        let additional_attesters = detect_attestable_devices()
+        let additional_tees = if enabled {
+            detect_attestable_devices()
+        } else {
+            log::info!("Device attestation is disabled; skipping additional device discovery.");
+            Vec::new()
+        };
+        let additional_attesters = additional_tees
             .into_iter()
             .map(|tee| -> Result<_> {
                 let boxed_attester = TryInto::<BoxedAttester>::try_into(tee).map_err(|e| {
@@ -82,6 +94,19 @@ impl EvidenceProvider for NativeEvidenceProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn disabled_device_attestation_preserves_primary_evidence() {
+        let provider = NativeEvidenceProvider::new_with_device_attestation(false).unwrap();
+        assert!(provider.additional_attesters.is_empty());
+        assert!(provider
+            .get_additional_evidence(vec![0; 48])
+            .await
+            .unwrap()
+            .is_empty());
+        assert_eq!(provider.get_tee_type().await.unwrap(), Tee::Sample);
+        assert!(provider.primary_evidence(vec![0; 64]).await.is_ok());
+    }
 
     #[tokio::test]
     async fn test_native_evidence_provider() {
