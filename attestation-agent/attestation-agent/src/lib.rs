@@ -172,10 +172,13 @@ impl AttestationAgent {
                 Config::new()?
             }
         };
-        let config = RwLock::new(config);
-
         let primary_tee = detect_tee_type();
-        let additional_tees = detect_attestable_devices();
+        let additional_tees = if config.device_attestation.enabled {
+            detect_attestable_devices()
+        } else {
+            info!("Device attestation is disabled; skipping additional device discovery.");
+            Vec::new()
+        };
 
         let mut additional_attesters = HashMap::new();
         for tee in additional_tees {
@@ -184,7 +187,7 @@ impl AttestationAgent {
 
         Ok(AttestationAgent {
             primary_tee,
-            config,
+            config: RwLock::new(config),
             eventlog: None,
             initdata: None,
             additional_attesters,
@@ -206,18 +209,14 @@ impl AttestationAPIs for AttestationAgent {
         match token_type {
             #[cfg(feature = "kbs")]
             token::TokenType::Kbs => {
-                token::kbs::KbsTokenGetter::new(
-                    self.config
-                        .read()
-                        .await
-                        .token_configs
-                        .kbs
-                        .as_ref()
-                        .ok_or(anyhow::anyhow!(
-                            "kbs token config not configured in config file"
-                        ))?,
+                let config = self.config.read().await;
+                token::kbs::KbsTokenGetter::new(config.token_configs.kbs.as_ref().ok_or(
+                    anyhow::anyhow!("kbs token config not configured in config file"),
+                )?)
+                .get_token_with_device_attestation(
+                    self.initdata.as_deref(),
+                    config.device_attestation.enabled,
                 )
-                .get_token(self.initdata.as_deref())
                 .await
             }
             // TODO: add initdata plaintext for CoCoAS token
@@ -338,6 +337,22 @@ mod tests {
         async fn get_evidence(&self, _report_data: Vec<u8>) -> Result<attester::TeeEvidence> {
             Ok(serde_json::json!({"tee": "unsupported-measurement-test"}))
         }
+    }
+
+    #[tokio::test]
+    async fn disabled_device_attestation_preserves_primary_evidence() {
+        let config = tempfile::Builder::new().suffix(".toml").tempfile().unwrap();
+        std::fs::write(config.path(), "[device_attestation]\nenabled = false").unwrap();
+        let aa = AttestationAgent::new(Some(config.path().to_str().unwrap())).unwrap();
+
+        assert!(aa.get_additional_tees().is_empty());
+        assert!(aa
+            .get_additional_evidence(&[0; 48])
+            .await
+            .unwrap()
+            .is_empty());
+        assert_eq!(aa.get_tee_type(), Tee::Sample);
+        assert!(aa.get_evidence(&[0; 64]).await.is_ok());
     }
 
     #[tokio::test]

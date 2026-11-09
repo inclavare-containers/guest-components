@@ -1,3 +1,7 @@
+[device_attestation]
+# Set false to skip additional device evidence, including Hygon DCU/HCU.
+enabled = true
+
 [token_configs]
 
 [token_configs.coco_as]

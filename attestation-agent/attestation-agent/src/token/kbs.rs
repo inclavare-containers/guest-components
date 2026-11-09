@@ -23,7 +23,18 @@ pub struct KbsTokenGetter {
 
 impl KbsTokenGetter {
     pub async fn get_token(&self, initdata: Option<&str>) -> Result<Vec<u8>> {
-        let evidence_provider = Box::new(NativeEvidenceProvider::new()?);
+        self.get_token_with_device_attestation(initdata, true).await
+    }
+
+    /// Get a token while honoring AA's additional device attestation setting.
+    pub async fn get_token_with_device_attestation(
+        &self,
+        initdata: Option<&str>,
+        enabled: bool,
+    ) -> Result<Vec<u8>> {
+        let evidence_provider = Box::new(NativeEvidenceProvider::new_with_device_attestation(
+            enabled,
+        )?);
 
         let mut builder =
             KbsClientBuilder::with_evidence_provider(evidence_provider, &self.kbs_host_url);
