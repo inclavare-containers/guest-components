@@ -248,6 +248,44 @@
       "get": {
         "tags": [],
         "operationId": "_resource",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "description": "Expected resource backend: kbs or aliyun_kms; defaults to the configured backend and must match it when supplied",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sts",
+            "in": "query",
+            "description": "Request-scoped Base64 of complete STS JSON or AK:SK:STS; URL-encode the value and never log it",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kms_id",
+            "in": "query",
+            "description": "Request-scoped KMS instance ID; defaults to CDH configuration",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "region_id",
+            "in": "query",
+            "description": "KMS management API region; request overrides configuration, then ECS IMDS",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "success response",
@@ -261,6 +299,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "invalid resource options"
           },
           "403": {
             "description": "forbid external access"

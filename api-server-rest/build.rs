@@ -69,11 +69,18 @@ fn _additional_evidence() {}
 #[utoipa::path(
     get,
     path = "/cdh/resource/{repository}/{type}/{tag}",
+    params(
+        ("type" = Option<String>, Query, description = "Expected resource backend: kbs or aliyun_kms; defaults to the configured backend and must match it when supplied"),
+        ("sts" = Option<String>, Query, description = "Request-scoped Base64 of complete STS JSON or AK:SK:STS; URL-encode the value and never log it"),
+        ("kms_id" = Option<String>, Query, description = "Request-scoped KMS instance ID; defaults to CDH configuration"),
+        ("region_id" = Option<String>, Query, description = "KMS management API region; request overrides configuration, then ECS IMDS")
+    ),
     responses(
         (status = 200, description = "success response",
                 content_type = "application/octet-stream",
                 body = String,
                 example = json!({"123456":"value"})),
+        (status = 400, description = "invalid resource options"),
         (status = 403, description = "forbid external access"),
         (status = 404, description = "resource not found"),
         (status = 405, description = "only Get method allowed")

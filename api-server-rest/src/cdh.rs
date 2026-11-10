@@ -76,11 +76,15 @@ impl ApiHandler for CDHClient {
                     ) {
                         return self.forbidden();
                     }
-                    match self.get_resource(resource_path).await {
+                    let options = match resource_query(req.uri().query()) {
+                        std::result::Result::Ok(options) => options,
+                        Err(_) => return self.bad_request(),
+                    };
+                    match self.get_resource(resource_path, options).await {
                         std::result::Result::Ok(results) => {
                             return self.octet_stream_response(results)
                         }
-                        Err(e) => return self.internal_error(e.to_string()),
+                        Err(e) => return self.rpc_error_response(e),
                     }
                 }
                 CDH_RESOURCE_INJECTION_URL => {
@@ -177,15 +181,18 @@ impl CDHClient {
         })
     }
 
-    pub async fn get_resource(&self, resource_path: &str) -> Result<Vec<u8>> {
-        let req = GetResourceRequest {
-            ResourcePath: build_kbs_resource_uri(resource_path),
-            ..Default::default()
+    pub async fn get_resource(
+        &self,
+        resource_path: &str,
+        mut req: GetResourceRequest,
+    ) -> Result<Vec<u8>> {
+        req.ResourcePath = build_kbs_resource_uri(resource_path);
+        let ctx = ttrpc::context::with_timeout(TTRPC_TIMEOUT);
+        let res = if req.Type.is_some() || !req.Options.is_empty() {
+            self.client.get_resource_with_options(ctx, &req).await?
+        } else {
+            self.client.get_resource(ctx, &req).await?
         };
-        let res = self
-            .client
-            .get_resource(ttrpc::context::with_timeout(TTRPC_TIMEOUT), &req)
-            .await?;
         Ok(res.Resource)
     }
 
@@ -230,6 +237,29 @@ impl CDHClient {
             .await?;
         Ok(())
     }
+}
+
+// This proxy only decodes the transport envelope. CDH interprets provider options.
+// Reject duplicates before collecting a map; otherwise authorization options can
+// silently overwrite each other. Never include query values in an error.
+fn resource_query(query: Option<&str>) -> Result<GetResourceRequest> {
+    let mut req = GetResourceRequest::default();
+    let query = query.unwrap_or_default();
+    ensure!(query.len() <= 20 * 1024, "resource query is too large");
+    for (key, value) in form_urlencoded::parse(query.as_bytes()) {
+        if key == "type" {
+            ensure!(req.Type.is_none(), "duplicate resource query parameter");
+            req.Type = Some(value.into_owned());
+        } else {
+            ensure!(
+                req.Options
+                    .insert(key.into_owned(), value.into_owned())
+                    .is_none(),
+                "duplicate resource query parameter"
+            );
+        }
+    }
+    Ok(req)
 }
 
 fn is_cdh_request_allowed(
