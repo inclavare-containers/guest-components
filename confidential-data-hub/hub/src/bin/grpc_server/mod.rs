@@ -68,6 +68,13 @@ impl SealedSecretService for Cdh {
 
 #[tonic::async_trait]
 impl GetResourceService for Cdh {
+    async fn get_resource_with_options(
+        &self,
+        _request: Request<GetResourceRequest>,
+    ) -> Result<Response<GetResourceResponse>, Status> {
+        Err(Status::unimplemented("resource options are not implemented yet"))
+    }
+
     async fn get_resource(
         &self,
         request: Request<GetResourceRequest>,

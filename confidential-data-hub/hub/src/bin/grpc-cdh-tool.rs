@@ -118,6 +118,7 @@ async fn main() {
                 .expect("initialize client");
             let req = tonic::Request::new(GetResourceRequest {
                 resource_path: arg.resource_uri,
+                ..Default::default()
             });
             let res = client.get_resource(req).await.expect("request to CDH");
             let res = STANDARD.encode(res.into_inner().resource);

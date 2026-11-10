@@ -15,6 +15,16 @@ pub struct UnsealSecretOutput {
 pub struct GetResourceRequest {
     #[prost(string, tag = "1")]
     pub resource_path: ::prost::alloc::string::String,
+    /// Optional resource type; omitted values retain the configured backend.
+    #[prost(string, optional, tag = "2")]
+    pub r#type: ::core::option::Option<::prost::alloc::string::String>,
+    /// Provider-specific values are interpreted by CDH, not the transport proxy.
+    /// Options may contain credentials. Never log their values.
+    #[prost(map = "string, string", tag = "3")]
+    pub options: ::std::collections::HashMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetResourceResponse {
@@ -311,6 +321,34 @@ pub mod get_resource_service_client {
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("api.GetResourceService", "GetResource"));
+            self.inner.unary(req, path, codec).await
+        }
+        /// Use this method when passing overrides: old CDH versions must reject the
+        /// call rather than silently ignore the new fields and use a default identity.
+        pub async fn get_resource_with_options(
+            &mut self,
+            request: impl tonic::IntoRequest<super::GetResourceRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::GetResourceResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/api.GetResourceService/GetResourceWithOptions",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new("api.GetResourceService", "GetResourceWithOptions"),
+                );
             self.inner.unary(req, path, codec).await
         }
         pub async fn prepare_resource_injection(
@@ -802,6 +840,15 @@ pub mod get_resource_service_server {
             tonic::Response<super::GetResourceResponse>,
             tonic::Status,
         >;
+        /// Use this method when passing overrides: old CDH versions must reject the
+        /// call rather than silently ignore the new fields and use a default identity.
+        async fn get_resource_with_options(
+            &self,
+            request: tonic::Request<super::GetResourceRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::GetResourceResponse>,
+            tonic::Status,
+        >;
         async fn prepare_resource_injection(
             &self,
             request: tonic::Request<super::PrepareResourceInjectionRequest>,
@@ -924,6 +971,55 @@ pub mod get_resource_service_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = GetResourceSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/api.GetResourceService/GetResourceWithOptions" => {
+                    #[allow(non_camel_case_types)]
+                    struct GetResourceWithOptionsSvc<T: GetResourceService>(pub Arc<T>);
+                    impl<
+                        T: GetResourceService,
+                    > tonic::server::UnaryService<super::GetResourceRequest>
+                    for GetResourceWithOptionsSvc<T> {
+                        type Response = super::GetResourceResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::GetResourceRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as GetResourceService>::get_resource_with_options(
+                                        &inner,
+                                        request,
+                                    )
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = GetResourceWithOptionsSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
