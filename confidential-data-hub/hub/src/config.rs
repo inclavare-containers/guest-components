@@ -498,6 +498,119 @@ some_undefined_field = "unknown value"
         CdhConfig::from_file(&path).unwrap();
     }
 
+    #[cfg(feature = "aliyun")]
+    #[test]
+    fn kms_configuration_validates_supplied_defaults_and_has_no_url() {
+        let config: CdhConfig = toml::from_str(
+            r#"
+[kbc]
+name = "aliyun_kms_kbc"
+instance_id = "kst-test"
+ecs_ram_role_name = "product-role"
+"#,
+        )
+        .unwrap();
+        config.kbc.validate().unwrap();
+        let KbcConfig::AliyunKms(settings) = config.kbc else {
+            panic!("expected KMS variant")
+        };
+        assert_eq!(settings.ecs_ram_role_name.as_deref(), Some("product-role"));
+
+        for role in ["", " ", "../role", "acs:ram::123:role/role", "role?query"] {
+            let mut invalid = settings.clone();
+            invalid.ecs_ram_role_name = Some(role.into());
+            assert!(invalid.validate().is_err(), "{role}");
+        }
+        for instance in [
+            "",
+            "kst-",
+            "https://kst-test",
+            "kst-test/path",
+            "kst-test?query",
+        ] {
+            let mut invalid = settings.clone();
+            invalid.instance_id = Some(instance.into());
+            assert!(invalid.validate().is_err(), "{instance}");
+        }
+        // KMS has no KBS-only fields, and an unknown backend is rejected on decode.
+        for extra in ["url='kst-test'", "url=''", "kbs_cert='pem'"] {
+            assert!(toml::from_str::<CdhConfig>(&format!(
+                "[kbc]\nname='aliyun_kms_kbc'\ninstance_id='kst-test'\necs_ram_role_name='role'\n{extra}"
+            )).is_err());
+        }
+        assert!(toml::from_str::<CdhConfig>("[kbc]\nname='unknown_kbc'").is_err());
+    }
+
+    #[test]
+    fn kms_template_allows_omitted_role_and_instance() {
+        for settings in ["", "instance_id='kst-test'", "ecs_ram_role_name='role'"] {
+            let config: CdhConfig =
+                toml::from_str(&format!("[kbc]\nname='aliyun_kms_kbc'\n{settings}")).unwrap();
+            let KbcConfig::AliyunKms(settings) = config.kbc else {
+                panic!("expected KMS variant")
+            };
+            settings.validate().unwrap();
+        }
+    }
+
+    #[test]
+    fn removed_credential_service_settings_are_rejected() {
+        for setting in [
+            "credential_source='credentials_uri'",
+            "credentials_uri='http://127.0.0.1/credentials'",
+        ] {
+            assert!(toml::from_str::<CdhConfig>(&format!(
+                "[kbc]\nname='aliyun_kms_kbc'\n{setting}"
+            ))
+            .is_err());
+        }
+    }
+
+    #[test]
+    fn backend_examples_load_through_the_config_file_loader() {
+        for example in [
+            "example.config.toml",
+            "example.aliyun-kms.config.toml",
+            "example.aliyun-kms-request.config.toml",
+        ] {
+            let path = format!("{}/../{example}", env!("CARGO_MANIFEST_DIR"));
+            let config = CdhConfig::from_file(&path).unwrap();
+            if cfg!(feature = "aliyun") || !matches!(config.kbc, KbcConfig::AliyunKms(_)) {
+                config.kbc.validate().unwrap();
+            } else {
+                assert!(config.kbc.validate().is_err());
+            }
+        }
+    }
+
+    #[test]
+    fn legacy_kbs_backends_keep_the_same_configuration_shape() {
+        for (name, url) in [
+            ("cc_kbc", "https://trustee.example/api"),
+            ("offline_fs_kbc", ""),
+            ("online_sev_kbc", "http://sev.example"),
+        ] {
+            let config: CdhConfig = toml::from_str(&format!(
+                "[kbc]\nname='{name}'\nurl='{url}'\nkbs_cert='pem'"
+            ))
+            .unwrap();
+            config.kbc.validate().unwrap();
+            assert_eq!(config.kbc.name(), name);
+            assert_eq!(
+                config.kbc.kbs_config(),
+                Some(&KbsConfig {
+                    url: url.into(),
+                    kbs_cert: Some("pem".into())
+                })
+            );
+            let json_config: CdhConfig = serde_json::from_value(serde_json::json!({
+                "kbc": {"name": name, "url": url, "kbs_cert": "pem"}
+            }))
+            .unwrap();
+            assert_eq!(json_config.kbc, config.kbc);
+        }
+    }
+
     #[rstest]
     #[case(
         r#"
@@ -601,6 +714,22 @@ name = "offline_fs_kbc"
             env::var("AA_SOCKET").unwrap(),
             "unix:///run/custom/deployment-aa.sock"
         );
+
+        // The KMS backend neither consumes nor exports legacy AA_KBC_PARAMS.
+        let mut managed = config.clone();
+        managed.kbc = toml::from_str::<CdhConfig>(
+            "[kbc]\nname='aliyun_kms_kbc'\ninstance_id='kst-test'\necs_ram_role_name='role'",
+        )
+        .unwrap()
+        .kbc;
+        managed.set_configuration_envs().unwrap();
+        assert_eq!(
+            env::var("AA_KBC_PARAMS").unwrap(),
+            "deployment_kbc::http://kbs.example"
+        );
+        env::remove_var("AA_KBC_PARAMS");
+        managed.set_configuration_envs().unwrap();
+        assert!(env::var_os("AA_KBC_PARAMS").is_none());
 
         match old_kbc_params {
             Some(value) => env::set_var("AA_KBC_PARAMS", value),
