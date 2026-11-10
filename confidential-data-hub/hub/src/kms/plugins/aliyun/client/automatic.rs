@@ -329,3 +329,178 @@ fn transient(error: &anyhow::Error) -> bool {
             .any(|e| e.is_timeout())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[tokio::test]
+    async fn missing_or_invalid_request_options_fail_without_network_or_identity_fallback() {
+        let client = AutomaticKmsClient::new(
+            KmsConfig {
+                instance_id: None,
+                ecs_ram_role_name: None,
+                region_id: Some("cn-beijing".into()),
+            },
+            "unix:///unused-aa".into(),
+        )
+        .unwrap();
+        for (id, sts) in [
+            (None, None),
+            (Some("kst-test"), None),
+            (Some("kst-test"), Some("")),
+            (Some("https://kms.example"), Some("YWJj")),
+        ] {
+            assert!(matches!(
+                client
+                    .get_secret_with_options("secret", &Annotations::default(), id, sts, None)
+                    .await,
+                Err(kms::Error::InvalidResourceOptions(_))
+            ));
+        }
+        assert!(client.transport.lock().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn request_region_is_independent_and_does_not_change_cached_default() {
+        let client = AutomaticKmsClient::new(
+            KmsConfig {
+                instance_id: Some("kst-test".into()),
+                ecs_ram_role_name: Some("product-role".into()),
+                region_id: Some("cn-beijing".into()),
+            },
+            "unix:///unused-aa".into(),
+        )
+        .unwrap();
+        assert_eq!(client.region(None).await.unwrap(), "cn-beijing");
+        assert_eq!(
+            client.region(Some("cn-hangzhou")).await.unwrap(),
+            "cn-hangzhou"
+        );
+        assert_eq!(client.region(None).await.unwrap(), "cn-beijing");
+        for region in ["", "https://example.test", "cn/beijing", "cn_beijing"] {
+            assert!(matches!(
+                client
+                    .get_secret_with_options(
+                        "secret",
+                        &Annotations::default(),
+                        None,
+                        None,
+                        Some(region)
+                    )
+                    .await,
+                Err(kms::Error::InvalidResourceOptions(_))
+            ));
+        }
+        let no_default = AutomaticKmsClient::new(
+            KmsConfig {
+                instance_id: None,
+                ecs_ram_role_name: None,
+                region_id: None,
+            },
+            "unix:///unused-aa".into(),
+        )
+        .unwrap();
+        assert_eq!(
+            no_default.region(Some("cn-beijing")).await.unwrap(),
+            "cn-beijing"
+        );
+        assert!(no_default.region.get().is_none());
+        let transport = Transport {
+            instance_id: "kst-test".into(),
+            region_id: "cn-beijing".into(),
+            client: http_builder().build().unwrap(),
+            refreshed: Instant::now(),
+            refresh_after: Instant::now() + CA_REFRESH,
+        };
+        assert!(transport.matches("kst-test", "cn-beijing"));
+        assert!(!transport.matches("kst-other", "cn-beijing"));
+        assert!(!transport.matches("kst-test", "cn-hangzhou"));
+    }
+
+    #[test]
+    fn ca_response_must_match_requested_instance() {
+        let response =
+            json!({"KmsInstance":{"InstanceId":"kst-test", "CaCertificateChainPem":"pem"}});
+        assert_eq!(instance_ca(&response, "kst-test").unwrap(), "pem");
+        assert!(instance_ca(&response, "kst-other").is_err());
+        assert!(instance_ca(
+            &json!({"KmsInstance":{"InstanceId":"kst-test"}}),
+            "kst-test"
+        )
+        .is_err());
+        assert!(tls_client("").is_err());
+        assert!(tls_client("not a certificate").is_err());
+    }
+
+    #[test]
+    fn only_unknown_issuer_allows_ca_bootstrap() {
+        let unknown = anyhow::Error::new(rustls::Error::InvalidCertificate(
+            rustls::CertificateError::UnknownIssuer,
+        ));
+        assert!(is_unknown_issuer(&unknown));
+        let wrapped = |error| {
+            anyhow::Error::new(std::io::Error::other(std::io::Error::other(error)))
+                .context("GetChallenge")
+        };
+        assert!(is_unknown_issuer(&wrapped(
+            rustls::Error::InvalidCertificate(rustls::CertificateError::UnknownIssuer)
+        )));
+        let bad_name = anyhow::Error::new(rustls::Error::InvalidCertificate(
+            rustls::CertificateError::NotValidForName,
+        ));
+        assert!(!is_unknown_issuer(&bad_name));
+        assert!(!is_unknown_issuer(&wrapped(
+            rustls::Error::InvalidCertificate(rustls::CertificateError::NotValidForName)
+        )));
+        assert!(!is_unknown_issuer(&anyhow::anyhow!("network timeout")));
+    }
+
+    /// Run on a disposable ECS VM with a bound test role. The environment
+    /// contains identifiers and an expected digest only, never credentials.
+    #[tokio::test]
+    #[ignore = "requires a real KMS instance and ECS IMDSv2"]
+    async fn live_management_ca_bootstrap_and_refresh() {
+        use sha2::{Digest, Sha256};
+        let required = |name| std::env::var(name).expect(name);
+        let client = AutomaticKmsClient::new(
+            KmsConfig {
+                instance_id: Some(required("KMS_TEST_INSTANCE_ID")),
+                ecs_ram_role_name: Some(required("KMS_TEST_RAM_ROLE")),
+                region_id: std::env::var("KMS_TEST_REGION").ok(),
+            },
+            "unix:///run/confidential-containers/attestation-agent/attestation-agent.sock".into(),
+        )
+        .unwrap();
+        let secret_name = required("KMS_TEST_SECRET_NAME");
+        let check_result = |result: Result<Vec<u8>>| {
+            let secret = result.expect("TLS and remote attestation must succeed");
+            assert_eq!(
+                hex::encode(Sha256::digest(&secret)),
+                required("KMS_TEST_SECRET_SHA256")
+            );
+            println!("TLS and attested secret digest verified");
+        };
+        check_result(
+            client
+                .get_secret(&secret_name, &Annotations::default())
+                .await
+                .map_err(anyhow::Error::from),
+        );
+        // Expire the transport cache to exercise authenticated management refresh.
+        client
+            .transport
+            .lock()
+            .await
+            .as_mut()
+            .unwrap()
+            .refresh_after = Instant::now();
+        check_result(
+            client
+                .get_secret(&secret_name, &Annotations::default())
+                .await
+                .map_err(anyhow::Error::from),
+        );
+        println!("Authenticated GetKmsInstance bootstrap and refresh verified");
+    }
+}
