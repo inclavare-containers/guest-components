@@ -629,6 +629,62 @@ fn sha384_canonical(value: &Value) -> anyhow::Result<Vec<u8>> {
 mod tests {
     use super::*;
 
+    #[tokio::test]
+    async fn supplied_session_credentials_are_used_without_imds() {
+        let client = AttestationClient::from_session(
+            "kst-test".into(),
+            StsCredential {
+                ak: "supplied-ak".into(),
+                sk: "supplied-sk".into(),
+                sts: "supplied-sts".into(),
+            },
+            reqwest::Client::new(),
+            DEFAULT_AA_SOCKET.into(),
+        );
+        let credential = client.get_session_credential().await.unwrap();
+        assert_eq!(credential.ak, "supplied-ak");
+        assert_eq!(credential.sk, "supplied-sk");
+        assert_eq!(credential.sts, "supplied-sts");
+    }
+
+    #[test]
+    fn export_settings_preserves_the_vault_provider_shape() {
+        let client = AttestationClient::from_session(
+            "kst-test".into(),
+            StsCredential {
+                ak: "test-ak".into(),
+                sk: "test-sk".into(),
+                sts: "test-sts".into(),
+            },
+            reqwest::Client::new(),
+            DEFAULT_AA_SOCKET.into(),
+        );
+        let settings = client.export_provider_settings().unwrap();
+        assert_eq!(settings["kms_instance_id"], "kst-test");
+        assert_eq!(settings["sts_token"], "test-ak:test-sk:test-sts");
+        assert!(!settings.contains_key("ecs_ram_role_name"));
+    }
+
+    #[test]
+    fn get_resource_decodes_only_binary_wire_values() {
+        let bytes = vec![0, 255, 1, 254];
+        let encoded = STANDARD.encode(&bytes).into_bytes();
+        assert_eq!(
+            decode_resource_bytes(encoded.clone(), Some("binary")).unwrap(),
+            bytes
+        );
+        assert_eq!(
+            decode_resource_bytes(encoded.clone(), Some("text")).unwrap(),
+            encoded
+        );
+        assert_eq!(
+            decode_resource_bytes(encoded.clone(), None).unwrap(),
+            encoded
+        );
+        assert!(decode_resource_bytes(b"not-base64!".to_vec(), Some("binary")).is_err());
+        assert!(decode_resource_bytes(vec![], Some("unknown")).is_err());
+    }
+
     #[test]
     fn canonical_hash_is_order_independent() {
         let a = json!({

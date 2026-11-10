@@ -240,3 +240,144 @@ fn parse_session(body: &str, now: DateTime<Utc>) -> Result<Session> {
     })
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn response(expiration: &str) -> String {
+        json!({"Code":"Success", "Expiration":expiration,
+            "AccessKeyId":"test-ak", "AccessKeySecret":"test-sk", "SecurityToken":"test-token"})
+        .to_string()
+    }
+
+    #[test]
+    fn request_sts_accepts_complete_json_and_legacy_representation() {
+        for text in [
+            response(&(Utc::now() + chrono::Duration::hours(1)).to_rfc3339()),
+            "test-ak:test-sk:test-token".to_string(),
+        ] {
+            for engine in [STANDARD, STANDARD_NO_PAD, URL_SAFE, URL_SAFE_NO_PAD] {
+                let credential = parse_request_sts(&engine.encode(&text)).unwrap();
+                assert_eq!(credential.ak, "test-ak");
+                assert_eq!(credential.sk, "test-sk");
+                assert_eq!(credential.sts, "test-token");
+            }
+        }
+        assert!(parse_request_sts(
+            &STANDARD.encode(r#"{"AccessKeyId":"a","AccessKeySecret":"b","SecurityToken":"c"}"#)
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn request_sts_rejects_invalid_empty_and_expired_values_without_echoing_them() {
+        for text in [
+            "private-credential".to_owned(),
+            "a::private-credential".to_owned(),
+            r#"{"AccessKeyId":{"secret":"private-credential"}}"#.to_owned(),
+            response(&(Utc::now() - chrono::Duration::minutes(1)).to_rfc3339()),
+        ] {
+            let error = parse_request_sts(&STANDARD.encode(text)).err().unwrap();
+            assert!(!format!("{error:#}").contains("private-credential"));
+        }
+        for encoded in [
+            "".to_owned(),
+            "not base64!".to_owned(),
+            "A".repeat(MAX_ENCODED_STS + 1),
+        ] {
+            assert!(parse_request_sts(&encoded).is_err());
+        }
+    }
+
+    #[test]
+    fn validates_imds_expiration_and_refreshes_early() {
+        let now = Utc::now();
+        let session = parse_session(
+            &response(&(now + chrono::Duration::hours(1)).to_rfc3339()),
+            now,
+        )
+        .unwrap();
+        assert!(session.refresh_at > now);
+        assert!(session.refresh_at <= session.expires - chrono::Duration::seconds(300));
+        assert!(parse_session(
+            &response(&(now - chrono::Duration::seconds(1)).to_rfc3339()),
+            now
+        )
+        .is_err());
+        assert!(parse_session("{}", now).is_err());
+    }
+
+    #[tokio::test]
+    async fn request_credentials_do_not_populate_the_imds_cache() {
+        let client = SessionClient::new(None).unwrap();
+        let credential = parse_request_sts(&STANDARD.encode("a:b:c")).unwrap();
+        assert_eq!(credential.ak, "a");
+        assert!(client.cached.lock().await.is_none());
+        assert!(client.credential().await.is_err());
+    }
+
+    #[tokio::test]
+    async fn concurrent_requests_share_one_imdsv2_refresh() {
+        use std::{
+            io::{Read, Write},
+            net::TcpListener,
+            sync::Arc,
+        };
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let endpoint = format!("http://{}/latest", listener.local_addr().unwrap());
+        let body = response(&(Utc::now() + chrono::Duration::hours(1)).to_rfc3339());
+        let server = std::thread::spawn(move || {
+            for (expected, response) in [
+                ("PUT /latest/api/token", "metadata-test-token".to_string()),
+                (
+                    "GET /latest/meta-data/ram/security-credentials/test-role",
+                    body,
+                ),
+            ] {
+                let (mut socket, _) = listener.accept().unwrap();
+                socket
+                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                let mut buf = [0; 8192];
+                let n = socket.read(&mut buf).unwrap();
+                let request = String::from_utf8_lossy(&buf[..n]);
+                assert!(
+                    request.starts_with(expected),
+                    "unexpected metadata request path"
+                );
+                if expected.starts_with("GET") {
+                    assert!(request
+                        .to_lowercase()
+                        .contains("x-aliyun-ecs-metadata-token: metadata-test-token"));
+                }
+                write!(
+                    socket,
+                    "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{}",
+                    response.len(),
+                    response
+                )
+                .unwrap();
+            }
+        });
+        let mut client = SessionClient::new(Some("test-role".into())).unwrap();
+        client.endpoint = endpoint;
+        let client = Arc::new(client);
+        let mut tasks = tokio::task::JoinSet::new();
+        for _ in 0..10 {
+            let client = client.clone();
+            tasks.spawn(async move { client.credential().await.unwrap().ak });
+        }
+        while let Some(result) = tasks.join_next().await {
+            assert_eq!(result.unwrap(), "test-ak");
+        }
+        let mut other = client.credential().await.unwrap();
+        other.ak = "different-session".into();
+        client.invalidate(&other).await;
+        assert!(client.cached.lock().await.is_some());
+        let credential = client.credential().await.unwrap();
+        client.invalidate(&credential).await;
+        assert!(client.cached.lock().await.is_none());
+        server.join().unwrap();
+    }
+}

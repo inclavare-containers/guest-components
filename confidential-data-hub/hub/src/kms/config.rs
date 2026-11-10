@@ -64,3 +64,40 @@ fn valid_identifier(value: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn defaults_are_optional_but_explicit_invalid_values_are_rejected() {
+        let default = KmsConfig {
+            instance_id: None,
+            ecs_ram_role_name: None,
+            region_id: None,
+        };
+        assert!(default.validate().is_ok());
+        for invalid in [
+            KmsConfig {
+                instance_id: Some("".into()),
+                ..default.clone()
+            },
+            KmsConfig {
+                ecs_ram_role_name: Some("role/invalid".into()),
+                ..default.clone()
+            },
+            KmsConfig {
+                region_id: Some("cn/beijing".into()),
+                ..default.clone()
+            },
+        ] {
+            assert!(invalid.validate().is_err());
+        }
+        assert!(KmsConfig {
+            instance_id: Some("kst-test".into()),
+            ecs_ram_role_name: Some("product-role".into()),
+            region_id: Some("cn-beijing".into())
+        }
+        .validate()
+        .is_ok());
+    }
+}
