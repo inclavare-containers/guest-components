@@ -10,6 +10,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("Invalid resource options: {0}")]
+    InvalidResourceOptions(&'static str),
     #[cfg(feature = "aliyun")]
     #[error("Aliyun KMS error: {0}")]
     AliyunKmsError(String),

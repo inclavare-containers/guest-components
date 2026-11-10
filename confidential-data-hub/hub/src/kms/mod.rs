@@ -6,6 +6,11 @@
 pub mod api;
 pub use api::*;
 
+mod config;
+pub use config::KmsConfig;
+#[cfg(feature = "aliyun")]
+pub(crate) use config::{valid_kms_instance_id, valid_region_id};
+
 pub mod error;
 pub use error::*;
 

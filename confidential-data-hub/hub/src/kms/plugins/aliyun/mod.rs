@@ -12,3 +12,4 @@ mod annotations;
 pub mod client;
 
 pub use client::AliyunKmsClient;
+pub use client::AutomaticKmsClient;
