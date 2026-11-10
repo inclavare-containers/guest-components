@@ -218,7 +218,7 @@ impl AttestationClient {
                 Error::AliyunKmsError(format!("serialize ProviderSettings failed: {e:?}"))
             })?
             .as_object()
-            .expect("must be an object")
+            .ok_or_else(|| Error::AliyunKmsError("ProviderSettings must be an object".into()))?
             .to_owned();
         Ok(provider_settings)
     }
