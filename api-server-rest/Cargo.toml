@@ -23,3 +23,6 @@ protos = { path = "../protos", default-features = false, features = ["ttrpc"] }
 [build-dependencies]
 serde_json = { workspace = true }
 utoipa = "5"
+
+[dev-dependencies]
+tempfile.workspace = true
