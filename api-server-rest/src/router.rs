@@ -49,6 +49,17 @@ pub trait ApiHandler: Send {
             .body(Body::from("BAD REQUEST"))?)
     }
 
+    // Keep RPC argument errors distinct without exposing provider options.
+    fn rpc_error_response(&self, error: anyhow::Error) -> Result<Response<Body>> {
+        if matches!(error.downcast_ref::<ttrpc::Error>(),
+            Some(ttrpc::Error::RpcStatus(status)) if status.code() == ttrpc::Code::INVALID_ARGUMENT)
+        {
+            self.bad_request()
+        } else {
+            self.internal_error(error.to_string())
+        }
+    }
+
     // Build 403 Forbidden response.
     fn forbidden(&self) -> Result<Response<Body>> {
         Ok(Response::builder()
@@ -161,3 +172,4 @@ impl Router {
         Ok(Response::builder().status(404).body(Body::empty())?)
     }
 }
+
