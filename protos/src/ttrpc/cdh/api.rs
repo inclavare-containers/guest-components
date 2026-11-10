@@ -274,6 +274,10 @@ pub struct GetResourceRequest {
     // message fields
     // @@protoc_insertion_point(field:api.GetResourceRequest.ResourcePath)
     pub ResourcePath: ::std::string::String,
+    // @@protoc_insertion_point(field:api.GetResourceRequest.Type)
+    pub Type: ::std::option::Option<::std::string::String>,
+    // @@protoc_insertion_point(field:api.GetResourceRequest.Options)
+    pub Options: ::std::collections::HashMap<::std::string::String, ::std::string::String>,
     // special fields
     // @@protoc_insertion_point(special_field:api.GetResourceRequest.special_fields)
     pub special_fields: ::protobuf::SpecialFields,
@@ -291,12 +295,22 @@ impl GetResourceRequest {
     }
 
     fn generated_message_descriptor_data() -> ::protobuf::reflect::GeneratedMessageDescriptorData {
-        let mut fields = ::std::vec::Vec::with_capacity(1);
+        let mut fields = ::std::vec::Vec::with_capacity(3);
         let mut oneofs = ::std::vec::Vec::with_capacity(0);
         fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
             "ResourcePath",
             |m: &GetResourceRequest| { &m.ResourcePath },
             |m: &mut GetResourceRequest| { &mut m.ResourcePath },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
+            "Type",
+            |m: &GetResourceRequest| { &m.Type },
+            |m: &mut GetResourceRequest| { &mut m.Type },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_map_simpler_accessor_new::<_, _>(
+            "Options",
+            |m: &GetResourceRequest| { &m.Options },
+            |m: &mut GetResourceRequest| { &mut m.Options },
         ));
         ::protobuf::reflect::GeneratedMessageDescriptorData::new_2::<GetResourceRequest>(
             "GetResourceRequest",
@@ -319,6 +333,24 @@ impl ::protobuf::Message for GetResourceRequest {
                 10 => {
                     self.ResourcePath = is.read_string()?;
                 },
+                18 => {
+                    self.Type = ::std::option::Option::Some(is.read_string()?);
+                },
+                26 => {
+                    let len = is.read_raw_varint32()?;
+                    let old_limit = is.push_limit(len as u64)?;
+                    let mut key = ::std::default::Default::default();
+                    let mut value = ::std::default::Default::default();
+                    while let Some(tag) = is.read_raw_tag_or_eof()? {
+                        match tag {
+                            10 => key = is.read_string()?,
+                            18 => value = is.read_string()?,
+                            _ => ::protobuf::rt::skip_field_for_tag(tag, is)?,
+                        };
+                    }
+                    is.pop_limit(old_limit);
+                    self.Options.insert(key, value);
+                },
                 tag => {
                     ::protobuf::rt::read_unknown_or_skip_group(tag, is, self.special_fields.mut_unknown_fields())?;
                 },
@@ -334,6 +366,15 @@ impl ::protobuf::Message for GetResourceRequest {
         if !self.ResourcePath.is_empty() {
             my_size += ::protobuf::rt::string_size(1, &self.ResourcePath);
         }
+        if let Some(v) = self.Type.as_ref() {
+            my_size += ::protobuf::rt::string_size(2, &v);
+        }
+        for (k, v) in &self.Options {
+            let mut entry_size = 0;
+            entry_size += ::protobuf::rt::string_size(1, &k);
+            entry_size += ::protobuf::rt::string_size(2, &v);
+            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(entry_size) + entry_size
+        };
         my_size += ::protobuf::rt::unknown_fields_size(self.special_fields.unknown_fields());
         self.special_fields.cached_size().set(my_size as u32);
         my_size
@@ -343,6 +384,18 @@ impl ::protobuf::Message for GetResourceRequest {
         if !self.ResourcePath.is_empty() {
             os.write_string(1, &self.ResourcePath)?;
         }
+        if let Some(v) = self.Type.as_ref() {
+            os.write_string(2, v)?;
+        }
+        for (k, v) in &self.Options {
+            let mut entry_size = 0;
+            entry_size += ::protobuf::rt::string_size(1, &k);
+            entry_size += ::protobuf::rt::string_size(2, &v);
+            os.write_raw_varint32(26)?; // Tag.
+            os.write_raw_varint32(entry_size as u32)?;
+            os.write_string(1, &k)?;
+            os.write_string(2, &v)?;
+        };
         os.write_unknown_fields(self.special_fields.unknown_fields())?;
         ::std::result::Result::Ok(())
     }
@@ -361,15 +414,14 @@ impl ::protobuf::Message for GetResourceRequest {
 
     fn clear(&mut self) {
         self.ResourcePath.clear();
+        self.Type = ::std::option::Option::None;
+        self.Options.clear();
         self.special_fields.clear();
     }
 
     fn default_instance() -> &'static GetResourceRequest {
-        static instance: GetResourceRequest = GetResourceRequest {
-            ResourcePath: ::std::string::String::new(),
-            special_fields: ::protobuf::SpecialFields::new(),
-        };
-        &instance
+        static instance: ::protobuf::rt::Lazy<GetResourceRequest> = ::protobuf::rt::Lazy::new();
+        instance.get(GetResourceRequest::new)
     }
 }
 
@@ -1667,40 +1719,46 @@ impl ::protobuf::reflect::ProtobufValue for ImagePullResponse {
 static file_descriptor_proto_data: &'static [u8] = b"\
     \n\tapi.proto\x12\x03api\"+\n\x11UnsealSecretInput\x12\x16\n\x06secret\
     \x18\x01\x20\x01(\x0cR\x06secret\"2\n\x12UnsealSecretOutput\x12\x1c\n\tp\
-    laintext\x18\x01\x20\x01(\x0cR\tplaintext\"8\n\x12GetResourceRequest\x12\
-    \"\n\x0cResourcePath\x18\x01\x20\x01(\tR\x0cResourcePath\"1\n\x13GetReso\
-    urceResponse\x12\x1a\n\x08Resource\x18\x01\x20\x01(\x0cR\x08Resource\"[\
-    \n\x1fPrepareResourceInjectionRequest\x12\"\n\x0cResourcePath\x18\x01\
-    \x20\x01(\tR\x0cResourcePath\x12\x14\n\x05Nonce\x18\x02\x20\x01(\tR\x05N\
-    once\"\x90\x01\n\x20PrepareResourceInjectionResponse\x12\x1c\n\tSessionI\
-    d\x18\x01\x20\x01(\tR\tSessionId\x12\x14\n\x05Nonce\x18\x02\x20\x01(\tR\
-    \x05Nonce\x12\x1c\n\tTeePubKey\x18\x03\x20\x01(\tR\tTeePubKey\x12\x1a\n\
-    \x08Evidence\x18\x04\x20\x01(\x0cR\x08Evidence\"\x90\x01\n\x1eCommitReso\
-    urceInjectionRequest\x12\x1c\n\tSessionId\x18\x01\x20\x01(\tR\tSessionId\
-    \x12\"\n\x0cResourcePath\x18\x02\x20\x01(\tR\x0cResourcePath\x12,\n\x11E\
-    ncryptedResource\x18\x03\x20\x01(\x0cR\x11EncryptedResource\"!\n\x1fComm\
-    itResourceInjectionResponse\"\xe8\x01\n\x12SecureMountRequest\x12\x1f\n\
-    \x0bvolume_type\x18\x01\x20\x01(\tR\nvolumeType\x12>\n\x07options\x18\
-    \x02\x20\x03(\x0b2$.api.SecureMountRequest.OptionsEntryR\x07options\x12\
-    \x14\n\x05flags\x18\x03\x20\x03(\tR\x05flags\x12\x1f\n\x0bmount_point\
-    \x18\x04\x20\x01(\tR\nmountPoint\x1a:\n\x0cOptionsEntry\x12\x10\n\x03key\
-    \x18\x01\x20\x01(\tR\x03key\x12\x14\n\x05value\x18\x02\x20\x01(\tR\x05va\
-    lue:\x028\x01\"4\n\x13SecureMountResponse\x12\x1d\n\nmount_path\x18\x01\
-    \x20\x01(\tR\tmountPath\"P\n\x10ImagePullRequest\x12\x1b\n\timage_url\
-    \x18\x01\x20\x01(\tR\x08imageUrl\x12\x1f\n\x0bbundle_path\x18\x02\x20\
-    \x01(\tR\nbundlePath\"<\n\x11ImagePullResponse\x12'\n\x0fmanifest_digest\
-    \x18\x01\x20\x01(\tR\x0emanifestDigest2V\n\x13SealedSecretService\x12?\n\
-    \x0cUnsealSecret\x12\x16.api.UnsealSecretInput\x1a\x17.api.UnsealSecretO\
-    utput2\xa5\x02\n\x12GetResourceService\x12@\n\x0bGetResource\x12\x17.api\
-    .GetResourceRequest\x1a\x18.api.GetResourceResponse\x12g\n\x18PrepareRes\
-    ourceInjection\x12$.api.PrepareResourceInjectionRequest\x1a%.api.Prepare\
-    ResourceInjectionResponse\x12d\n\x17CommitResourceInjection\x12#.api.Com\
-    mitResourceInjectionRequest\x1a$.api.CommitResourceInjectionResponse2V\n\
-    \x12SecureMountService\x12@\n\x0bSecureMount\x12\x17.api.SecureMountRequ\
-    est\x1a\x18.api.SecureMountResponse2N\n\x10ImagePullService\x12:\n\tPull\
-    Image\x12\x15.api.ImagePullRequest\x1a\x16.api.ImagePullResponseBaZ_gith\
-    ub.com/confidential-containers/guest-components/confidential-data-hub/go\
-    lang/pkg/api/cdhapib\x06proto3\
+    laintext\x18\x01\x20\x01(\x0cR\tplaintext\"\xd6\x01\n\x12GetResourceRequ\
+    est\x12\"\n\x0cResourcePath\x18\x01\x20\x01(\tR\x0cResourcePath\x12\x17\
+    \n\x04Type\x18\x02\x20\x01(\tH\0R\x04Type\x88\x01\x01\x12>\n\x07Options\
+    \x18\x03\x20\x03(\x0b2$.api.GetResourceRequest.OptionsEntryR\x07Options\
+    \x1a:\n\x0cOptionsEntry\x12\x10\n\x03key\x18\x01\x20\x01(\tR\x03key\x12\
+    \x14\n\x05value\x18\x02\x20\x01(\tR\x05value:\x028\x01B\x07\n\x05_Type\"\
+    1\n\x13GetResourceResponse\x12\x1a\n\x08Resource\x18\x01\x20\x01(\x0cR\
+    \x08Resource\"[\n\x1fPrepareResourceInjectionRequest\x12\"\n\x0cResource\
+    Path\x18\x01\x20\x01(\tR\x0cResourcePath\x12\x14\n\x05Nonce\x18\x02\x20\
+    \x01(\tR\x05Nonce\"\x90\x01\n\x20PrepareResourceInjectionResponse\x12\
+    \x1c\n\tSessionId\x18\x01\x20\x01(\tR\tSessionId\x12\x14\n\x05Nonce\x18\
+    \x02\x20\x01(\tR\x05Nonce\x12\x1c\n\tTeePubKey\x18\x03\x20\x01(\tR\tTeeP\
+    ubKey\x12\x1a\n\x08Evidence\x18\x04\x20\x01(\x0cR\x08Evidence\"\x90\x01\
+    \n\x1eCommitResourceInjectionRequest\x12\x1c\n\tSessionId\x18\x01\x20\
+    \x01(\tR\tSessionId\x12\"\n\x0cResourcePath\x18\x02\x20\x01(\tR\x0cResou\
+    rcePath\x12,\n\x11EncryptedResource\x18\x03\x20\x01(\x0cR\x11EncryptedRe\
+    source\"!\n\x1fCommitResourceInjectionResponse\"\xe8\x01\n\x12SecureMoun\
+    tRequest\x12\x1f\n\x0bvolume_type\x18\x01\x20\x01(\tR\nvolumeType\x12>\n\
+    \x07options\x18\x02\x20\x03(\x0b2$.api.SecureMountRequest.OptionsEntryR\
+    \x07options\x12\x14\n\x05flags\x18\x03\x20\x03(\tR\x05flags\x12\x1f\n\
+    \x0bmount_point\x18\x04\x20\x01(\tR\nmountPoint\x1a:\n\x0cOptionsEntry\
+    \x12\x10\n\x03key\x18\x01\x20\x01(\tR\x03key\x12\x14\n\x05value\x18\x02\
+    \x20\x01(\tR\x05value:\x028\x01\"4\n\x13SecureMountResponse\x12\x1d\n\nm\
+    ount_path\x18\x01\x20\x01(\tR\tmountPath\"P\n\x10ImagePullRequest\x12\
+    \x1b\n\timage_url\x18\x01\x20\x01(\tR\x08imageUrl\x12\x1f\n\x0bbundle_pa\
+    th\x18\x02\x20\x01(\tR\nbundlePath\"<\n\x11ImagePullResponse\x12'\n\x0fm\
+    anifest_digest\x18\x01\x20\x01(\tR\x0emanifestDigest2V\n\x13SealedSecret\
+    Service\x12?\n\x0cUnsealSecret\x12\x16.api.UnsealSecretInput\x1a\x17.api\
+    .UnsealSecretOutput2\xf2\x02\n\x12GetResourceService\x12@\n\x0bGetResour\
+    ce\x12\x17.api.GetResourceRequest\x1a\x18.api.GetResourceResponse\x12K\n\
+    \x16GetResourceWithOptions\x12\x17.api.GetResourceRequest\x1a\x18.api.Ge\
+    tResourceResponse\x12g\n\x18PrepareResourceInjection\x12$.api.PrepareRes\
+    ourceInjectionRequest\x1a%.api.PrepareResourceInjectionResponse\x12d\n\
+    \x17CommitResourceInjection\x12#.api.CommitResourceInjectionRequest\x1a$\
+    .api.CommitResourceInjectionResponse2V\n\x12SecureMountService\x12@\n\
+    \x0bSecureMount\x12\x17.api.SecureMountRequest\x1a\x18.api.SecureMountRe\
+    sponse2N\n\x10ImagePullService\x12:\n\tPullImage\x12\x15.api.ImagePullRe\
+    quest\x1a\x16.api.ImagePullResponseBaZ_github.com/confidential-container\
+    s/guest-components/confidential-data-hub/golang/pkg/api/cdhapib\x06proto\
+    3\
 ";
 
 /// `FileDescriptorProto` object which was a source for this generated file

@@ -16,6 +16,11 @@ message UnsealSecretOutput {
 
 message GetResourceRequest {
     string ResourcePath = 1;
+    // Optional resource type; omitted values retain the configured backend.
+    optional string Type = 2;
+    // Provider-specific values are interpreted by CDH, not the transport proxy.
+    // Options may contain credentials. Never log their values.
+    map<string, string> Options = 3;
 }
 
 message GetResourceResponse {
@@ -68,6 +73,9 @@ service SealedSecretService {
 
 service GetResourceService {
     rpc GetResource(GetResourceRequest) returns (GetResourceResponse) {};
+    // Use this method when passing overrides: old CDH versions must reject the
+    // call rather than silently ignore the new fields and use a default identity.
+    rpc GetResourceWithOptions(GetResourceRequest) returns (GetResourceResponse) {};
     rpc PrepareResourceInjection(PrepareResourceInjectionRequest) returns (PrepareResourceInjectionResponse) {};
     rpc CommitResourceInjection(CommitResourceInjectionRequest) returns (CommitResourceInjectionResponse) {};
 }

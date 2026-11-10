@@ -84,6 +84,11 @@ impl GetResourceServiceClient {
         ::ttrpc::async_client_request!(self, ctx, req, "api.GetResourceService", "GetResource", cres);
     }
 
+    pub async fn get_resource_with_options(&self, ctx: ttrpc::context::Context, req: &super::api::GetResourceRequest) -> ::ttrpc::Result<super::api::GetResourceResponse> {
+        let mut cres = super::api::GetResourceResponse::new();
+        ::ttrpc::async_client_request!(self, ctx, req, "api.GetResourceService", "GetResourceWithOptions", cres);
+    }
+
     pub async fn prepare_resource_injection(&self, ctx: ttrpc::context::Context, req: &super::api::PrepareResourceInjectionRequest) -> ::ttrpc::Result<super::api::PrepareResourceInjectionResponse> {
         let mut cres = super::api::PrepareResourceInjectionResponse::new();
         ::ttrpc::async_client_request!(self, ctx, req, "api.GetResourceService", "PrepareResourceInjection", cres);
@@ -103,6 +108,17 @@ struct GetResourceMethod {
 impl ::ttrpc::r#async::MethodHandler for GetResourceMethod {
     async fn handler(&self, ctx: ::ttrpc::r#async::TtrpcContext, req: ::ttrpc::Request) -> ::ttrpc::Result<::ttrpc::Response> {
         ::ttrpc::async_request_handler!(self, ctx, req, api, GetResourceRequest, get_resource);
+    }
+}
+
+struct GetResourceWithOptionsMethod {
+    service: Arc<dyn GetResourceService + Send + Sync>,
+}
+
+#[async_trait]
+impl ::ttrpc::r#async::MethodHandler for GetResourceWithOptionsMethod {
+    async fn handler(&self, ctx: ::ttrpc::r#async::TtrpcContext, req: ::ttrpc::Request) -> ::ttrpc::Result<::ttrpc::Response> {
+        ::ttrpc::async_request_handler!(self, ctx, req, api, GetResourceRequest, get_resource_with_options);
     }
 }
 
@@ -133,6 +149,9 @@ pub trait GetResourceService: Sync {
     async fn get_resource(&self, _ctx: &::ttrpc::r#async::TtrpcContext, _: super::api::GetResourceRequest) -> ::ttrpc::Result<super::api::GetResourceResponse> {
         Err(::ttrpc::Error::RpcStatus(::ttrpc::get_status(::ttrpc::Code::NOT_FOUND, "/api.GetResourceService/GetResource is not supported".to_string())))
     }
+    async fn get_resource_with_options(&self, _ctx: &::ttrpc::r#async::TtrpcContext, _: super::api::GetResourceRequest) -> ::ttrpc::Result<super::api::GetResourceResponse> {
+        Err(::ttrpc::Error::RpcStatus(::ttrpc::get_status(::ttrpc::Code::NOT_FOUND, "/api.GetResourceService/GetResourceWithOptions is not supported".to_string())))
+    }
     async fn prepare_resource_injection(&self, _ctx: &::ttrpc::r#async::TtrpcContext, _: super::api::PrepareResourceInjectionRequest) -> ::ttrpc::Result<super::api::PrepareResourceInjectionResponse> {
         Err(::ttrpc::Error::RpcStatus(::ttrpc::get_status(::ttrpc::Code::NOT_FOUND, "/api.GetResourceService/PrepareResourceInjection is not supported".to_string())))
     }
@@ -148,6 +167,9 @@ pub fn create_get_resource_service(service: Arc<dyn GetResourceService + Send + 
 
     methods.insert("GetResource".to_string(),
                     Box::new(GetResourceMethod{service: service.clone()}) as Box<dyn ::ttrpc::r#async::MethodHandler + Send + Sync>);
+
+    methods.insert("GetResourceWithOptions".to_string(),
+                    Box::new(GetResourceWithOptionsMethod{service: service.clone()}) as Box<dyn ::ttrpc::r#async::MethodHandler + Send + Sync>);
 
     methods.insert("PrepareResourceInjection".to_string(),
                     Box::new(PrepareResourceInjectionMethod{service: service.clone()}) as Box<dyn ::ttrpc::r#async::MethodHandler + Send + Sync>);

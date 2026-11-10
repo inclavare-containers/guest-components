@@ -27,6 +27,7 @@ impl Client for Grpc {
     async fn get_resource(&self, resource_path: &str) -> Result<Vec<u8>> {
         let req = tonic::Request::new(GetResourceRequest {
             resource_path: resource_path.to_string(),
+            ..Default::default()
         });
 
         let resource = self
