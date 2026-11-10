@@ -143,3 +143,146 @@ fn kms_secret_name(uri: &str) -> anyhow::Result<&str> {
     Ok(name)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn provider_options_are_validated_in_cdh_without_changing_defaults() {
+        use std::collections::HashMap;
+        for entries in [
+            vec![],
+            vec![("sts", "YWJj")],
+            vec![("kms_id", "kst-test")],
+            vec![("region_id", "cn-beijing")],
+            vec![
+                ("sts", "YWJj"),
+                ("kms_id", "kst-test"),
+                ("region_id", "cn-beijing"),
+            ],
+        ] {
+            let options = GetResourceOptions {
+                resource_type: None,
+                options: entries
+                    .into_iter()
+                    .map(|(k, v)| (k.into(), v.into()))
+                    .collect(),
+            };
+            assert!(validate_options(&options, "aliyun_kms").is_ok());
+        }
+        assert!(validate_options(&GetResourceOptions::default(), "kbs").is_ok());
+        for (configured, requested, key) in [
+            ("kbs", None, Some("sts")),
+            ("aliyun_kms", Some("kbs"), None),
+            ("kbs", Some("aliyun_kms"), None),
+            ("aliyun_kms", Some(""), None),
+            ("aliyun_kms", Some("private-marker"), None),
+            ("aliyun_kms", None, Some("private-marker")),
+        ] {
+            let options = GetResourceOptions {
+                resource_type: requested.map(str::to_owned),
+                options: key
+                    .map(|k| HashMap::from([(k.into(), "private-marker".into())]))
+                    .unwrap_or_default(),
+            };
+            let error = validate_options(&options, configured).unwrap_err();
+            assert!(!error.to_string().contains("private-marker"));
+            assert!(!format!("{options:?}").contains("private-marker"));
+        }
+        for backend in ["kbs", "aliyun_kms"] {
+            assert!(validate_options(
+                &GetResourceOptions {
+                    resource_type: Some(backend.into()),
+                    ..Default::default()
+                },
+                backend
+            )
+            .is_ok());
+        }
+        let oversized = GetResourceOptions {
+            options: HashMap::from([("sts".into(), "x".repeat(20 * 1024 + 1))]),
+            ..Default::default()
+        };
+        assert!(validate_options(&oversized, "aliyun_kms").is_err());
+    }
+
+    #[cfg(feature = "aliyun")]
+    #[tokio::test]
+    async fn malformed_kms_options_are_rejected_by_cdh_before_network_access() {
+        let config:CdhConfig=toml::from_str("[kbc]\nname='aliyun_kms_kbc'\ninstance_id='kst-test'\necs_ram_role_name='product-role'\nregion_id='cn-beijing'").unwrap();
+        let resolver = ResourceResolver::new(&config).unwrap();
+        for (key, value) in [
+            ("sts", ""),
+            ("sts", "not-base64!"),
+            ("kms_id", ""),
+            ("kms_id", "https://kms.example"),
+            ("region_id", ""),
+            ("region_id", "cn/beijing"),
+            ("region_id", "cn_beijing"),
+            ("unknown", "private-marker"),
+        ] {
+            let options = GetResourceOptions {
+                options: std::collections::HashMap::from([(key.into(), value.into())]),
+                ..Default::default()
+            };
+            assert!(matches!(
+                resolver.get_resource("kbs:///secret", &options).await,
+                Err(kms::Error::InvalidResourceOptions(_))
+            ));
+        }
+    }
+
+    #[cfg(feature = "aliyun")]
+    #[test]
+    fn backend_is_selected_by_configuration_variant_not_url() {
+        let config: CdhConfig = toml::from_str(
+            r#"
+[kbc]
+name = "cc_kbc"
+url = "https://trustee.example/api"
+"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            ResourceResolver::new(&config).unwrap().backend,
+            Backend::Kbs
+        ));
+        let mut config = config;
+        config.kbc = KbcConfig::Cc(crate::KbsConfig {
+            url: "kst-test".into(),
+            kbs_cert: None,
+        });
+        assert!(ResourceResolver::new(&config).is_err());
+        config = toml::from_str("[kbc]\nname='aliyun_kms_kbc'\ninstance_id='kst-test'\necs_ram_role_name='product-role'").unwrap();
+        assert!(matches!(
+            ResourceResolver::new(&config).unwrap().backend,
+            Backend::AliyunKms(_)
+        ));
+    }
+
+    #[test]
+    fn accepts_single_component_and_preserves_nested_names() {
+        for name in ["my-secret", "my-repo/my-type/my-data", "app/secret_v1"] {
+            assert_eq!(kms_secret_name(&format!("kbs:///{name}")).unwrap(), name);
+        }
+    }
+
+    #[test]
+    fn rejects_authority_query_encoding_and_traversal() {
+        for uri in [
+            "my-secret",
+            "kbs://host/secret",
+            "https://host/x",
+            "kbs:///",
+            "kbs:////x",
+            "kbs:///a/../b",
+            "kbs:///./x",
+            "kbs:///a//b",
+            "kbs:///a%2Fb",
+            "kbs:///x?query",
+            "kbs:///x#frag",
+        ] {
+            assert!(kms_secret_name(uri).is_err(), "{uri}");
+        }
+    }
+}
