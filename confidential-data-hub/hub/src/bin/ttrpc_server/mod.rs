@@ -9,7 +9,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use confidential_data_hub::{
     storage::volume_type::Storage,
-    {hub::Hub, CdhConfig, DataHub},
+    {hub::Hub, CdhConfig, DataHub, GetResourceOptions},
 };
 use log::{debug, error};
 use ttrpc::{asynchronous::TtrpcContext, Code, Error, Status};
@@ -69,23 +69,49 @@ impl SealedSecretService for Server {
 
 #[async_trait]
 impl GetResourceService for Server {
+    async fn get_resource_with_options(
+        &self,
+        ctx: &TtrpcContext,
+        req: GetResourceRequest,
+    ) -> ::ttrpc::Result<GetResourceResponse> {
+        GetResourceService::get_resource(self, ctx, req).await
+    }
+
     async fn get_resource(
         &self,
         _ctx: &TtrpcContext,
         req: GetResourceRequest,
     ) -> ::ttrpc::Result<GetResourceResponse> {
         debug!("[ttRPC CDH] get new GetResource request");
-        let resource = self.hub.get_resource(req.ResourcePath).await.map_err(|e| {
-            let detailed_error = format_error!(e);
-            error!("[ttRPC CDH] GetResource :\n{detailed_error}");
-            let mut status = Status::new();
-            status.set_code(Code::INTERNAL);
-            // Note that this error message will be delivered to infra-owner.
-            status.set_message(format!(
-                "[CDH] [ERROR]: Get Resource failed: {detailed_error}"
-            ));
-            Error::RpcStatus(status)
-        })?;
+        let options = GetResourceOptions {
+            resource_type: req.Type,
+            options: req.Options,
+        };
+        let resource = self
+            .hub
+            .get_resource_with_options(req.ResourcePath, options)
+            .await
+            .map_err(|e| {
+                let detailed_error = format_error!(e);
+                error!("[ttRPC CDH] GetResource :\n{detailed_error}");
+                let mut status = Status::new();
+                let invalid_options = matches!(
+                    &e,
+                    confidential_data_hub::Error::GetResource {
+                        source: confidential_data_hub::kms::Error::InvalidResourceOptions(_)
+                    }
+                );
+                status.set_code(if invalid_options {
+                    Code::INVALID_ARGUMENT
+                } else {
+                    Code::INTERNAL
+                });
+                // Note that this error message will be delivered to infra-owner.
+                status.set_message(format!(
+                    "[CDH] [ERROR]: Get Resource failed: {detailed_error}"
+                ));
+                Error::RpcStatus(status)
+            })?;
 
         let mut reply = GetResourceResponse::new();
         reply.Resource = resource;

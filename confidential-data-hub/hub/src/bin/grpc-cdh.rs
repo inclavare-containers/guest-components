@@ -31,7 +31,9 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     let config = CdhConfig::new(cli.config)?;
-    env_logger::init_from_env(env_logger::Env::new().default_filter_or(&config.log.level));
+    env_logger::Builder::from_env(env_logger::Env::new().default_filter_or(&config.log.level))
+        .filter_module("ttrpc::asynchronous::connection", log::LevelFilter::Off)
+        .init();
 
     let cdh_socket = config.socket.parse::<SocketAddr>()?;
 

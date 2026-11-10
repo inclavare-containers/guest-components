@@ -4,9 +4,26 @@
 //
 
 use async_trait::async_trait;
+use std::collections::HashMap;
 
 use crate::storage::volume_type::Storage;
 use crate::Result;
+
+/// Provider-specific request options. Absent fields retain deployment defaults.
+#[derive(Clone, Default)]
+pub struct GetResourceOptions {
+    pub resource_type: Option<String>,
+    pub options: HashMap<String, String>,
+}
+
+impl std::fmt::Debug for GetResourceOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GetResourceOptions")
+            .field("resource_type", &"<redacted>")
+            .field("options", &"<redacted>")
+            .finish()
+    }
+}
 
 pub struct PrepareResourceInjectionResult {
     pub session_id: String,

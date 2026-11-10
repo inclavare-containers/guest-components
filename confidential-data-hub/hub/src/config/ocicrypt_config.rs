@@ -71,15 +71,14 @@ mod tests {
     use serial_test::serial;
 
     use super::*;
-    use crate::{KbsConfig, LogConfig};
+    use crate::{KbcConfig, KbsConfig, LogConfig};
 
     fn test_config(socket: &str) -> CdhConfig {
         CdhConfig {
-            kbc: KbsConfig {
-                name: "offline_fs_kbc".into(),
+            kbc: KbcConfig::OfflineFs(KbsConfig {
                 url: String::new(),
                 kbs_cert: None,
-            },
+            }),
             credentials: Vec::new(),
             image: ImageConfig::default(),
             socket: socket.into(),
