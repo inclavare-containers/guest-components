@@ -173,3 +173,35 @@ impl Router {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct Handler;
+
+    #[async_trait]
+    impl ApiHandler for Handler {}
+
+    #[tokio::test]
+    async fn rpc_argument_errors_return_redacted_bad_requests() {
+        let mut status = ttrpc::Status::new();
+        status.set_code(ttrpc::Code::INVALID_ARGUMENT);
+        status.set_message("private-provider-option".into());
+        let response = Handler
+            .rpc_error_response(ttrpc::Error::RpcStatus(status).into())
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            hyper::body::to_bytes(response).await.unwrap(),
+            "BAD REQUEST"
+        );
+    }
+
+    #[test]
+    fn other_rpc_errors_remain_internal_errors() {
+        let response = Handler
+            .rpc_error_response(anyhow!("service unavailable"))
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+}

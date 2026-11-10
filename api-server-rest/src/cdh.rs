@@ -286,6 +286,169 @@ fn build_kbs_resource_uri(resource_path: &str) -> String {
 mod tests {
     use super::*;
 
+    #[test]
+    fn resource_options_are_optional_independent_and_url_decoded() {
+        let empty = resource_query(None).unwrap();
+        assert!(empty.Type.is_none() && empty.Options.is_empty());
+        for (query, key, value) in [
+            ("sts=YWJj", "sts", "YWJj"),
+            ("kms_id=kst-test", "kms_id", "kst-test"),
+            ("region_id=cn-beijing", "region_id", "cn-beijing"),
+        ] {
+            let req = resource_query(Some(query)).unwrap();
+            assert!(req.Type.is_none());
+            assert_eq!(req.Options.len(), 1);
+            assert_eq!(req.Options[key], value);
+        }
+        let req = resource_query(Some(
+            "type=aliyun_kms&sts=YWJj%2B%2F%3D&kms_id=kst-test&region_id=cn-beijing",
+        ))
+        .unwrap();
+        assert_eq!(req.Type.as_deref(), Some("aliyun_kms"));
+        assert_eq!(req.Options["sts"], "YWJj+/=");
+        assert_eq!(req.Options["kms_id"], "kst-test");
+        assert_eq!(req.Options["region_id"], "cn-beijing");
+        assert_eq!(req.Options.len(), 3);
+    }
+
+    #[test]
+    fn proxy_rejects_duplicates_and_bounds_but_does_not_validate_provider_values() {
+        for query in [
+            "sts=a&sts=b",
+            "kms_id=kst-a&kms_id=kst-b",
+            "region_id=cn-beijing&region_id=cn-hangzhou",
+            "type=kbs&type=aliyun_kms",
+            "private-marker=a&private-marker=b",
+        ] {
+            let error = resource_query(Some(query)).err().unwrap();
+            assert!(!error.to_string().contains("private-marker"));
+        }
+        assert!(resource_query(Some(&"a".repeat(20 * 1024 + 1))).is_err());
+        for query in [
+            "sts=",
+            "kms_id=https%3A%2F%2Fexample.test",
+            "region_id=cn%2Fbeijing",
+            "future_option=private-marker",
+        ] {
+            assert!(resource_query(Some(query)).is_ok());
+        }
+    }
+
+    struct ResourceMock;
+
+    #[async_trait]
+    impl protos::ttrpc::cdh::api_ttrpc::GetResourceService for ResourceMock {
+        async fn get_resource(
+            &self,
+            _ctx: &ttrpc::asynchronous::TtrpcContext,
+            req: GetResourceRequest,
+        ) -> ttrpc::Result<protos::ttrpc::cdh::api::GetResourceResponse> {
+            assert_eq!(req.ResourcePath, "kbs:///my-secret");
+            assert!(req.Type.is_none() && req.Options.is_empty());
+            std::result::Result::Ok(protos::ttrpc::cdh::api::GetResourceResponse {
+                Resource: b"legacy".to_vec(),
+                ..Default::default()
+            })
+        }
+
+        async fn get_resource_with_options(
+            &self,
+            _ctx: &ttrpc::asynchronous::TtrpcContext,
+            req: GetResourceRequest,
+        ) -> ttrpc::Result<protos::ttrpc::cdh::api::GetResourceResponse> {
+            assert_eq!(req.ResourcePath, "kbs:///my-secret");
+            if req.Options.get("kms_id").map(String::as_str) == Some("kst-invalid")
+                || req.Options.values().any(String::is_empty)
+            {
+                let mut status = ttrpc::Status::new();
+                status.set_code(ttrpc::Code::INVALID_ARGUMENT);
+                status.set_message("private-marker must not be exposed by REST".into());
+                return Err(ttrpc::Error::RpcStatus(status));
+            }
+            if let Some(resource_type) = req.Type.as_deref() {
+                assert_eq!(resource_type, "aliyun_kms");
+            }
+            assert_eq!(req.Options["region_id"], "cn-beijing");
+            if !req.Options.contains_key("sts") && !req.Options.contains_key("kms_id") {
+                return std::result::Result::Ok(protos::ttrpc::cdh::api::GetResourceResponse {
+                    Resource: b"region-only".to_vec(),
+                    ..Default::default()
+                });
+            }
+            assert_eq!(req.Options["sts"], "YWJj+/=");
+            assert_eq!(req.Options["kms_id"], "kst-test");
+            std::result::Result::Ok(protos::ttrpc::cdh::api::GetResourceResponse {
+                Resource: vec![0, 255, 1],
+                ..Default::default()
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn rest_forwards_options_through_ttrpc_and_preserves_legacy_requests() {
+        use std::sync::Arc;
+        let dir = tempfile::tempdir().unwrap();
+        let socket = format!("unix://{}/cdh.sock", dir.path().display());
+        let services =
+            protos::ttrpc::cdh::api_ttrpc::create_get_resource_service(Arc::new(ResourceMock));
+        let mut server = ttrpc::asynchronous::Server::new()
+            .bind(&socket)
+            .unwrap()
+            .register_service(services);
+        server.start().await.unwrap();
+        let client = CDHClient::new(&socket, vec![Method::GET], false).unwrap();
+        for (query, status, expected) in [
+            ("", StatusCode::OK, b"legacy".as_slice()),
+            (
+                "?sts=YWJj%2B%2F%3D&kms_id=kst-test&region_id=cn-beijing",
+                StatusCode::OK,
+                &[0, 255, 1],
+            ),
+            (
+                "?region_id=cn-beijing",
+                StatusCode::OK,
+                b"region-only".as_slice(),
+            ),
+            (
+                "?type=aliyun_kms&sts=YWJj%2B%2F%3D&kms_id=kst-test&region_id=cn-beijing",
+                StatusCode::OK,
+                &[0, 255, 1],
+            ),
+            (
+                "?region_id=",
+                StatusCode::BAD_REQUEST,
+                b"BAD REQUEST".as_slice(),
+            ),
+            (
+                "?kms_id=kst-invalid",
+                StatusCode::BAD_REQUEST,
+                b"BAD REQUEST".as_slice(),
+            ),
+            ("?sts=", StatusCode::BAD_REQUEST, b"BAD REQUEST".as_slice()),
+        ] {
+            let request = Request::builder()
+                .uri(format!("/cdh/resource/my-secret{query}"))
+                .body(Body::empty())
+                .unwrap();
+            let response = client
+                .handle_request(local_addr(), "/resource/my-secret", request)
+                .await
+                .unwrap();
+            assert_eq!(response.status(), status);
+            if status == StatusCode::OK {
+                assert_eq!(
+                    response.headers()["content-type"],
+                    "application/octet-stream"
+                );
+            }
+            assert_eq!(
+                body::to_bytes(response.into_body()).await.unwrap().as_ref(),
+                expected
+            );
+        }
+        server.shutdown().await.unwrap();
+    }
+
     fn local_addr() -> SocketAddr {
         SocketAddr::from(([127, 0, 0, 1], 8006))
     }

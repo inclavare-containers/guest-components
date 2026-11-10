@@ -219,6 +219,7 @@ dependencies = [
  "protos",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "ttrpc",
  "utoipa",
