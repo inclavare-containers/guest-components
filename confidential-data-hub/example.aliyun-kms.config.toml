@@ -1,0 +1,14 @@
+# Enable the `aliyun` build feature. This selects GetResource's backend;
+# it does not change existing Vault/UnsealSecret provider settings.
+socket = "unix:///run/confidential-containers/cdh.sock"
+
+[aa]
+aa_socket = "unix:///run/confidential-containers/attestation-agent/attestation-agent.sock"
+
+[kbc]
+name = "aliyun_kms_kbc"
+# No url or kbs_cert in KMS mode.
+instance_id = "kst-example"
+ecs_ram_role_name = "your-bound-kms-role"
+# Optional for a different KMS region; defaults to the instance's IMDS region.
+# region_id = "cn-hangzhou"

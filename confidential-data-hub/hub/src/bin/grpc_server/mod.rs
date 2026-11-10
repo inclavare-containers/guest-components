@@ -7,7 +7,7 @@ use anyhow::*;
 
 use confidential_data_hub::{
     storage::volume_type::Storage,
-    {hub::Hub, DataHub},
+    {hub::Hub, DataHub, GetResourceOptions},
 };
 use log::{debug, error};
 use std::{error::Error as _, net::SocketAddr, sync::Arc};
@@ -70,9 +70,9 @@ impl SealedSecretService for Cdh {
 impl GetResourceService for Cdh {
     async fn get_resource_with_options(
         &self,
-        _request: Request<GetResourceRequest>,
+        request: Request<GetResourceRequest>,
     ) -> Result<Response<GetResourceResponse>, Status> {
-        Err(Status::unimplemented("resource options are not implemented yet"))
+        GetResourceService::get_resource(self, request).await
     }
 
     async fn get_resource(
@@ -84,12 +84,27 @@ impl GetResourceService for Cdh {
 
         let resource = self
             .inner
-            .get_resource(request.resource_path)
+            .get_resource_with_options(
+                request.resource_path,
+                GetResourceOptions {
+                    resource_type: request.r#type,
+                    options: request.options,
+                },
+            )
             .await
             .map_err(|e| {
                 let detailed_error = format_error!(e);
                 error!("[gRPC CDH] Call CDH to get resource failed:\n{detailed_error}");
-                Status::internal(format!("[ERROR] CDH get resource failed: {e}"))
+                if matches!(
+                    &e,
+                    confidential_data_hub::Error::GetResource {
+                        source: confidential_data_hub::kms::Error::InvalidResourceOptions(_)
+                    }
+                ) {
+                    Status::invalid_argument(detailed_error)
+                } else {
+                    Status::internal(format!("[ERROR] CDH get resource failed: {e}"))
+                }
             })?;
 
         debug!("[gRPC CDH] Get resource successfully!");

@@ -1,0 +1,8 @@
+# Request sts, kms_id and region_id supply identity, target and region independently.
+socket = "unix:///run/confidential-containers/cdh.sock"
+
+[kbc]
+name = "aliyun_kms_kbc"
+# Optional region default; without IMDS, provide it here or in each request.
+# region_id = "cn-beijing"
+# instance_id and ecs_ram_role_name may be omitted for request-only operation.

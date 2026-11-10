@@ -12,6 +12,8 @@ use image_rs::config::ImageConfig;
 use log::{debug, info};
 use serde::Deserialize;
 
+pub use crate::kms::KmsConfig;
+
 #[cfg(any(feature = "ttrpc", feature = "grpc"))]
 mod ocicrypt_config;
 
@@ -32,23 +34,76 @@ const CDH_DEFAULT_IMAGE_AUTHENTICATED_REGISTRY_CREDENTIALS: &str =
 
 #[derive(Clone, Deserialize, Debug, PartialEq)]
 pub struct KbsConfig {
-    pub name: String,
-
+    #[serde(default)]
     pub url: String,
 
     pub kbs_cert: Option<String>,
 }
 
-impl KbsConfig {
+pub const ALIYUN_KMS_KBC: &str = "aliyun_kms_kbc";
+
+/// The selected backend and its parameters share one `[kbc]` table.
+/// Existing KBS configurations retain their `name`, `url`, and `kbs_cert` fields.
+#[derive(Clone, Deserialize, Debug, PartialEq)]
+#[serde(tag = "name")]
+pub enum KbcConfig {
+    #[serde(rename = "cc_kbc")]
+    Cc(KbsConfig),
+    #[serde(rename = "offline_fs_kbc")]
+    OfflineFs(KbsConfig),
+    #[serde(rename = "online_sev_kbc")]
+    OnlineSev(KbsConfig),
+    #[serde(rename = "aliyun_kms_kbc")]
+    AliyunKms(KmsConfig),
+}
+
+impl KbcConfig {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Cc(_) => "cc_kbc",
+            Self::OfflineFs(_) => "offline_fs_kbc",
+            Self::OnlineSev(_) => "online_sev_kbc",
+            Self::AliyunKms(_) => ALIYUN_KMS_KBC,
+        }
+    }
+
+    fn kbs_config(&self) -> Option<&KbsConfig> {
+        match self {
+            Self::Cc(config) | Self::OfflineFs(config) | Self::OnlineSev(config) => Some(config),
+            Self::AliyunKms(_) => None,
+        }
+    }
+
+    pub(crate) fn validate(&self) -> Result<()> {
+        match self {
+            Self::Cc(config) => ensure!(
+                config.url.starts_with("http://") || config.url.starts_with("https://"),
+                "cc_kbc requires a Trustee HTTP(S) kbc.url"
+            ),
+            Self::OfflineFs(_) | Self::OnlineSev(_) => {}
+            Self::AliyunKms(config) => {
+                config.validate()?;
+                #[cfg(not(feature = "aliyun"))]
+                bail!("aliyun_kms_kbc requires the aliyun build feature");
+            }
+        }
+        Ok(())
+    }
+
     fn new() -> Result<Self> {
         debug!("Try to get kbc and url from env and kernel commandline.");
-        let aa_kbc_params =
-            AaKbcParams::new().context("failed to read aa_kbc_params to initialize KbsConfig")?;
-        Ok(KbsConfig {
-            name: aa_kbc_params.kbc,
-            url: aa_kbc_params.uri,
+        let params = AaKbcParams::new().context("read aa_kbc_params to initialize KbcConfig")?;
+        let config = KbsConfig {
+            url: params.uri,
             kbs_cert: None,
-        })
+        };
+        match params.kbc.as_str() {
+            "cc_kbc" => Ok(Self::Cc(config)),
+            "offline_fs_kbc" => Ok(Self::OfflineFs(config)),
+            "online_sev_kbc" => Ok(Self::OnlineSev(config)),
+            ALIYUN_KMS_KBC => bail!("aliyun_kms_kbc requires a CDH configuration file"),
+            other => bail!("unsupported resource backend: {other}"),
+        }
     }
 }
 
@@ -102,7 +157,7 @@ impl Default for LogConfig {
 #[derive(Clone, Deserialize, Debug, PartialEq)]
 #[serde(from = "RawCdhConfig")]
 pub struct CdhConfig {
-    pub kbc: KbsConfig,
+    pub kbc: KbcConfig,
 
     #[serde(default)]
     pub credentials: Vec<Credential>,
@@ -127,7 +182,7 @@ pub struct CdhConfig {
 
 #[derive(Deserialize)]
 struct RawCdhConfig {
-    kbc: KbsConfig,
+    kbc: KbcConfig,
 
     #[serde(default)]
     credentials: Vec<Credential>,
@@ -200,7 +255,7 @@ impl CdhConfig {
             None => {
                 info!("No config path specified, use a default config (some parts will read from kernel cmdline).");
                 Self {
-                    kbc: KbsConfig::new()?,
+                    kbc: KbcConfig::new()?,
                     credentials: Vec::new(),
                     socket: DEFAULT_CDH_SOCKET_ADDR.into(),
                     skip_sealed_secret_verification: false,
@@ -219,6 +274,7 @@ impl CdhConfig {
         }
 
         config.extend_credentials_from_kernel_cmdline()?;
+        config.kbc.validate()?;
         Ok(config)
     }
 
@@ -226,7 +282,6 @@ impl CdhConfig {
     /// `config` crate.
     fn from_file(config_path: &str) -> Result<Self> {
         let c = Config::builder()
-            .set_default("kbc.url", "")?
             .add_source(File::with_name(config_path))
             .build()?;
 
@@ -253,10 +308,8 @@ impl CdhConfig {
         let cmdline = fs::read_to_string("/proc/cmdline").context("read kernel cmdline failed")?;
         let kbs_resources = cmdline
             .split_ascii_whitespace()
-            .find(|para| para.starts_with("cdh.kbs_resources="))
-            .unwrap_or("cdh.kbs_resources=")
-            .strip_prefix("cdh.kbs_resources=")
-            .expect("must have one")
+            .find_map(|para| para.strip_prefix("cdh.kbs_resources="))
+            .unwrap_or_default()
             .split(',')
             .filter(|s| !s.is_empty())
             .filter_map(|it| it.split_once("::"))
@@ -272,18 +325,19 @@ impl CdhConfig {
 
 impl CdhConfig {
     pub fn set_configuration_envs(&self) -> Result<()> {
-        if env::var("AA_KBC_PARAMS").is_err() {
-            env::set_var(
-                "AA_KBC_PARAMS",
-                format!("{}::{}", self.kbc.name, self.kbc.url),
-            );
+        if let Some(config) = self.kbc.kbs_config() {
+            if env::var("AA_KBC_PARAMS").is_err() {
+                env::set_var(
+                    "AA_KBC_PARAMS",
+                    format!("{}::{}", self.kbc.name(), config.url),
+                );
+            }
+            if let Some(kbs_cert) = &config.kbs_cert {
+                env::set_var("KBS_CERT", kbs_cert);
+            }
         }
         if env::var("AA_SOCKET").is_err() {
             env::set_var("AA_SOCKET", &self.aa_socket);
-        }
-        // KBS configurations
-        if let Some(kbs_cert) = &self.kbc.kbs_cert {
-            env::set_var("KBS_CERT", kbs_cert);
         }
         if self.skip_sealed_secret_verification {
             env::set_var("SKIP_SEALED_SECRET_VERIFICATION", "true");
@@ -305,7 +359,7 @@ mod tests {
 
     use crate::{
         config::{DEFAULT_AA_SOCKET_ADDR, DEFAULT_CDH_SOCKET_ADDR},
-        CdhConfig, KbsConfig, LogConfig,
+        CdhConfig, KbcConfig, KbsConfig, LogConfig,
     };
 
     #[rstest]
@@ -331,11 +385,10 @@ extra_root_certificates = ["cert1", "cert2"]
 image_pull_proxy = "http://127.0.0.1:8080"
     "#,
         Some(CdhConfig {
-            kbc: KbsConfig {
-                name: "offline_fs_kbc".to_string(),
+            kbc: KbcConfig::OfflineFs(KbsConfig {
                 url: "".to_string(),
                 kbs_cert: Some("".to_string()),
-            },
+            }),
             credentials: vec![],
             image: ImageConfig {
                 max_concurrent_layer_downloads_per_image: 3,
@@ -378,11 +431,10 @@ kbs_cert = ""
 name = "offline_fs_kbc"
 "#,
     Some(CdhConfig {
-        kbc: KbsConfig {
-            name: "offline_fs_kbc".to_string(),
+        kbc: KbcConfig::OfflineFs(KbsConfig {
             url: "".to_string(),
             kbs_cert: None,
-        },
+        }),
         credentials: vec![],
         image: ImageConfig {
                 sigstore_config_uri: None,
@@ -407,11 +459,10 @@ name = "offline_fs_kbc"
 some_undefined_field = "unknown value"
 "#,
     Some(CdhConfig {
-        kbc: KbsConfig {
-            name: "offline_fs_kbc".to_string(),
+        kbc: KbcConfig::OfflineFs(KbsConfig {
             url: "".to_string(),
             kbs_cert: None,
-        },
+        }),
         credentials: vec![],
         image: ImageConfig {
                 sigstore_config_uri: None,
@@ -516,11 +567,10 @@ name = "offline_fs_kbc"
         );
 
         let config = CdhConfig {
-            kbc: KbsConfig {
-                name: "cc_kbc".into(),
+            kbc: KbcConfig::Cc(KbsConfig {
                 url: "http://127.0.0.1:8080".into(),
                 kbs_cert: None,
-            },
+            }),
             credentials: Vec::new(),
             image: ImageConfig::default(),
             socket: DEFAULT_CDH_SOCKET_ADDR.into(),
@@ -578,11 +628,10 @@ name = "offline_fs_kbc"
 
         let config = CdhConfig::new(None).expect("Must be successful");
         let expected = CdhConfig {
-            kbc: KbsConfig {
-                name: "offline_fs_kbc".into(),
+            kbc: KbcConfig::OfflineFs(KbsConfig {
                 url: "".into(),
                 kbs_cert: None,
-            },
+            }),
             credentials: Vec::new(),
             socket: DEFAULT_CDH_SOCKET_ADDR.into(),
             skip_sealed_secret_verification: false,
