@@ -44,10 +44,6 @@ environment:
   tools:
     - name: "rpmdevtools"
       version: "9.6-5.an23"
-    # Satisfy trustiflux.spec's BuildRequires metadata. The build commands
-    # below put the pinned official Rust 1.88.0 distribution first in PATH.
-    - name: "cargo"
-      version: "1.84.1-4.an23"
     - name: "clang"
       version: "17.0.6-8.an23"
 
@@ -63,7 +59,9 @@ phases:
     commands:
       - tar -xzf /tmp/rpmbuild/SOURCES/v${VERSION}.tar.gz -C /tmp/rpmbuild/SPECS --strip-components=1 guest-components-${VERSION}/trustiflux.spec
       - PATH=/opt/rust-${RUST_VERSION}/bin:$PATH rpmbuild --define "_topdir /tmp/rpmbuild" -bs /tmp/rpmbuild/SPECS/trustiflux.spec --define 'debug_package %{nil}' --define 'debugsource_package %{nil}' --target src
-      - PATH=/opt/rust-${RUST_VERSION}/bin:$PATH rpmbuild --define "_topdir /tmp/rpmbuild" -bb /tmp/rpmbuild/SPECS/trustiflux.spec --define 'debug_package %{nil}' --define 'debugsource_package %{nil}'
+      # The verified Rust distribution supplies the binary build toolchain.
+      # Keep the default system-toolchain BuildRequires in the SRPM above.
+      - PATH=/opt/rust-${RUST_VERSION}/bin:$PATH rpmbuild --define "_topdir /tmp/rpmbuild" -bb /tmp/rpmbuild/SPECS/trustiflux.spec --define 'with_rustup 1' --define 'debug_package %{nil}' --define 'debugsource_package %{nil}'
 
 outputs:
   - path: /tmp/rpmbuild/SRPMS/trustiflux-${VERSION}-${RELEASE}.an23.src.rpm
