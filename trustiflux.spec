@@ -1,9 +1,9 @@
-%define release alpha
+%define release 1
 %global config_dir /etc/trustiflux
 %global libdir /usr/lib
 
 Name:		trustiflux
-Version:	1.7.2
+Version:	1.8.0
 Release:	%{release}%{?dist}
 Summary:	A daemon service running inside TEE (Trusted Execution Environment) to confidential resource related APIs
 
@@ -24,7 +24,8 @@ Requires: libtdx-attest tee-primitives
 %endif
 
 %if 0%{!?with_rustup:1}
-BuildRequires: cargo
+BuildRequires: cargo >= 1.88.0
+BuildRequires: rust >= 1.88.0
 %endif
 BuildRequires:	clang perl protobuf-devel git libgudev-devel tpm2-tss-devel openssl-devel
 Requires: tpm2-tss
@@ -167,6 +168,17 @@ rm -rf %{buildroot}
 %{libdir}/dracut/modules.d/99confidential-data-hub/module-setup.sh
 
 %changelog
+* Thu Nov 12 2026 Jiale Zhang <zhangjiale@linux.alibaba.com> - 1.8.0-1
+- CDH/KMS: support attested KMS sessions, authenticated CA bootstrap and
+  binary secret responses with explicit credential validation
+- Resource APIs: forward generic resource types and opaque provider options
+  while validating backend settings and preserving legacy requests
+- Attestation: make additional device evidence configurable without disabling
+  primary platform attestation
+- RPM: support native aarch64 AA/CDH packages and require Rust/Cargo >= 1.88
+- Security: update Rust and Go dependencies, including Tokio I/O safety and
+  the TTRPC client logrus denial-of-service fix
+
 * Mon Nov 09 2026 Jiale Zhang <zhangjiale@linux.alibaba.com> - 1.7.2-alpha
 - Attestation: allow disabling additional device attestation through AA
   configuration, including Hygon DCU/HCU evidence in KBS token requests
