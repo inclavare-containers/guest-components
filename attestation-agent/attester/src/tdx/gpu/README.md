@@ -6,6 +6,12 @@ report and certificate chain; query failures, unsupported architectures and
 disabled CC mode fail collection rather than silently omitting a device.
 CPU-only systems retain the existing TDX evidence format.
 
+GPU-enabled collectors also check NVIDIA display/3D devices in the visible
+PCI inventory. If NVML returns fewer devices, collection fails. This catches
+driver initialization failures that otherwise appear as zero GPUs, including
+an H20 initialization failure observed during hardware testing. PCI bridges
+and NVSwitch devices are not counted as GPUs.
+
 The collector creates the GPU requester nonce from all 64 padded report-data
 bytes, then commits the complete ordered device set in the primary TDX quote:
 
@@ -41,3 +47,15 @@ cargo +1.88.0 test -p attester --no-default-features \
 go test ./...
 CGO_ENABLED=1 go test -tags gpu ./...
 ```
+
+On 2026-11-17, both collectors were tested on a real H20 in an Alibaba Cloud
+`ecs.gn8v-tee.4xlarge` TDX guest (driver `595.71.05`, VBIOS `96.00.CF.00.05`,
+GPU CC ON). Each collected a 5006-byte TDX quote, 4129-byte GPU report and
+4826-byte GPU attestation certificate chain for a random 64-byte challenge.
+The paired Trustee verified the full evidence in both local RIM/OCSP and
+NRAS modes, and rejected nonce/report/certificate changes and GPU removal.
+
+This hardware run found and verified fixes for zero-device NVML fallback,
+Rust selecting the empty CEC certificate chain, and Rust including unused
+report buffer padding. Rust now uses `attestation_cert_chain` and NVML's
+reported lengths. Actual device evidence is kept outside the repository.

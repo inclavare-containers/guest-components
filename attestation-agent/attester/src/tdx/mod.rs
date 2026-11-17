@@ -167,15 +167,22 @@ impl Attester for TdxAttester {
 
         // Collect every discovered GPU before sealing the complete set in the
         // primary quote. A driver/device error must not downgrade to CPU-only.
+        let pci_gpu_count = gpu::evidence::nvidia_pci_gpu_count(Path::new("/sys/bus/pci/devices"))
+            .context("Enumerate NVIDIA PCI devices")?;
         let gpu_evidence = match GpuEvidenceCollector::new() {
             Result::Ok(collector) => {
-                if collector.device_count()? == 0 {
+                let device_count = collector.device_count()?;
+                ensure!(
+                    device_count >= pci_gpu_count,
+                    "NVML enumerated fewer GPUs than PCI; GPU initialization failed"
+                );
+                if device_count == 0 {
                     None
                 } else {
                     Some(collector.collect_gpu_evidence(&report_data)?)
                 }
             }
-            Result::Err(_) if !Path::new("/dev/nvidiactl").exists() => None,
+            Result::Err(_) if pci_gpu_count == 0 && !Path::new("/dev/nvidiactl").exists() => None,
             Result::Err(error) => return Err(error.into()),
         };
         let quote_report_data = match &gpu_evidence {
