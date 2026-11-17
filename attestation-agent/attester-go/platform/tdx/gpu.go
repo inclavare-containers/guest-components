@@ -17,8 +17,12 @@ import (
 // A CPU-only machine may omit GPU evidence. Once devices are discovered,
 // collection must succeed for every device; partial lists are not accepted.
 func collectGpuEvidence(reportData []byte) (*GpuEvidenceList, error) {
+	pciCount, err := nvidiaPciGpuCount("/sys/bus/pci/devices")
+	if err != nil {
+		return nil, fmt.Errorf("enumerate NVIDIA PCI devices: %w", err)
+	}
 	if ret := nvml.Init(); ret != nvml.SUCCESS {
-		if _, err := os.Stat("/dev/nvidiactl"); os.IsNotExist(err) {
+		if _, err := os.Stat("/dev/nvidiactl"); pciCount == 0 && os.IsNotExist(err) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("GPU NVML initialization failed: %s", nvml.ErrorString(ret))
@@ -27,6 +31,9 @@ func collectGpuEvidence(reportData []byte) (*GpuEvidenceList, error) {
 	count, ret := nvml.DeviceGetCount()
 	if ret != nvml.SUCCESS {
 		return nil, fmt.Errorf("GPU enumeration failed: %s", nvml.ErrorString(ret))
+	}
+	if count < pciCount {
+		return nil, fmt.Errorf("NVML enumerated fewer GPUs than PCI; GPU initialization failed")
 	}
 	if count == 0 {
 		return nil, nil

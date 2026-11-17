@@ -1,8 +1,56 @@
 use super::error::GpuAttestationError;
 use base64::{engine::general_purpose, Engine};
+use nvml_wrapper::structs::device::{
+    ConfidentialComputeGpuAttestationReport, ConfidentialComputeGpuCertificate,
+};
 use nvml_wrapper::{Device as NvmlDevice, Nvml};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256, Sha512};
+
+/// NVML can report zero devices when a physically present GPU fails to
+/// initialize. Cross-check display/3D PCI devices to prevent CPU-only fallback.
+pub(crate) fn nvidia_pci_gpu_count(root: &std::path::Path) -> std::io::Result<u32> {
+    let entries = match std::fs::read_dir(root) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+        Err(error) => return Err(error),
+    };
+    let mut count = 0;
+    for entry in entries {
+        let path = entry?.path();
+        let vendor = std::fs::read_to_string(path.join("vendor"))?;
+        let class = std::fs::read_to_string(path.join("class"))?;
+        if vendor.trim() == "0x10de" && class.trim().starts_with("0x03") {
+            count += 1;
+        }
+    }
+    Ok(count)
+}
+
+fn nvml_bytes(buffer: &[u8], size: u32) -> Result<Vec<u8>, GpuAttestationError> {
+    buffer
+        .get(..size as usize)
+        .filter(|bytes| !bytes.is_empty())
+        .map(|bytes| bytes.to_vec())
+        .ok_or_else(|| GpuAttestationError::Other("Invalid NVML evidence size".into()))
+}
+
+fn report_bytes(
+    report: ConfidentialComputeGpuAttestationReport,
+) -> Result<Vec<u8>, GpuAttestationError> {
+    nvml_bytes(&report.attestation_report, report.attestation_report_size)
+}
+
+fn certificate_bytes(
+    cert: ConfidentialComputeGpuCertificate,
+) -> Result<Vec<u8>, GpuAttestationError> {
+    // cert_chain belongs to CEC and can be empty on Hopper. The GPU report
+    // signature is authenticated by attestation_cert_chain.
+    nvml_bytes(
+        &cert.attestation_cert_chain,
+        cert.attestation_cert_chain_size,
+    )
+}
 
 /// GPU attestation evidence
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -252,7 +300,7 @@ impl GpuEvidenceCollector {
         let nonce_array = gpu_nonce(report_data);
 
         match device.confidential_compute_gpu_attestation_report(nonce_array) {
-            Ok(report) => Ok(report.attestation_report),
+            Ok(report) => report_bytes(report),
             Err(e) => {
                 log::error!("Failed to get gpu attestation report: {e}");
                 Err(GpuAttestationError::ConfidentialComputeUnavailable)
@@ -263,7 +311,7 @@ impl GpuEvidenceCollector {
     /// Get GPU certificate
     fn get_gpu_certificate(&self, device: &NvmlDevice) -> Result<Vec<u8>, GpuAttestationError> {
         match device.confidential_compute_gpu_certificate() {
-            Ok(cert) => Ok(cert.cert_chain),
+            Ok(cert) => certificate_bytes(cert),
             Err(e) => {
                 log::error!("Failed to get GPU certificate: {e}");
                 Err(GpuAttestationError::GetGpuCertificateFailed)
@@ -280,6 +328,46 @@ impl GpuEvidenceCollector {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn nvml_output_uses_gpu_chain_and_reported_lengths() {
+        let report = ConfidentialComputeGpuAttestationReport {
+            attestation_report_size: 3,
+            attestation_report: vec![1, 2, 0, 0, 0],
+            is_cec_attestation_report_present: false,
+            cec_attestation_report_size: 0,
+            cec_attestation_report: vec![0; 8],
+        };
+        assert_eq!(report_bytes(report).unwrap(), [1, 2, 0]);
+        let cert = ConfidentialComputeGpuCertificate {
+            cert_chain_size: 0,
+            cert_chain: vec![0; 8],
+            attestation_cert_chain_size: 4,
+            attestation_cert_chain: vec![4, 5, 6, 7, 0, 0],
+        };
+        assert_eq!(certificate_bytes(cert).unwrap(), [4, 5, 6, 7]);
+        assert!(nvml_bytes(&[0; 8], 0).is_err());
+        assert!(nvml_bytes(&[0; 8], 9).is_err());
+    }
+
+    #[test]
+    fn pci_gpu_inventory_excludes_nvidia_bridges() {
+        let root = tempfile::tempdir().unwrap();
+        for (name, vendor, class) in [
+            ("cpu", "0x8086\n", "0x030000\n"),
+            ("switch", "0x10de\n", "0x060400\n"),
+            ("h20", "0x10de\n", "0x030200\n"),
+            ("vga", "0x10de\n", "0x030000\n"),
+        ] {
+            let path = root.path().join(name);
+            std::fs::create_dir(&path).unwrap();
+            std::fs::write(path.join("vendor"), vendor).unwrap();
+            std::fs::write(path.join("class"), class).unwrap();
+        }
+        assert_eq!(nvidia_pci_gpu_count(root.path()).unwrap(), 2);
+        std::fs::remove_file(root.path().join("h20/vendor")).unwrap();
+        assert!(nvidia_pci_gpu_count(root.path()).is_err());
+    }
+
     #[test]
     fn shared_binding_vector_and_full_nonce() {
         let vector: serde_json::Value =
