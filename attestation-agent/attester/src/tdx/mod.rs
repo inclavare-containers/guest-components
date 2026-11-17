@@ -165,13 +165,31 @@ impl Attester for TdxAttester {
 
         report_data.resize(TDX_REPORT_DATA_SIZE, 0);
 
+        // Collect every discovered GPU before sealing the complete set in the
+        // primary quote. A driver/device error must not downgrade to CPU-only.
+        let gpu_evidence = match GpuEvidenceCollector::new() {
+            Result::Ok(collector) => {
+                if collector.device_count()? == 0 {
+                    None
+                } else {
+                    Some(collector.collect_gpu_evidence(&report_data)?)
+                }
+            }
+            Result::Err(_) if !Path::new("/dev/nvidiactl").exists() => None,
+            Result::Err(error) => return Err(error.into()),
+        };
+        let quote_report_data = match &gpu_evidence {
+            Some(gpus) => gpus.bound_report_data(&report_data)?,
+            None => report_data,
+        };
+
         let quote_bytes = TsmReportPath::new(TsmReportProvider::Tdx).map_or_else(
             |notsm| {
-                get_quote_ioctl(&report_data)
+                get_quote_ioctl(&quote_report_data)
                     .context(format!("TDX Attester: quote generation using ioctl() fallback failed after a TSM report error ({notsm})"))
             },
             |tsm| {
-                tsm.attestation_report(TsmReportData::Tdx(report_data.clone()))
+                tsm.attestation_report(TsmReportData::Tdx(quote_report_data.clone()))
                     .context("TDX Attester: quote generation using TSM reports failed")
             },
         )?;
@@ -180,36 +198,6 @@ impl Attester for TdxAttester {
         let quote = engine.encode(quote_bytes);
 
         let cc_eventlog = read_eventlog().await?;
-
-        // Try to collect GPU evidence
-        #[allow(unused_assignments)]
-        let mut gpu_evidence: Option<GpuEvidenceList> = None;
-        if let Result::Ok(gpu_collector) = GpuEvidenceCollector::new() {
-            match gpu_collector.has_gpu_devices() {
-                true => match gpu_collector.collect_gpu_evidence(&report_data) {
-                    Result::Ok(gpu_evidence_list) => {
-                        log::info!(
-                            "GPU evidence collected successfully, found {} GPU devices",
-                            gpu_evidence_list.gpu_count()
-                        );
-                        gpu_evidence = Some(gpu_evidence_list);
-                    }
-                    Result::Err(e) => {
-                        log::warn!("Failed to collect GPU evidence: {e}");
-                        gpu_evidence = None;
-                    }
-                },
-                false => {
-                    log::info!("No GPU devices found, skipping GPU evidence collection");
-                    gpu_evidence = None;
-                }
-            }
-        } else {
-            log::warn!(
-                "Failed to initialize GPU evidence collector, skipping GPU evidence collection"
-            );
-            gpu_evidence = None;
-        }
 
         let evidence = TdxEvidence {
             cc_eventlog,
