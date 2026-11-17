@@ -1,0 +1,33 @@
+{
+  "report_data": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+  "nonce": "0626ee41ac567e07672235633570ea03acca8a600dc480c8945e87c46a86c509",
+  "bound_report_data": "edb27a407fc202d96e7cdde1fe06450037456aa8172d4ecdfb1eb16a30dce2990cf077a9bf9c27c4242a499eebb0dc51a8fd0880c50f1c99b62ca7305ab3a6b6",
+  "gpu_evidence": {
+    "binding_version": 1,
+    "evidence_list": [
+      {
+        "arch": "HOPPER",
+        "index": 3,
+        "uuid": "untrusted-label",
+        "name": "untrusted-name",
+        "driver_version": "untrusted-driver",
+        "vbios_version": "untrusted-vbios",
+        "attestation_report": "cmVwb3J0LW9uZQ==",
+        "certificate": "Y2VydGlmaWNhdGUtb25l",
+        "cc_enabled": true
+      },
+      {
+        "arch": "BLACKWELL",
+        "index": 7,
+        "uuid": "untrusted-label",
+        "name": "untrusted-name",
+        "driver_version": "untrusted-driver",
+        "vbios_version": "untrusted-vbios",
+        "attestation_report": "cmVwb3J0LXR3bw==",
+        "certificate": "Y2VydGlmaWNhdGUtdHdv",
+        "cc_enabled": true
+      }
+    ],
+    "collection_time": "2026-11-17T00:00:00Z"
+  }
+}

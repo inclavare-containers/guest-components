@@ -1,97 +1,89 @@
-// Copyright (c) 2024 Alibaba Cloud
-//
+// Copyright (c) 2024-2026 Alibaba Cloud
 // SPDX-License-Identifier: Apache-2.0
 
 //go:build gpu
 
-// This file is only compiled with `-tags gpu`. It uses github.com/NVIDIA/go-nvml
-// which dlopen()s libnvidia-ml at runtime, so a binary built with this tag still
-// starts on machines without an NVIDIA driver (GPU evidence is simply skipped).
 package tdx
 
 import (
 	"encoding/base64"
-	"log"
+	"fmt"
+	"os"
 	"time"
 
 	"github.com/NVIDIA/go-nvml/pkg/nvml"
 )
 
-// collectGpuEvidence collects confidential-computing evidence from all NVIDIA
-// GPUs, mirroring tdx::gpu::evidence::GpuEvidenceCollector. Any failure to
-// initialise NVML or query a device is non-fatal and yields nil / a partial
-// list, matching the Rust best-effort behaviour.
-func collectGpuEvidence(reportData []byte) *GpuEvidenceList {
+// A CPU-only machine may omit GPU evidence. Once devices are discovered,
+// collection must succeed for every device; partial lists are not accepted.
+func collectGpuEvidence(reportData []byte) (*GpuEvidenceList, error) {
 	if ret := nvml.Init(); ret != nvml.SUCCESS {
-		log.Printf("GPU: NVML init failed (%s), skipping GPU evidence", nvml.ErrorString(ret))
-		return nil
+		if _, err := os.Stat("/dev/nvidiactl"); os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("GPU NVML initialization failed: %s", nvml.ErrorString(ret))
 	}
 	defer nvml.Shutdown()
-
 	count, ret := nvml.DeviceGetCount()
-	if ret != nvml.SUCCESS || count == 0 {
-		return nil
+	if ret != nvml.SUCCESS {
+		return nil, fmt.Errorf("GPU enumeration failed: %s", nvml.ErrorString(ret))
 	}
-
-	var nonce [32]byte
-	switch {
-	case len(reportData) == 0:
-		// leave zero
-	case len(reportData) <= 32:
-		copy(nonce[:], reportData)
-	default:
-		copy(nonce[:], reportData[:32])
+	if count == 0 {
+		return nil, nil
 	}
-
-	driverVersion, _ := nvml.SystemGetDriverVersion()
-
-	ccEnabled := false
-	if state, ret := nvml.SystemGetConfComputeState(); ret == nvml.SUCCESS {
-		ccEnabled = state.CcFeature != 0
+	if count > 32 {
+		return nil, fmt.Errorf("GPU count exceeds 32")
 	}
-
-	list := &GpuEvidenceList{CollectionTime: time.Now().UTC()}
+	state, ret := nvml.SystemGetConfComputeState()
+	if ret != nvml.SUCCESS || state.CcFeature == 0 {
+		return nil, fmt.Errorf("GPU confidential computing unavailable")
+	}
+	driverVersion, ret := nvml.SystemGetDriverVersion()
+	if ret != nvml.SUCCESS {
+		return nil, fmt.Errorf("GPU driver query failed: %s", nvml.ErrorString(ret))
+	}
+	nonce := gpuNonce(reportData)
+	list := &GpuEvidenceList{BindingVersion: 1, CollectionTime: time.Now().UTC()}
 	for i := 0; i < count; i++ {
 		device, ret := nvml.DeviceGetHandleByIndex(i)
 		if ret != nvml.SUCCESS {
-			log.Printf("GPU: get handle %d failed: %s", i, nvml.ErrorString(ret))
-			continue
+			return nil, fmt.Errorf("GPU %d handle failed: %s", i, nvml.ErrorString(ret))
+		}
+		architecture, ret := device.GetArchitecture()
+		if ret != nvml.SUCCESS {
+			return nil, fmt.Errorf("GPU %d architecture query failed", i)
+		}
+		arch := ""
+		switch architecture {
+		case nvml.DEVICE_ARCH_HOPPER:
+			arch = "HOPPER"
+		case nvml.DEVICE_ARCH_BLACKWELL:
+			arch = "BLACKWELL"
+		default:
+			return nil, fmt.Errorf("GPU %d architecture unsupported", i)
 		}
 		uuid, _ := device.GetUUID()
 		name, _ := device.GetName()
 		vbios, _ := device.GetVbiosVersion()
-
-		ev := GpuEvidence{
-			Index:         uint32(i),
-			UUID:          uuid,
-			Name:          name,
-			DriverVersion: driverVersion,
-			VbiosVersion:  vbios,
-			CcEnabled:     ccEnabled,
-		}
-
 		report := nvml.ConfComputeGpuAttestationReport{Nonce: nonce}
-		if ret := nvml.DeviceGetConfComputeGpuAttestationReport(device, &report); ret == nvml.SUCCESS {
-			b := base64.StdEncoding.EncodeToString(report.AttestationReport[:report.AttestationReportSize])
-			ev.AttestationReport = &b
-		} else {
-			log.Printf("GPU %d: get attestation report failed: %s", i, nvml.ErrorString(ret))
+		if ret := nvml.DeviceGetConfComputeGpuAttestationReport(device, &report); ret != nvml.SUCCESS {
+			return nil, fmt.Errorf("GPU %d report failed: %s", i, nvml.ErrorString(ret))
 		}
-
-		if ccEnabled {
-			if cert, ret := nvml.DeviceGetConfComputeGpuCertificate(device); ret == nvml.SUCCESS {
-				b := base64.StdEncoding.EncodeToString(cert.AttestationCertChain[:cert.AttestationCertChainSize])
-				ev.Certificate = &b
-			} else {
-				log.Printf("GPU %d: get certificate failed: %s", i, nvml.ErrorString(ret))
-			}
+		if report.AttestationReportSize == 0 || int(report.AttestationReportSize) > len(report.AttestationReport) {
+			return nil, fmt.Errorf("GPU %d report size invalid", i)
 		}
-
-		list.EvidenceList = append(list.EvidenceList, ev)
+		reportB64 := base64.StdEncoding.EncodeToString(report.AttestationReport[:report.AttestationReportSize])
+		cert, ret := nvml.DeviceGetConfComputeGpuCertificate(device)
+		if ret != nvml.SUCCESS {
+			return nil, fmt.Errorf("GPU %d certificate failed: %s", i, nvml.ErrorString(ret))
+		}
+		if cert.AttestationCertChainSize == 0 || int(cert.AttestationCertChainSize) > len(cert.AttestationCertChain) {
+			return nil, fmt.Errorf("GPU %d certificate size invalid", i)
+		}
+		certB64 := base64.StdEncoding.EncodeToString(cert.AttestationCertChain[:cert.AttestationCertChainSize])
+		list.EvidenceList = append(list.EvidenceList, GpuEvidence{Arch: arch, Index: uint32(i),
+			UUID: uuid, Name: name, DriverVersion: driverVersion, VbiosVersion: vbios,
+			CcEnabled: true, AttestationReport: &reportB64, Certificate: &certB64})
 	}
-
-	if len(list.EvidenceList) == 0 {
-		return nil
-	}
-	return list
+	return list, nil
 }

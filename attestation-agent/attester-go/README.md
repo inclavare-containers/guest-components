@@ -74,6 +74,11 @@ CGO_ENABLED=1 go build -tags gpu ./...
 `libnvidia-ml` at runtime, so the binary still starts on machines without an
 NVIDIA driver (GPU evidence is simply skipped).
 
+When GPUs are present, collection must succeed for every device. The complete
+report/certificate set is bound into the TDX quote; GPU collection errors fail
+attestation. GPU workloads require the paired Trustee binding-version-1
+verifier. See [the GPU binding protocol](../attester/src/tdx/gpu/README.md).
+
 ## Library usage
 
 ```go

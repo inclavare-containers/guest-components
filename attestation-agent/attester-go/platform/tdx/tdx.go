@@ -58,7 +58,16 @@ func (a *Attester) GetEvidence(reportData []byte) (api.TeeEvidence, error) {
 	}
 	rd := util.Pad(reportData, reportDataSize)
 
-	quoteBytes, err := a.getQuote(rd)
+	gpuEvidence, err := collectGpuEvidence(rd)
+	if err != nil {
+		return nil, err
+	}
+	quoteReportData, err := boundReportData(rd, gpuEvidence)
+	if err != nil {
+		return nil, err
+	}
+
+	quoteBytes, err := a.getQuote(quoteReportData)
 	if err != nil {
 		return nil, err
 	}
@@ -67,9 +76,6 @@ func (a *Attester) GetEvidence(reportData []byte) (api.TeeEvidence, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	// GPU evidence is best-effort (nil when unsupported / not built with -tags gpu).
-	gpuEvidence := collectGpuEvidence(rd)
 
 	ev := evidence{
 		Quote:       base64.StdEncoding.EncodeToString(quoteBytes),
