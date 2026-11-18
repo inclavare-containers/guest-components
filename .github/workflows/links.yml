@@ -9,7 +9,13 @@ on:
 
 jobs:
   checklinks:
+    # The lychee steps below are currently disabled. Keep the workflow valid
+    # and report that state explicitly instead of failing before jobs start.
+    if: ${{ false }}
     runs-on: ubuntu-24.04
+    steps:
+      - name: Link checking is disabled
+        run: echo "Link checking is currently disabled."
     # steps:
       # - name: Checkout code
       #   uses: actions/checkout@v4
