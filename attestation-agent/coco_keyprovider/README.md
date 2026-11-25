@@ -100,7 +100,7 @@ The `<parameters>` is a key-value list separated by double colons (e.g. key1=val
 - `sample`: Optional, defaults to `false`. When enabled, the provider reads a raw 32-byte KEK from the file specified by `COCO_SAMPLE_KEY_FILE`. The sample KBC must use the same key file.
 - `keyid`: Required if `sample` is not enabled. It is a Key Broker Service (KBS) Resource URI (see the specification below). When decryption occurs, the `keyid` value is used to index the Key Encryption Key (KEK).
 - `keypath`: Required if `sample` is not enabled. A local filesystem path, absolute path recommended. Specify the KEK to encrypt the image in local filesystem. KEK will be read from filesystem and then used to encrypt the image. This key's length must be 32 bytes.
-- `algorithm`: Not required. Indicate the encryption algorithm used. Either `A256GCM` or `A256CTR`. If not provided, use `A256GCM` by default as it is AEAD scheme.
+- `algorithm` is optional. The key provider always wraps the layer key parameters with `A256GCM`. Existing requests with `algorithm=A256CTR` still emit `A256GCM` and produce a deprecation warning. Remove that option or set it to `A256GCM`.
 
 The `keyid` parameter refers an KBS Resource URI and must follow one of the following formats,
 - `kbs:///<repository>/<type>/<tag>`

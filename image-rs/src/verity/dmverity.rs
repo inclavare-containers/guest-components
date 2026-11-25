@@ -5,6 +5,7 @@
 use anyhow::{bail, Context, Error, Result};
 use base64::Engine;
 use devicemapper::{DevId, DmFlags, DmName, DmOptions, DM};
+use log::warn;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::path::Path;
@@ -13,6 +14,10 @@ use std::path::Path;
 #[derive(Debug, Deserialize, Serialize)]
 pub struct DmVerityOption {
     /// Hash algorithm for dm-verity.
+    ///
+    /// Use SHA-256 for new images. SHA-1 is retained for existing images.
+    /// To migrate those images, rebuild their hash tree with SHA-256 and
+    /// update the algorithm and trusted root hash together.
     pub hashtype: String,
     /// Root hash for device verification or activation.
     pub hash: String,
@@ -87,30 +92,30 @@ impl DmVerityOption {
     }
 
     fn parse_tarfs_options(source_option: &str) -> std::result::Result<DmVerityOption, Error> {
-        let mut parts: Vec<&str> = source_option.split(',').collect();
-        if parts.len() == 3 {
-            parts[2] = parts[2].trim_start_matches("sha256:");
-        }
+        let parts: Vec<&str> = source_option.split(',').collect();
+        let [blocknum, offset, hash] = parts.as_slice() else {
+            bail!("Invalid dm-verity tarfs options");
+        };
         Ok(DmVerityOption {
             hashtype: "sha256".to_string(),
             blocksize: 512, //default block size
             hashsize: 4096, //default hash size
-            blocknum: parts[0].parse()?,
-            offset: parts[1].parse()?,
-            hash: parts[2].to_string(),
+            blocknum: blocknum.parse()?,
+            offset: offset.parse()?,
+            hash: hash.trim_start_matches("sha256:").to_string(),
         })
     }
 }
 
-// Parse `DmVerityOption` object from plaintext or base64 encoded json string.
+// Parse `DmVerityOption` from JSON, base64-encoded JSON or tarfs options.
 impl TryFrom<&str> for DmVerityOption {
     type Error = Error;
 
     fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
-        let option = if value.contains("sha256:") {
-            Self::parse_tarfs_options(value)?
-        } else if let Ok(v) = serde_json::from_str::<DmVerityOption>(value) {
+        let option = if let Ok(v) = serde_json::from_str::<DmVerityOption>(value) {
             v
+        } else if value.contains(',') {
+            Self::parse_tarfs_options(value)?
         } else {
             let decoded = base64::engine::general_purpose::STANDARD.decode(value)?;
             serde_json::from_slice::<DmVerityOption>(&decoded)?
@@ -137,6 +142,9 @@ pub fn create_verity_device(
     verity_option: &DmVerityOption,
     source_device_path: &Path,
 ) -> Result<String> {
+    if verity_option.hashtype.eq_ignore_ascii_case("sha1") {
+        warn!("SHA-1 dm-verity images are deprecated. Regenerate the hash tree with SHA-256.");
+    }
     let dm = DM::new()?;
     let verity_name = DmName::new(&verity_option.hash)?;
     let id = DevId::Name(verity_name);
@@ -258,6 +266,31 @@ mod tests {
             decoded.hash,
             "9de18652fe74edfb9b805aaed72ae2aa48f94333f1ba5c452ac33b1c39325174"
         );
+
+        let bare_options = format!("1024,524288,{}", decoded.hash);
+        let bare = DmVerityOption::try_from(&bare_options).unwrap();
+        assert_eq!(bare.hashtype, "sha256");
+        assert_eq!(bare.hash, decoded.hash);
+        assert!(DmVerityOption::try_from("1024,sha256:").is_err());
+    }
+
+    #[test]
+    fn decodes_legacy_sha1_verity_options() {
+        let legacy = DmVerityOption {
+            hashtype: "sha1".to_string(),
+            blocksize: 512,
+            hashsize: 1024,
+            blocknum: 1024,
+            offset: 524288,
+            hash: "00".repeat(20),
+        };
+        let json = serde_json::to_string(&legacy).unwrap();
+        let encoded = base64::engine::general_purpose::STANDARD.encode(&json);
+        for input in [&json, &encoded] {
+            let decoded = DmVerityOption::try_from(input).unwrap();
+            assert_eq!(decoded.hashtype, legacy.hashtype);
+            assert_eq!(decoded.hash, legacy.hash);
+        }
     }
 
     #[tokio::test]

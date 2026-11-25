@@ -8,14 +8,14 @@ use std::collections::HashMap;
 use anyhow::{anyhow, bail, Context, Result};
 use base64::Engine;
 use jwt_simple::prelude::Ed25519KeyPair;
-use log::{debug, info};
+use log::{debug, info, warn};
 use rand::TryRngCore;
 use reqwest::Url;
 use resource_uri::ResourceUri;
 use serde::{Deserialize, Serialize};
 use tokio::fs;
 
-use self::{crypto::Algorithm, kbs::register_kek};
+use self::kbs::register_kek;
 
 mod crypto;
 mod kbs;
@@ -53,15 +53,11 @@ struct InputParams {
     /// used to encrypt the image. This key's length must
     /// be 32 bytes
     keypath: Option<String>,
-
-    /// Encryption algorithm, included in the `wrap_type`
-    /// field of AnnotationPacket. Can be
-    /// - `A256GCM`: aes 256 gcm (default)
-    /// - `A256CTR`: aes 256 ctr
-    algorithm: Algorithm,
 }
 
 const HARD_CODED_KEYID: &str = "kbs:///default/test-key/1";
+
+const WRAP_TYPE: &str = "A256GCM";
 
 /// When a KEK is randomly generated, a new kid will be generated
 /// with this prefix.
@@ -69,30 +65,25 @@ const DEFAULT_KEY_REPO_PATH: &str = "/default/image-kek";
 
 const KBS_RESOURCE_URL_PREFIX: &str = "kbs://";
 
-fn parse_input_params(input: &str) -> Result<InputParams> {
+fn parse_input_params(input: &str) -> InputParams {
     let map: HashMap<&str, &str> = input
         .split("::")
-        .collect::<Vec<&str>>()
-        .iter()
         .filter_map(|field| field.split_once('='))
         .collect();
-    debug!("Get new request: {map:?}");
+    if map.get("algorithm") == Some(&"A256CTR") {
+        warn!("A256CTR is a deprecated key wrapping option. The key is wrapped with {WRAP_TYPE}.");
+    }
     let sample = map
         .get("sample")
         .map(|sa| sa.parse::<bool>().unwrap_or(false))
         .unwrap_or(false);
     let keyid = map.get("keyid").map(|id| id.to_string());
     let keypath = map.get("keypath").map(|p| p.to_string());
-    let algorithm = map
-        .get("keypath")
-        .map(|alg| (*alg).try_into().unwrap_or_default())
-        .unwrap_or_default();
-    Ok(InputParams {
+    InputParams {
         sample,
         keyid,
         keypath,
-        algorithm,
-    })
+    }
 }
 
 /// This function will generate (key, iv, keyid) for given `InputParams`
@@ -194,8 +185,7 @@ fn normalized_annotation_kid(key_id: &str, kbs_address: &str, key_path: &str) ->
     }
 }
 
-/// The input params vector should only have one element.
-/// The format of the element is in the following format:
+/// The input parameters are encoded in the following format:
 /// ```plaintext
 /// <key1>=<value1>::<key2>=<value2>::...
 /// ```
@@ -207,13 +197,13 @@ fn normalized_annotation_kid(key_id: &str, kbs_address: &str, key_path: &str) ->
 /// | sample    | `true` or `false`                    | Whether this image is encrypted by sample key provider. By default `false`                       |
 /// | keyid     | a KBS Resource URI, s.t. `kbs://..`  | Specify the KEK of this image. keyid field will be included in AnnotationPacket                  |
 /// | keypath   | path to the KEK, e.g. `/home/key`    | Specify the KEK to encrypted the image in local filesystem                                       |
-/// | algorithm | `A256GCM` or `A256CTR`               | Encryption algorithm, included in the `wrap_type` field of AnnotationPacket. By default `A256GCM`|
+/// | algorithm | `A256GCM`                          | The provider always wraps layer key parameters with `A256GCM`. |
 pub async fn enc_optsdata_gen_anno(
     kbs_parameter: (&Option<Url>, &Option<Ed25519KeyPair>),
     optsdata: &[u8],
-    params: Vec<String>,
+    params: &str,
 ) -> Result<String> {
-    let input_params = parse_input_params(&params[0])?;
+    let input_params = parse_input_params(params);
     let (key, iv, kid) = generate_key_parameters(&input_params)
         .await
         .context("generating key params")?;
@@ -221,9 +211,7 @@ pub async fn enc_optsdata_gen_anno(
     let (kbs_addr, k_path) = normalize_path(&kid)?;
     let annotation_kid = normalized_annotation_kid(&kid, &kbs_addr, &k_path);
 
-    let algorithm = input_params.algorithm;
-    let encrypt_optsdata = crypto::encrypt(optsdata, &key, &iv, &algorithm)
-        .map_err(|e| anyhow!("Encrypt failed: {e:?}"))?;
+    let encrypt_optsdata = crypto::encrypt(optsdata, &key, &iv).context("encrypt key options")?;
 
     if let (Some(addr), Some(private_key)) = kbs_parameter {
         if !input_params.sample {
@@ -240,7 +228,7 @@ pub async fn enc_optsdata_gen_anno(
         kid: annotation_kid,
         wrapped_data: engine.encode(encrypt_optsdata),
         iv: engine.encode(iv),
-        wrap_type: algorithm.to_string(),
+        wrap_type: WRAP_TYPE.to_string(),
     };
 
     serde_json::to_string(&annotation).map_err(|_| anyhow!("Serialize annotation failed"))

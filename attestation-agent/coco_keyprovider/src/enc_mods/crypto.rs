@@ -3,45 +3,13 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
-use std::fmt::Display;
+use aes_gcm::{aead::Aead, Aes256Gcm, KeyInit, Nonce};
+use anyhow::{anyhow, Result};
 
-use aes_gcm::{aead::Aead, aes::Aes256, Aes256Gcm, Key, Nonce};
-use anyhow::*;
-use strum::EnumString;
-
-#[derive(Default, EnumString)]
-pub enum Algorithm {
-    #[default]
-    A256GCM,
-    A256CTR,
-}
-
-impl Display for Algorithm {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Algorithm::A256GCM => f.write_str("A256GCM"),
-            Algorithm::A256CTR => f.write_str("A256CTR"),
-        }
-    }
-}
-
-pub fn encrypt(data: &[u8], key: &[u8], iv: &[u8], algorithm: &Algorithm) -> Result<Vec<u8>> {
-    match algorithm {
-        Algorithm::A256GCM => {
-            use aes_gcm::KeyInit;
-            let encryption_key = Key::<Aes256Gcm>::from_slice(key);
-            let cipher = Aes256Gcm::new(encryption_key);
-            let nonce = Nonce::from_slice(iv);
-            cipher
-                .encrypt(nonce, data.as_ref())
-                .map_err(|e| anyhow!("Decrypt failed: {e:?}"))
-        }
-        Algorithm::A256CTR => {
-            use ctr::cipher::{KeyIvInit, StreamCipher};
-            let mut buf = data.to_vec();
-            let mut cipher = ctr::Ctr128BE::<Aes256>::new(key.into(), iv.into());
-            cipher.apply_keystream(&mut buf);
-            Ok(buf)
-        }
-    }
+pub fn encrypt(data: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8>> {
+    let cipher =
+        Aes256Gcm::new_from_slice(key).map_err(|_| anyhow!("A256GCM requires a 32-byte key"))?;
+    cipher
+        .encrypt(Nonce::from_slice(iv), data)
+        .map_err(|e| anyhow!("A256GCM encryption failed: {e:?}"))
 }
