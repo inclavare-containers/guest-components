@@ -100,17 +100,17 @@ mod tests {
     use super::*;
 
     const KID: &str = "foo";
-    const KEY: [u8; 32] = *b"passphrasewhichneedstobe32bytes!";
     const WRONG_KEY: &str = "key";
 
     #[tokio::test]
     async fn test_get_key() {
+        let key = crate::tests::generate_test_key();
         let mut kbc = OfflineSevKbc {
             kbs_info: HashMap::new(),
-            keys: Ok([(KID.to_string(), KEY.to_vec())].iter().cloned().collect()),
+            keys: Ok([(KID.to_string(), key.to_vec())].iter().cloned().collect()),
         };
 
-        assert_eq!(&kbc.get_key(KID).await.expect("get key failed")[..], KEY);
+        assert_eq!(&kbc.get_key(KID).await.expect("get key failed")[..], key);
         assert!(kbc.get_key(WRONG_KEY).await.is_err());
     }
 }

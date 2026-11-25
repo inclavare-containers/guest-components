@@ -302,9 +302,9 @@ pub fn async_decrypt_layer<R: tokio::io::AsyncRead + Send>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use openssl::rsa::Rsa;
     use sha2::{Digest, Sha256};
     use std::env;
-    use std::fs;
     use std::path::PathBuf;
 
     #[test]
@@ -313,11 +313,9 @@ mod tests {
         let test_conf_path = format!("{}/{}", path, "ocicrypt_config.json");
         env::set_var("OCICRYPT_KEYPROVIDER_CONFIG", test_conf_path);
 
-        let pub_key_file = format!("{}/{}", path, "public_key.pem");
-        let pub_key = fs::read(pub_key_file).unwrap();
-
-        let priv_key_file = format!("{}/{}", path, "private_key.pem");
-        let priv_key = fs::read(priv_key_file).unwrap();
+        let key = Rsa::generate(2048).unwrap();
+        let pub_key = key.public_key_to_pem().unwrap();
+        let priv_key = key.private_key_to_pem().unwrap();
 
         let mut ec = EncryptConfig::default();
         assert!(ec.encrypt_with_jwe(vec![pub_key.clone()]).is_ok());
@@ -363,11 +361,9 @@ mod tests {
         let test_conf_path = format!("{}/{}", path, "ocicrypt_config.json");
         env::set_var("OCICRYPT_KEYPROVIDER_CONFIG", &test_conf_path);
 
-        let pub_key_file = format!("{}/{}", path, "public_key.pem");
-        let pub_key = fs::read(&pub_key_file).unwrap();
-
-        let priv_key_file = format!("{}/{}", path, "private_key.pem");
-        let priv_key = fs::read(&priv_key_file).unwrap();
+        let key = Rsa::generate(2048).unwrap();
+        let pub_key = key.public_key_to_pem().unwrap();
+        let priv_key = key.private_key_to_pem().unwrap();
 
         let mut ec = EncryptConfig::default();
         assert!(ec.encrypt_with_jwe(vec![pub_key]).is_ok());

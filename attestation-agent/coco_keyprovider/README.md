@@ -97,7 +97,7 @@ On the examples above the `--insecure-policy` option is not needed for encryptio
 As shown on the previous section, the encryption protocol (`--encryption-key`) passed to skopeo has the `provider:attestation-agent:<parameters>` format.
 
 The `<parameters>` is a key-value list separated by double colons (e.g. key1=value1::key2=value2). Here are the defined keys:
-- `sample`: Not required. Either `true` or `false`. If not set, use `false`. This value indicates whether the hardcoded encryption key is used. This works the same way as `sample keyprovider`.
+- `sample`: Optional, defaults to `false`. When enabled, the provider reads a raw 32-byte KEK from the file specified by `COCO_SAMPLE_KEY_FILE`. The sample KBC must use the same key file.
 - `keyid`: Required if `sample` is not enabled. It is a Key Broker Service (KBS) Resource URI (see the specification below). When decryption occurs, the `keyid` value is used to index the Key Encryption Key (KEK).
 - `keypath`: Required if `sample` is not enabled. A local filesystem path, absolute path recommended. Specify the KEK to encrypt the image in local filesystem. KEK will be read from filesystem and then used to encrypt the image. This key's length must be 32 bytes.
 - `algorithm`: Not required. Indicate the encryption algorithm used. Either `A256GCM` or `A256CTR`. If not provided, use `A256GCM` by default as it is AEAD scheme.
@@ -120,7 +120,15 @@ This section contain encrypting examples.
 
 #### Example 1: encrypting for sample kbc
 
-Let's start with the simplest example possible, which is to encrypt an image using the sample key provider:
+For a local demo, create a fresh 32-byte key file and pass its path to both the keyprovider and the sample KBC before starting them:
+
+```bash
+umask 077
+export COCO_SAMPLE_KEY_FILE="$(mktemp)"
+openssl rand -out "$COCO_SAMPLE_KEY_FILE" 32
+```
+
+Set `COCO_SAMPLE_REGISTRY_AUTH_FILE` for the sample KBC when the demo needs private registry authentication. Then encrypt the image:
 
 ```shell
 $ skopeo copy --insecure-policy --encryption-key provider:attestation-agent:sample=true docker://busybox oci:busybox_encrypted:sample
@@ -261,21 +269,8 @@ application/vnd.oci.image.layer.v1.tar+gzip
 tools/generate_keys.sh generate > aa-offline_fs_kbc-keys.json
 ```
 
-you will get a randomly generated `aa-offline_fs_kbc-keys.json` like the following
-```
-{
-  "default/key/key_id7": "gH4b2MYb/lGrYRVmrf3qtNo46mzC6C87cN5hdRt+Wvg=",
-  "default/key/key_id6": "cemWcxJw9fG11Y3WhrzcZNKBWebdFt7qQDsIa6h6kJI=",
-  "default/key/key_id10": "FePQCdgX/UONTIOl6eQP+7Itq5fdwr8JPufkmypbMWI=",
-  "default/key/key_id5": "uDAikSR/Hadk7RXkA86DBsQs8eekP/dkLkXyuVjyLf8=",
-  "default/key/key_id4": "5PN33vLpX+UO82Ryl/BhZNm5+suhTrBEqdWTDi1wqVU=",
-  "default/key/key_id3": "Y8ptYp5WgJxXdhe5tIS+ZIoSlVup1DUHu63MyHOsxsA=",
-  "default/key/key_id2": "sIDb9K+J7IEfYQMbcDzEYz8t+hABQlHSR+55SIAgsUw=",
-  "default/key/key_id1": "TfyYGL/gBbtXwgDmx3a6N6WxFJFamcSRUFlpBPXu0f4=",
-  "default/key/key_id9": "CfGZPsmKq1pkzraBpMAsbBZGIGlbWUepu4eR/Z4exnE=",
-  "default/key/key_id8": "eXIlv83nTjfyeLZcCvTda9ypYIYj83eGjbqjoVFAQHA="
-}
-```
+The script writes a JSON object whose values are newly generated base64-encoded KEKs.
+For example, the value at `default/key/key_id1` is the KEK used below.
 
 #### Use the Generated Key to Encrypt Image
 

@@ -36,30 +36,31 @@ mod tests {
 
     #[rstest]
     #[case(
-        b"0123456789abcdefghijklmnopqrstuv",
+        rand::random::<[u8; 32]>(),
         b"plaintext1",
         b"16bytes ivlength"
     )]
     #[case(
-        b"hijklmnopqrstuv0123456789abcdefg",
+        rand::random::<[u8; 32]>(),
         b"plaintext2",
         b"16bytes ivlength"
     )]
-    fn en_decrypt(#[case] key: &[u8], #[case] plaintext: &[u8], #[case] iv: &[u8]) {
-        let ciphertext = encrypt(key, plaintext, iv).expect("encryption failed");
-        let plaintext_de = decrypt(key, &ciphertext, iv).expect("decryption failed");
+    fn en_decrypt(#[case] key: [u8; 32], #[case] plaintext: &[u8], #[case] iv: &[u8]) {
+        let ciphertext = encrypt(&key, plaintext, iv).expect("encryption failed");
+        let plaintext_de = decrypt(&key, &ciphertext, iv).expect("decryption failed");
         assert_eq!(plaintext, plaintext_de);
     }
 
     #[test]
     fn test_wrong_key() {
         let plaintext = b"plaintext";
-        let key = b"0123456789abcdefghijklmnopqrstuv";
+        let key = rand::random::<[u8; 32]>();
         let iv = b"16bytes ivlength";
-        let ciphertext = encrypt(key, plaintext, iv).expect("encryption failed");
+        let ciphertext = encrypt(&key, plaintext, iv).expect("encryption failed");
 
-        let wrong_key = b"efghijklmnopqrstuv0123456789abcd";
-        let plaintext_de = decrypt(wrong_key, &ciphertext, iv).unwrap();
+        let mut wrong_key = key;
+        wrong_key[0] ^= 1;
+        let plaintext_de = decrypt(&wrong_key, &ciphertext, iv).unwrap();
         assert!(plaintext_de != plaintext);
     }
 }

@@ -257,7 +257,7 @@ mod tests {
         let mount = tempfile::TempDir::new().unwrap();
         let pool = format!("cdhpool{}{:x}", std::process::id(), rand::random::<u32>());
         let dataset = "secrets".to_string();
-        let key = Zeroizing::new(b"correct horse battery staple".to_vec());
+        let key = Zeroizing::new(format!("{:032x}", rand::random::<u128>()).into_bytes());
         let parameters = ZfsParameters {
             pool: pool.clone(),
             dataset: dataset.clone(),

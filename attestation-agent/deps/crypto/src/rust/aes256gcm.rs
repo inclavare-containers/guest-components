@@ -72,37 +72,37 @@ mod tests {
     use super::{decrypt, decrypt_with_aad_detached_tag, encrypt, encrypt_with_aad_detached_tag};
 
     #[rstest]
-    #[case(b"0123456789abcdefghijklmnopqrstuv", b"plaintext1", b"unique nonce")]
-    #[case(b"hijklmnopqrstuv0123456789abcdefg", b"plaintext2", b"unique2nonce")]
-    fn en_decrypt(#[case] key: &[u8], #[case] plaintext: &[u8], #[case] iv: &[u8]) {
-        let ciphertext = encrypt(key, plaintext, iv).expect("encryption failed");
-        let plaintext_de = decrypt(key, &ciphertext, iv).expect("decryption failed");
+    #[case(rand::random::<[u8; 32]>(), b"plaintext1", b"unique nonce")]
+    #[case(rand::random::<[u8; 32]>(), b"plaintext2", b"unique2nonce")]
+    fn en_decrypt(#[case] key: [u8; 32], #[case] plaintext: &[u8], #[case] iv: &[u8]) {
+        let ciphertext = encrypt(&key, plaintext, iv).expect("encryption failed");
+        let plaintext_de = decrypt(&key, &ciphertext, iv).expect("decryption failed");
         assert_eq!(plaintext, plaintext_de);
     }
 
     #[rstest]
     #[case(
-        b"0123456789abcdefghijklmnopqrstuv",
+        rand::random::<[u8; 32]>(),
         b"plaintext1",
         b"unique nonce",
         b"test-aad"
     )]
     #[case(
-        b"hijklmnopqrstuv0123456789abcdefg",
+        rand::random::<[u8; 32]>(),
         b"plaintext2",
         b"unique2nonce",
         b"test-aad"
     )]
     fn en_decrypt_with_aad(
-        #[case] key: &[u8],
+        #[case] key: [u8; 32],
         #[case] plaintext: &[u8],
         #[case] iv: &[u8],
         #[case] aad: &[u8],
     ) {
         let ciphertext =
-            encrypt_with_aad_detached_tag(key, plaintext, iv, aad).expect("encryption failed");
+            encrypt_with_aad_detached_tag(&key, plaintext, iv, aad).expect("encryption failed");
         let plaintext_de =
-            decrypt_with_aad_detached_tag(key, &ciphertext.ciphertext, iv, aad, &ciphertext.tag)
+            decrypt_with_aad_detached_tag(&key, &ciphertext.ciphertext, iv, aad, &ciphertext.tag)
                 .expect("decryption failed");
         assert_eq!(plaintext, plaintext_de);
     }
@@ -110,12 +110,13 @@ mod tests {
     #[test]
     fn test_wrong_key() {
         let plaintext = b"plaintext";
-        let key = b"0123456789abcdefghijklmnopqrstuv";
+        let key = rand::random::<[u8; 32]>();
         let iv = b"unique2nonce";
-        let ciphertext = encrypt(key, plaintext, iv).expect("encryption failed");
+        let ciphertext = encrypt(&key, plaintext, iv).expect("encryption failed");
 
-        let wrong_key = b"efghijklmnopqrstuv0123456789abcd";
-        let plaintext_de = decrypt(wrong_key, &ciphertext, iv);
+        let mut wrong_key = key;
+        wrong_key[0] ^= 1;
+        let plaintext_de = decrypt(&wrong_key, &ciphertext, iv);
         assert!(plaintext_de.is_err());
     }
 }

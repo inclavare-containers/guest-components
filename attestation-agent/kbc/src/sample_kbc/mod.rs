@@ -15,11 +15,6 @@ use zeroize::Zeroizing;
 
 use super::AnnotationPacket;
 
-const HARDCODED_KEY: &[u8] = &[
-    217, 155, 119, 5, 176, 186, 122, 22, 130, 149, 179, 163, 54, 114, 112, 176, 221, 155, 55, 27,
-    245, 20, 202, 139, 155, 167, 240, 163, 55, 17, 218, 234,
-];
-
 #[derive(AsRefStr, EnumString, Display, Debug, PartialEq, Eq)]
 pub enum ResourceType {
     #[strum(serialize = "security-policy")]
@@ -63,7 +58,10 @@ impl KbcInterface for SampleKbc {
     }
 
     async fn decrypt_payload(&mut self, annotation_packet: AnnotationPacket) -> Result<Vec<u8>> {
-        let key = Zeroizing::new(HARDCODED_KEY.to_vec());
+        let key_file = std::env::var_os("COCO_SAMPLE_KEY_FILE")
+            .context("COCO_SAMPLE_KEY_FILE must point to a raw 32-byte key")?;
+        let key = Zeroizing::new(std::fs::read(key_file).context("read sample KBC key")?);
+        ensure!(key.len() == 32, "sample KBC key must be exactly 32 bytes");
         let engine = base64::engine::general_purpose::STANDARD;
         let plain_text = decrypt(
             key,
@@ -89,7 +87,10 @@ impl KbcInterface for SampleKbc {
             ResourceType::CosignVerificationKey => {
                 Ok(std::include_str!("cosign.pub").as_bytes().to_vec())
             }
-            ResourceType::Credential => Ok(std::include_str!("auth.json").as_bytes().to_vec()),
+            ResourceType::Credential => match std::env::var_os("COCO_SAMPLE_REGISTRY_AUTH_FILE") {
+                Some(path) => std::fs::read(path).context("read sample KBC registry auth"),
+                None => Ok(br#"{"auths":{}}"#.to_vec()),
+            },
         }
     }
 }

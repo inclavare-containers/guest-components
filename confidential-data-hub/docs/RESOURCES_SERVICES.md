@@ -73,11 +73,11 @@ $ make RESOURCE_PROVIDER=kbs KMS_PROVIDER=none
 ```
 
 Create the resources file (**/etc/aa-offline_fs_kbc-resources.json**) and add the **default/key/1**
-key (its value should be encoded in base64):
+key. Replace the placeholder below with the base64 encoding of the resource bytes:
 
 ```json
 {
-  "default/key/1": "HUlOu8NWz8si11OZUzUJMnjiq/iZyHBJZMSD3BaqgMc="
+  "default/key/1": "<BASE64_RESOURCE_VALUE>"
 }
 ```
 
@@ -111,11 +111,10 @@ Finally we can obtain the resource **default/key/1** key from CDH:
 $ key=$(curl -s http://127.0.0.1:8006/cdh/resource/default/key/1 | base64)
 root_path /cdh, url_path /resource/default/key/1
 [2024-03-22T14:43:55Z INFO  confidential_data_hub::hub] get resource called: kbs:///default/key/1
-$ echo $key
-HUlOu8NWz8si11OZUzUJMnjiq/iZyHBJZMSD3BaqgMc=
+$ test -n "$key"
 ```
 
-Notice on the output above that the service returned the raw key's value, i.e., it is already base64 decoded.
+The service returns the decoded resource bytes, which the example encodes again for local validation.
 
 ## Challenge attestation based resource injection
 

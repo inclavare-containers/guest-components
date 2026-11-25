@@ -548,10 +548,10 @@ mod tests {
     #[cfg(feature = "keywrap-keyprovider-native")]
     use crate::helpers::create_decrypt_config;
 
-    ///Test runner which mocks binary executable for key wrapping and unwrapping
+    /// Test runner which mocks the key provider executable.
     #[derive(Clone, Copy)]
     #[cfg(feature = "keywrap-keyprovider-cmd")]
-    pub struct TestRunner {}
+    struct TestRunner([u8; 32]);
 
     ///Mock annotation packet, which goes into container image manifest
     #[derive(Serialize, Deserialize, Debug)]
@@ -561,13 +561,22 @@ mod tests {
         pub wrap_type: String,
     }
 
-    ///grpc server with mock api implementation for serving the clients with mock WrapKey and Unwrapkey grpc method implementations
-    #[derive(Default)]
+    /// Mock key provider server, with a fresh key for each instance.
     #[cfg(any(
         feature = "keywrap-keyprovider-grpc",
         feature = "keywrap-keyprovider-ttrpc"
     ))]
-    struct TestServer {}
+    struct TestServer([u8; 32]);
+
+    #[cfg(any(
+        feature = "keywrap-keyprovider-grpc",
+        feature = "keywrap-keyprovider-ttrpc"
+    ))]
+    impl Default for TestServer {
+        fn default() -> Self {
+            Self(crate::test_support::random_bytes())
+        }
+    }
 
     #[cfg(any(
         feature = "keywrap-keyprovider-cmd",
@@ -576,37 +585,34 @@ mod tests {
     ))]
     mod cmd_grpc {
         use aes_gcm::aead::{Aead, KeyInit};
-        use aes_gcm::aes::{Aes256Dec, Aes256Enc};
-        use aes_gcm::{Aes256Gcm, Key, Nonce};
+        use aes_gcm::{Aes256Gcm, Nonce};
         use anyhow::{anyhow, Result};
 
-        pub static mut ENC_KEY: &[u8; 32] = b"passphrasewhichneedstobe32bytes!";
-        pub static mut DEC_KEY: &[u8; 32] = b"passphrasewhichneedstobe32bytes!";
-
         pub fn encrypt_key(plain_text: &[u8], encrypting_key: &[u8; 32]) -> Result<Vec<u8>> {
-            let encrypting_key = Key::<Aes256Enc>::from_slice(encrypting_key);
-            let cipher = Aes256Gcm::new(encrypting_key);
-            let nonce = Nonce::from_slice(b"unique nonce");
-
-            cipher
-                .encrypt(nonce, plain_text.as_ref())
-                .map_err(|_| anyhow!("encryption failure"))
+            let cipher = Aes256Gcm::new(encrypting_key.into());
+            let nonce = crate::test_support::random_bytes::<12>();
+            let ciphertext = cipher
+                .encrypt(Nonce::from_slice(&nonce), plain_text)
+                .map_err(|_| anyhow!("encryption failure"))?;
+            let mut wrapped = nonce.to_vec();
+            wrapped.extend_from_slice(&ciphertext);
+            Ok(wrapped)
         }
 
         pub fn decrypt_key(cipher_text: &[u8], decrypting_key: &[u8; 32]) -> Result<Vec<u8>> {
-            let decrypting_key = Key::<Aes256Dec>::from_slice(decrypting_key);
-            let cipher = Aes256Gcm::new(decrypting_key);
-            let nonce = Nonce::from_slice(b"unique nonce");
-
+            let (nonce, ciphertext) = cipher_text
+                .split_at_checked(12)
+                .ok_or_else(|| anyhow!("missing key wrap nonce"))?;
+            let cipher = Aes256Gcm::new(decrypting_key.into());
             cipher
-                .decrypt(nonce, cipher_text.as_ref())
+                .decrypt(Nonce::from_slice(nonce), ciphertext)
                 .map_err(|_| anyhow!("decryption failure"))
         }
     }
 
     #[cfg(feature = "keywrap-keyprovider-grpc")]
     mod grpc {
-        use super::cmd_grpc::{decrypt_key, encrypt_key, DEC_KEY, ENC_KEY};
+        use super::cmd_grpc::{decrypt_key, encrypt_key};
         use super::*;
         use protos::grpc::cdh::keyprovider::{
             key_provider_service_server::{KeyProviderService, KeyProviderServiceServer},
@@ -633,7 +639,7 @@ mod tests {
                     &base64::engine::general_purpose::STANDARD
                         .decode(plain_optsdata)
                         .unwrap(),
-                    unsafe { ENC_KEY },
+                    &self.0,
                 ) {
                     let ap = AnnotationPacket {
                         key_url: "https://key-provider/key-uuid".to_string(),
@@ -674,7 +680,7 @@ mod tests {
                 let annotation_packet: AnnotationPacket =
                     serde_json::from_str(str_annotation).unwrap();
                 let wrapped_key = annotation_packet.wrapped_key;
-                if let Ok(unwrapped_key_result) = decrypt_key(&wrapped_key, unsafe { DEC_KEY }) {
+                if let Ok(unwrapped_key_result) = decrypt_key(&wrapped_key, &self.0) {
                     let key_wrap_output = super::super::KeyProviderKeyWrapProtocolOutput {
                         key_wrap_results: None,
                         key_unwrap_results: Some(super::super::KeyUnwrapResults {
@@ -716,7 +722,7 @@ mod tests {
 
     #[cfg(feature = "keywrap-keyprovider-ttrpc")]
     mod ttrpc_test {
-        use super::cmd_grpc::{decrypt_key, encrypt_key, DEC_KEY, ENC_KEY};
+        use super::cmd_grpc::{decrypt_key, encrypt_key};
         use super::*;
         use async_trait::async_trait;
         use protos::ttrpc::cdh::sync::keyprovider::{
@@ -741,7 +747,7 @@ mod tests {
                     &base64::engine::general_purpose::STANDARD
                         .decode(plain_optsdata)
                         .unwrap(),
-                    unsafe { ENC_KEY },
+                    &self.0,
                 ) {
                     let ap = AnnotationPacket {
                         key_url: "https://key-provider/key-uuid".to_string(),
@@ -782,7 +788,7 @@ mod tests {
                 let annotation_packet: AnnotationPacket =
                     serde_json::from_str(str_annotation).unwrap();
                 let wrapped_key = annotation_packet.wrapped_key;
-                if let Ok(unwrapped_key_result) = decrypt_key(&wrapped_key, unsafe { DEC_KEY }) {
+                if let Ok(unwrapped_key_result) = decrypt_key(&wrapped_key, &self.0) {
                     let key_wrap_output = KeyProviderKeyWrapProtocolOutput {
                         key_wrap_results: None,
                         key_unwrap_results: Some(KeyUnwrapResults {
@@ -872,7 +878,7 @@ mod tests {
                         &base64::engine::general_purpose::STANDARD
                             .decode(plain_optsdata)
                             .unwrap(),
-                        unsafe { self::cmd_grpc::ENC_KEY },
+                        &self.0,
                     )
                     .map_err(|e| std::io::Error::other(e.to_string()))?;
                     let ap = AnnotationPacket {
@@ -898,10 +904,8 @@ mod tests {
                     let annotation_packet: AnnotationPacket =
                         serde_json::from_str(str_annotation).unwrap();
                     let wrapped_key = annotation_packet.wrapped_key;
-                    let unwrapped_key = super::cmd_grpc::decrypt_key(&wrapped_key, unsafe {
-                        super::cmd_grpc::DEC_KEY
-                    })
-                    .map_err(|e| std::io::Error::other(e.to_string()))?;
+                    let unwrapped_key = super::cmd_grpc::decrypt_key(&wrapped_key, &self.0)
+                        .map_err(|e| std::io::Error::other(e.to_string()))?;
                     key_wrap_output = KeyProviderKeyWrapProtocolOutput {
                         key_wrap_results: None,
                         key_unwrap_results: Some(KeyUnwrapResults {
@@ -920,7 +924,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_key_provider_command_success() {
-        let test_runner = TestRunner {};
+        let test_runner = TestRunner(crate::test_support::random_bytes());
         let mut provider = std::collections::HashMap::new();
         let mut dc_params = vec![];
         let mut attrs = crate::config::KeyProviderAttrs {
@@ -938,11 +942,6 @@ mod tests {
             attrs.clone(),
             Some(Box::new(test_runner)),
         );
-
-        unsafe {
-            self::cmd_grpc::ENC_KEY = b"passphrasewhichneedstobe32bytes!";
-            self::cmd_grpc::DEC_KEY = b"passphrasewhichneedstobe32bytes!";
-        }
 
         // Prepare for mock encryption config
         let opts_data = b"symmetric_key";
@@ -991,7 +990,7 @@ mod tests {
     #[cfg(feature = "keywrap-keyprovider-cmd")]
     #[test]
     fn test_command_executer_wrap_key_fail() {
-        let test_runner = TestRunner {};
+        let test_runner = TestRunner(crate::test_support::random_bytes());
         let mut ec_params = vec![];
         let mut provider = std::collections::HashMap::new();
         let attrs = crate::config::KeyProviderAttrs {
@@ -1024,7 +1023,7 @@ mod tests {
     #[cfg(feature = "keywrap-keyprovider-cmd")]
     #[test]
     fn test_command_executer_unwrap_key_fail() {
-        let test_runner = TestRunner {};
+        let test_runner = TestRunner(crate::test_support::random_bytes());
         let mut dc_params = vec![];
 
         let mut provider = std::collections::HashMap::new();
@@ -1046,18 +1045,14 @@ mod tests {
 
         // Perform manual encryption
         let opts_data = b"symmetric_key";
-        let wrapped_key =
-            self::cmd_grpc::encrypt_key(opts_data.as_ref(), unsafe { self::cmd_grpc::ENC_KEY })
-                .unwrap();
+        let encrypting_key = crate::test_support::random_bytes();
+        let wrapped_key = self::cmd_grpc::encrypt_key(opts_data.as_ref(), &encrypting_key).unwrap();
         let ap = AnnotationPacket {
             key_url: "https://key-provider/key-uuid".to_string(),
             wrapped_key,
             wrap_type: "AES".to_string(),
         };
         let serialized_ap = serde_json::to_vec(&ap).unwrap();
-
-        // Change the decryption key so that decryption should fail
-        unsafe { self::cmd_grpc::DEC_KEY = b"wrong_passwhichneedstobe32bytes!" };
 
         // Prepare for mock decryption config
         dc_params.push("keyprovider1".to_string().as_bytes().to_vec());
@@ -1076,11 +1071,6 @@ mod tests {
         self::grpc::start_grpc_server("127.0.0.1:8990".to_string());
         // sleep for few seconds so that grpc server bootstraps
         std::thread::sleep(std::time::Duration::from_secs(1));
-        unsafe {
-            self::cmd_grpc::ENC_KEY = b"passphrasewhichneedstobe32bytes!";
-            self::cmd_grpc::DEC_KEY = b"passphrasewhichneedstobe32bytes!";
-        }
-
         let mut provider = std::collections::HashMap::new();
         let mut dc_params = vec![];
         let attrs = crate::config::KeyProviderAttrs {
@@ -1127,11 +1117,6 @@ mod tests {
         self::grpc::start_grpc_server("127.0.0.1:8991".to_string());
         // sleep for few seconds so that grpc server bootstraps
         std::thread::sleep(std::time::Duration::from_secs(1));
-        unsafe {
-            self::cmd_grpc::ENC_KEY = b"passphrasewhichneedstobe32bytes!";
-            self::cmd_grpc::DEC_KEY = b"passphrasewhichneedstobe32bytes!";
-        }
-
         let mut provider = std::collections::HashMap::new();
         let mut dc_params = vec![];
         let attrs = crate::config::KeyProviderAttrs {
@@ -1178,11 +1163,6 @@ mod tests {
         let _guard = rt.enter();
         self::ttrpc_test::start_ttrpc_server();
         std::thread::sleep(std::time::Duration::from_secs(2));
-        unsafe {
-            self::cmd_grpc::ENC_KEY = b"passphrasewhichneedstobe32bytes!";
-            self::cmd_grpc::DEC_KEY = b"passphrasewhichneedstobe32bytes!";
-        }
-
         let mut provider = HashMap::new();
         let mut dc_params = vec![];
         let attrs = crate::config::KeyProviderAttrs {
@@ -1259,9 +1239,45 @@ mod tests {
 
     #[cfg(feature = "keywrap-keyprovider-native")]
     #[test]
-    fn test_key_provider_native_succuss() {
-        let annotation_from_sample_kbc: Vec<u8> =
-            { std::fs::read("data/sample_kbc_annotation.json").unwrap_or_default() };
+    fn test_key_provider_native_success() {
+        use crate::test_support::{random_bytes, TestDir};
+        use crypto::{encrypt, WrapType};
+        use zeroize::Zeroizing;
+
+        const CHILD_KEY_FILE: &str = "OCICRYPT_NATIVE_TEST_CHILD_KEY_FILE";
+        let Some(key_path) = std::env::var_os(CHILD_KEY_FILE) else {
+            let dir = TestDir::new();
+            let key_path = dir.write("sample-key", random_bytes::<32>());
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "keywrap::keyprovider::tests::test_key_provider_native_success",
+                ])
+                .env(CHILD_KEY_FILE, &key_path)
+                .env("COCO_SAMPLE_KEY_FILE", &key_path)
+                .output()
+                .unwrap();
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            assert!(
+                output.status.success() && stdout.contains("1 passed"),
+                "{stdout}"
+            );
+            return;
+        };
+
+        let key = Zeroizing::new(std::fs::read(key_path).unwrap());
+        let plaintext = b"layer encryption options";
+        let iv = random_bytes::<12>();
+        let wrapped_data =
+            encrypt(key, plaintext.to_vec(), iv.to_vec(), WrapType::Aes256Gcm).unwrap();
+        let base64 = base64::engine::general_purpose::STANDARD;
+        let annotation = kbc::AnnotationPacket {
+            kid: "kbs:///default/key/test".try_into().unwrap(),
+            wrapped_data: base64.encode(wrapped_data),
+            iv: base64.encode(iv),
+            wrap_type: WrapType::Aes256Gcm.as_ref().to_string(),
+        };
+        let annotation = serde_json::to_vec(&annotation).unwrap();
 
         let mut provider = std::collections::HashMap::new();
         let attrs = crate::config::KeyProviderAttrs {
@@ -1277,7 +1293,9 @@ mod tests {
         let aa_parameters: &str = "provider:attestation-agent:sample_kbc::null";
         let cc = create_decrypt_config(vec![aa_parameters.to_string()], vec![]).unwrap();
         let dc = cc.decrypt_config.unwrap();
-        let res = keyprovider_key_wrapper.unwrap_keys(&dc, &annotation_from_sample_kbc);
-        assert!(res.is_ok());
+        let res = keyprovider_key_wrapper
+            .unwrap_keys(&dc, &annotation)
+            .unwrap();
+        assert_eq!(res, plaintext);
     }
 }

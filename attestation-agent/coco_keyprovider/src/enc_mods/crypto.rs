@@ -9,12 +9,6 @@ use aes_gcm::{aead::Aead, aes::Aes256, Aes256Gcm, Key, Nonce};
 use anyhow::*;
 use strum::EnumString;
 
-/// Only for sample
-pub const HARDCODED_KEY: &[u8] = &[
-    217, 155, 119, 5, 176, 186, 122, 22, 130, 149, 179, 163, 54, 114, 112, 176, 221, 155, 55, 27,
-    245, 20, 202, 139, 155, 167, 240, 163, 55, 17, 218, 234,
-];
-
 #[derive(Default, EnumString)]
 pub enum Algorithm {
     #[default]

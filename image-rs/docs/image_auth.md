@@ -34,7 +34,7 @@ First let us make some assumptions to help.
 - User `Alice` wants to deploy an image `busybox` inside a confidential VM, s.t. pod. Let's say the host of the confidential VM is `Bob`, who can represent CSP.
 - The image is from a private registry `private-registry.org` which needs credential to login.
 - The image is pulled inside the VM to prevent `Bob` from knowing the credential.
-- `Alice` has the credential of this registry, s.t. `username:Alice`, `password:pswd`
+- `Alice` has a username and password for this registry.
 - The pod of `Bob` side to deploy confidential container is exclusive by `Alice`.
 
 ### Authorization
@@ -45,14 +45,13 @@ First let us make some assumptions to help.
 {
 	"auths": {
 		"private-registry.org": {
-			"auth": "QWxpY2U6cHN3ZAo="
-		},
+			"auth": "<BASE64_USERNAME_AND_PASSWORD>"
+		}
 	}
 }
 ```
 
-Here `QWxpY2U6cHN3ZAo=` is the base64-encoded `Alice:pswd`.
-All the credentials have a common format that `<username>:<password>`.
+Replace the placeholder with the base64 encoding of `<username>:<password>`.
 
 All above happens on the `Alice`'s side, so it is exactly safe and unknown to `Bob`.
 
@@ -64,7 +63,7 @@ When `Alice` wants to deploy the image `private-registry.org/busybox` inside the
 2. Fetch the `auth.json` via `GetResource` gRPC of Attestation Agent inside the same Pod. More details about `GetResource` and Attestation Agent please refer to [get-resource-service](ccv1_image_security_design.md#get-resource-service) and [attestation-agent](ccv1_image_security_design.md#attestation-agent).
 3. The `image-rs` module then match the entries inside the `auth.json` using longest prefix match. In this story, it will do:
 * Firstly look for the entry `private-registry.org/busybox`, but there is not.
-* Then search for the entry `private-registry.org`, and the matched value will be `"auth": "QWxpY2U6cHN3ZAo="`.
+* Then look up the registry entry `private-registry.org`, which supplies the encoded credential.
 In other scenarios, if no entries is matched, use `Anonymous` authentication in step 4.
 4. The `image-rs` module use the credential matched to pull the image.
 

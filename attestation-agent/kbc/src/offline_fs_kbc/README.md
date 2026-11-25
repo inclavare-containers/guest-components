@@ -19,8 +19,7 @@ Keys must be provided in the guest file system at `/etc/aa-offline_fs_kbc-keys.j
 
 with the 32-byte keys base64-encoded.
 
-The script [`generate_keys.sh`](../../../coco_keyprovider/tools/generate_keys.sh) can be used to generate some sample keys based on `/dev/random` if it fits your use case sufficiently well.
-Here is a sample generated keys file [`aa-offline_fs_kbc-keys.json`](aa-offline_fs_kbc-keys.json)
+The script [`generate_keys.sh`](../../../coco_keyprovider/tools/generate_keys.sh) generates example keys. Store the generated JSON in a private location and provision it to the guest separately.
 
 Resources must be provide in the guest file system at `/etc/aa-offline_fs_kbc-resources.json` like:
 ```json
@@ -40,12 +39,12 @@ cat </path/to/pubkey.gpg> | base64
 cat </path/to/cosign.pub> | base64
 cat </path/to/auth.json> | base64
 ```
-Here is a sample resource file [`aa-offline_fs_kbc-resources.json`](aa-offline_fs_kbc-resources.json) which base on the files under sample_kbc folder:
+The sample KBC directory provides example public resources:
 - [`policy.json`](../sample_kbc/policy.json)
 - [`sigstore_config.yaml`](../sample_kbc/sigstore_config.yaml)
 - [`pubkey.gpg`](../sample_kbc/pubkey.gpg)
 - [`cosign.pub`](../sample_kbc/cosign.pub)
-- [`auth.json`](../sample_kbc/auth.json)
+Provide your own registry auth file when a test pulls private images.
     
 Referrers
 
