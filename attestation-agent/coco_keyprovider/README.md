@@ -53,6 +53,16 @@ docker run -v ~/.docker/config.json:/root/.docker/config.json ghcr.io/confidenti
 
 ### Detailed instructions
 
+If you are following [the sample KBC example](#example-1-encrypting-for-sample-kbc),
+create a fresh 32-byte key before starting the keyprovider. Pass the same file
+path to the sample KBC process through `COCO_SAMPLE_KEY_FILE`.
+
+```bash
+umask 077
+export COCO_SAMPLE_KEY_FILE="$(mktemp)"
+openssl rand -out "$COCO_SAMPLE_KEY_FILE" 32
+```
+
 Build and run CoCo keyprovider at localhost on port 50000:
 
 ```shell
@@ -120,15 +130,9 @@ This section contain encrypting examples.
 
 #### Example 1: encrypting for sample kbc
 
-For a local demo, create a fresh 32-byte key file and pass its path to both the keyprovider and the sample KBC before starting them:
-
-```bash
-umask 077
-export COCO_SAMPLE_KEY_FILE="$(mktemp)"
-openssl rand -out "$COCO_SAMPLE_KEY_FILE" 32
-```
-
-Set `COCO_SAMPLE_REGISTRY_AUTH_FILE` for the sample KBC when the demo needs private registry authentication. Then encrypt the image:
+Start the keyprovider and sample KBC with the shared key file from the previous
+section. Set `COCO_SAMPLE_REGISTRY_AUTH_FILE` for the sample KBC when the demo
+needs private registry authentication. Then encrypt the image:
 
 ```shell
 $ skopeo copy --insecure-policy --encryption-key provider:attestation-agent:sample=true docker://busybox oci:busybox_encrypted:sample

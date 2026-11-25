@@ -99,7 +99,7 @@ Firstly edit an `policy.json` like
             "example.org": [
                 {
                     "type": "sigstoreSigned",
-                    "keyPath": "/run/image-security/cosign/cosign.pub"
+                    "keyPath": "kbs:///default/cosign-public-key/test"
                 }
             ]
         }
@@ -107,29 +107,23 @@ Firstly edit an `policy.json` like
 }
 ```
 
-Here, `"keyPath"` refers to the path to the `cosign.pub` public key. When verification
-occurs, firstly the path is checked to see whether there is such a file. If not, the
-key will be retrieved via the KBC secure channel.
+The `keyPath` URI tells image-rs to request `cosign.pub` from the KBC. Create
+the resource file with your policy and public key, then provision it to the guest.
+For a guest with an existing resource file, add these entries to it.
 
-let's calculate base64-encoded values for the two resources
 ```bash
-cat /path/to/policy.json | base64 --wrap=0
-cat /path/to/cosign.pub | base64 --wrap=0
+cat > aa-offline_fs_kbc-resources.json <<EOF
+{
+    "default/security-policy/test": "$(base64 --wrap=0 /path/to/policy.json)",
+    "default/cosign-public-key/test": "$(base64 --wrap=0 /path/to/cosign.pub)"
+}
+EOF
+sudo install -m 0600 aa-offline_fs_kbc-resources.json /etc/aa-offline_fs_kbc-resources.json
 ```
 
-Let's return to the dir of `attestation-agent` and edit the resources.
-Replace the values of `Policy` and `Cosign Key` in `src/kbc_modules/offline_fs_kbc/aa-offline_fs_kbc-resources.json`
-to the related base64 code generated. 
-
-Then copy the newly edited `aa-offline_fs_kbc-resources.json` to the target dir.
-```
-cd src/kbc_modules/offline_fs_kbc/
-cp aa-offline_fs_kbc-resources.json /etc/aa-offline_fs_kbc-resources.json
-cp aa-offline_fs_kbc-keys.json /etc/aa-offline_fs_kbc-keys.json
-```
-
-In this way, when the images from `"example.org"` is being pulled,
-the signature will be verified using the public key of path `"/run/image-security/cosign/cosign.pub"`.
+When pulling images from `example.org`, image-rs uses that public key to verify
+their signatures. To also decrypt images, provision your own key file as described
+in the [Offline-FS-KBC usage guide](../../../attestation-agent/kbc/src/offline_fs_kbc/README.md).
 
 Now let's start the AA with Offline-Fs-KBC
 
