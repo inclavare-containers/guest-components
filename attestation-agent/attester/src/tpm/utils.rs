@@ -118,7 +118,7 @@ pub fn create_pcr_selection_list(algorithm: &str) -> Result<PcrSelectionList> {
 /// `pcr::read_all` to read such a bank can loop forever because the TPM keeps
 /// returning an empty selection. Query the assigned-PCR capability first and
 /// only quote banks with at least one allocated PCR.
-pub fn supported_quote_algorithms() -> Result<Vec<&'static str>> {
+pub fn supported_quote_algorithms(sha256_only: bool) -> Result<Vec<&'static str>> {
     let mut context = create_ctx_without_session()?;
     let (capability, _) = context.get_capability(
         CapabilityType::AssignedPcr,
@@ -128,6 +128,28 @@ pub fn supported_quote_algorithms() -> Result<Vec<&'static str>> {
     let CapabilityData::AssignedPcr(selections) = capability else {
         bail!("TPM returned unexpected data for assigned PCR capability");
     };
+
+    quote_algorithms_for_pcrs(&selections, sha256_only)
+}
+
+fn quote_algorithms_for_pcrs(
+    selections: &PcrSelectionList,
+    sha256_only: bool,
+) -> Result<Vec<&'static str>> {
+    if sha256_only {
+        let assigned = selections.get_selections().iter().any(|selection| {
+            let selected = selection.selected();
+            selection.hashing_algorithm() == HashingAlgorithm::Sha256
+                && TPM_QUOTE_PCR_SLOTS
+                    .iter()
+                    .all(|slot| selected.contains(slot))
+        });
+        ensure!(
+            assigned,
+            "SHA256-only TPM evidence requires SHA256 PCRs 0 through 23"
+        );
+        return Ok(vec!["SHA256"]);
+    }
 
     let mut algorithms = Vec::new();
     for selection in selections.get_selections() {
@@ -315,4 +337,42 @@ pub fn get_quote(ak: AttestationKey, report_data: &[u8], pcr_algorithm: &str) ->
         attest_sig: engine.encode(rsa_sig.signature().to_vec()),
         pcrs: dump_pcrs(pcr_algorithm)?,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn quote_profiles_preserve_legacy_bank_selection() {
+        let selections = PcrSelectionListBuilder::new()
+            .with_selection(HashingAlgorithm::Sha1, &TPM_QUOTE_PCR_SLOTS)
+            .with_selection(HashingAlgorithm::Sha256, &TPM_QUOTE_PCR_SLOTS)
+            .build()
+            .unwrap();
+        let legacy = quote_algorithms_for_pcrs(&selections, false).unwrap();
+        assert_eq!(legacy.len(), 2);
+        assert!(legacy.contains(&"SHA1"));
+        assert!(legacy.contains(&"SHA256"));
+        assert_eq!(
+            quote_algorithms_for_pcrs(&selections, true).unwrap(),
+            ["SHA256"]
+        );
+    }
+
+    #[test]
+    fn sha256_only_refuses_missing_or_incomplete_sha256_bank() {
+        let legacy = PcrSelectionListBuilder::new()
+            .with_selection(HashingAlgorithm::Sha1, &TPM_QUOTE_PCR_SLOTS)
+            .build()
+            .unwrap();
+        assert_eq!(quote_algorithms_for_pcrs(&legacy, false).unwrap(), ["SHA1"]);
+        assert!(quote_algorithms_for_pcrs(&legacy, true).is_err());
+
+        let partial = PcrSelectionListBuilder::new()
+            .with_selection(HashingAlgorithm::Sha256, &TPM_QUOTE_PCR_SLOTS[..23])
+            .build()
+            .unwrap();
+        assert!(quote_algorithms_for_pcrs(&partial, true).is_err());
+    }
 }

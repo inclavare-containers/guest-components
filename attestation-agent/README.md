@@ -146,6 +146,22 @@ AA supports different kinds of hardware TEE attesters, now
 | cca-attester        | Arm Confidential Compute Architecture (CCA)  |
 | se-attester         | IBM Secure Execution (SE)   |
 
+#### TPM quote banks
+
+With `tpm-attester`, AA quotes each supported and allocated PCR bank by
+default. This keeps existing SHA-1 and SHA-256 evidence compatible with
+deployed verifiers and appraisal policies.
+
+Set `AA_TPM_SHA256_ONLY=true` in the AA process environment to quote only the
+SHA-256 bank. This requires all of SHA-256 PCRs 0 through 23 to be allocated.
+AA returns an error if the bank is missing or incomplete.
+
+Upgrade and configure the TPM verifier to accept SHA-256-only evidence before
+enabling this setting on guests. With Trustee, configure
+`TRUSTEE_TPM_ALLOW_SHA256_ONLY=true` and verify that the event log and appraisal
+policy can be satisfied using SHA-256 measurements. Existing policies that
+require SHA-1 claims need updated reference values and policy rules.
+
 #### SEV-SNP with an SVSM vTPM
 
 On a guest with the Linux `tpm_svsm` driver and the TSM SVSM attestation ABI,

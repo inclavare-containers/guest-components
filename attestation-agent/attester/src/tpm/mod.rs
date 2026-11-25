@@ -23,6 +23,7 @@ mod utils;
 const TPM_EVENTLOG_FILE_PATH: &str = "/sys/kernel/security/tpm0/binary_bios_measurements";
 const TPM_SYSFS_DEVICE_PATH: &str = "/sys/class/tpm/tpm0/device";
 const TPM_REPORT_DATA_SIZE: usize = 32;
+const TPM_SHA256_ONLY_ENV: &str = "AA_TPM_SHA256_ONLY";
 
 const KEYLIME_AGENT_UUID_ENV: &str = "KEYLIME_AGENT_UUID";
 const KEYLIME_AGENT_DATA_PATH: &str = "/var/lib/keylime/agent_data.json";
@@ -41,6 +42,16 @@ fn try_get_keylime_uuid() -> Option<String> {
     match env::var(KEYLIME_AGENT_UUID_ENV) {
         Result::Ok(v) if !v.is_empty() => Some(v),
         _ => None,
+    }
+}
+
+fn sha256_only_from_env() -> Result<bool> {
+    match env::var(TPM_SHA256_ONLY_ENV) {
+        Result::Ok(value) => value
+            .parse::<bool>()
+            .with_context(|| format!("{TPM_SHA256_ONLY_ENV} must be true or false")),
+        Err(env::VarError::NotPresent) => Ok(false),
+        Err(error) => Err(error).with_context(|| format!("Read {TPM_SHA256_ONLY_ENV}")),
     }
 }
 
@@ -84,13 +95,14 @@ impl Attester for TpmAttester {
             report_data.truncate(TPM_REPORT_DATA_SIZE);
         }
         report_data.resize(TPM_REPORT_DATA_SIZE, 0);
+        let sha256_only = sha256_only_from_env()?;
 
         // Read the deterministic EK before creating and quoting with an AK.
         // Coconut's vTPM can otherwise keep returning TPM2_RC_RETRY when a new
         // EK primary is created immediately after the quote contexts close.
         let engine = base64::engine::general_purpose::STANDARD;
         let ek_pubkey = engine.encode(dump_ek_pub()?);
-        let quote_algorithms = supported_quote_algorithms()?;
+        let quote_algorithms = supported_quote_algorithms(sha256_only)?;
 
         let mut keylime_uuid: Option<String> = None;
         let mut quote = HashMap::new();
