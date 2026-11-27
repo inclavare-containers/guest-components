@@ -8,6 +8,8 @@ Container Images Rust Crate
 
 [CCv1 Image Security Design document](docs/ccv1_image_security_design.md)
 
+OpenPGP simple-signing signatures use a SHA-256, SHA-384, or SHA-512 digest.
+
 ## Performance Testing
 
 This crate includes benchmark tests to measure image pull throughput and memory consumption.
