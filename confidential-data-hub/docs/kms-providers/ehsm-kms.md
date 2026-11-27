@@ -27,7 +27,7 @@ The `annotations` should be set empty.
 
 ### Credential files
 
-Provide a `credential.<app-id>.json` file at deployment time, with the
+Provide a `credential_<app-id>.json` file at deployment time, with the
 `AppId` and `ApiKey` issued by eHSM.
 
 For more details please see the [`Enroll` operation of ehsm](https://github.com/intel/ehsm/blob/main/docs/API_Reference.md#Enroll).
