@@ -31,4 +31,4 @@ openssl req -new -key private_key.pem -out private_csr.csr -subj '/CN=bar/'
 openssl x509 -req -in private_csr.csr -CA certificate.pem  -CAkey certificate_key.pem -CAcreateserial -out public_certificate.pem -days 100 -sha256
 
 ### Create passwordfile
-echo -n "123456" > passwordfile
+(umask 077; openssl rand -base64 24 > passwordfile)

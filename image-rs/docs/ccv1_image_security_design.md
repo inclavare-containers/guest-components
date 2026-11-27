@@ -74,7 +74,7 @@ The example are as follows:
   ```json
   {
       "cipher": "AES_256_CTR_HMAC_SHA256",
-      "hmac": “M0M5OTA5QUZFQzI1MzU0RDU1MURBR…”
+      "hmac": "<BASE64_LAYER_HMAC>",
       "cipheroptions": {}
   }
   ```
@@ -83,9 +83,9 @@ The example are as follows:
 
   ```json
   {
-      "symkey": "54kiln1USEaKnlYhKdz+aA==",
+      "symkey": "<BASE64_LAYER_KEY>",
       "cipheroptions": {
-          "nonce": "AdcRPTAEhXx6uwuYcOquNA=="
+          "nonce": "<BASE64_LAYER_NONCE>"
       }
   }
   ```

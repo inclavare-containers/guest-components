@@ -134,21 +134,25 @@ impl KeyWrapper for JweKeyWrapper {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
-    use std::path::PathBuf;
+    use josekit::jwk::{alg::rsa::RsaKeyPair, KeyPair};
+    use openssl::{
+        ec::{EcGroup, EcKey},
+        nid::Nid,
+        pkey::PKey,
+        rsa::Rsa,
+    };
 
     #[test]
     fn test_keywrap_jwe() {
-        let path = load_data_path();
-        let path = path.display();
-        let pub_key_files = [
-            format!("{}/{}", path, "public_key.pem"),
-            format!("{}/{}", path, "public_key_ec.der"),
-            format!("{}/{}", path, "RSA_public.jwk"),
-        ];
-
+        let rsa = Rsa::generate(2048).unwrap();
+        let rsa_pem = rsa.private_key_to_pem().unwrap();
+        let jwk = RsaKeyPair::from_pem(&rsa_pem).unwrap();
+        let rsa_der = rsa.private_key_to_der().unwrap();
+        let rsa_key = PKey::from_rsa(rsa).unwrap();
+        let group = EcGroup::from_curve_name(Nid::X9_62_PRIME256V1).unwrap();
+        let ec_key = PKey::from_ec_key(EcKey::generate(&group).unwrap()).unwrap();
         let mut ec = EncryptConfig::default();
-        let mut dc = DecryptConfig::default();
+        let dc = DecryptConfig::default();
         let payload = b"test".to_vec();
 
         let jwe_key_wrapper = JweKeyWrapper {};
@@ -156,41 +160,32 @@ mod tests {
         assert!(!jwe_key_wrapper.probe(&dc.param));
         assert!(jwe_key_wrapper.private_keys(&dc.param).is_none());
 
-        let mut pubkeys = vec![];
-        for key_file in pub_key_files.iter() {
-            let contents = fs::read(key_file).unwrap();
-            pubkeys.push(contents);
-        }
+        let pubkeys = vec![
+            rsa_key.public_key_to_pem().unwrap(),
+            ec_key.public_key_to_der().unwrap(),
+            jwk.to_jwk_public_key().to_string().into_bytes(),
+        ];
 
         assert!(ec.encrypt_with_jwe(pubkeys).is_ok());
         assert!(jwe_key_wrapper.wrap_keys(&ec, &payload).is_ok());
 
         let json = jwe_key_wrapper.wrap_keys(&ec, &payload).unwrap();
 
-        let priv_key_files = [
-            format!("{}/{}", path, "private_key.pem"),
-            format!("{}/{}", path, "private_key.der"),
-            format!("{}/{}", path, "private_key8.pem"),
-            format!("{}/{}", path, "private_key8.der"),
-            format!("{}/{}", path, "private_key_ec.der"),
-            format!("{}/{}", path, "RSA_private.jwk"),
+        let privkeys = vec![
+            rsa_pem,
+            rsa_der,
+            rsa_key.private_key_to_pem_pkcs8().unwrap(),
+            rsa_key.private_key_to_pkcs8().unwrap(),
+            ec_key.private_key_to_der().unwrap(),
+            jwk.to_jwk_key_pair().to_string().into_bytes(),
         ];
-
-        let mut privkeys = vec![];
-        let mut privkey_passwords: Vec<Vec<u8>> = vec![];
-        for key_file in priv_key_files.iter() {
-            let contents = fs::read(key_file).unwrap();
-            privkeys.push(contents);
-            privkey_passwords.push(vec![]);
+        for key in privkeys {
+            let mut dc = DecryptConfig::default();
+            dc.decrypt_with_priv_keys(vec![key], vec![vec![]]).unwrap();
+            assert!(jwe_key_wrapper.probe(&dc.param));
+            assert!(jwe_key_wrapper.private_keys(&dc.param).is_some());
+            assert_eq!(jwe_key_wrapper.unwrap_keys(&dc, &json).unwrap(), payload);
         }
-
-        assert!(dc
-            .decrypt_with_priv_keys(privkeys, privkey_passwords)
-            .is_ok());
-
-        assert!(jwe_key_wrapper.probe(&dc.param));
-        assert!(jwe_key_wrapper.private_keys(&dc.param).is_some());
-        assert_eq!(jwe_key_wrapper.unwrap_keys(&dc, &json).unwrap(), payload);
 
         assert_eq!(
             jwe_key_wrapper.annotation_id(),
@@ -203,11 +198,5 @@ mod tests {
         assert!(jwe_key_wrapper
             .recipients("recipients".to_string())
             .is_none());
-    }
-
-    fn load_data_path() -> PathBuf {
-        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push("data");
-        path
     }
 }

@@ -1,5 +1,9 @@
 ## Generate keypair and container image for unit and integration tests
 
+Generate the key in a private directory outside the checkout. For the live JWE
+pull test, set `IMAGE_RS_TEST_JWE_DECRYPT_CONFIG` to the private key file and
+`IMAGE_RS_TEST_JWE_IMAGE` to the image encrypted with its public key.
+
 ### Create PEM private key
 ```shell
 $ openssl genrsa -out private_key_for_tests.pem
