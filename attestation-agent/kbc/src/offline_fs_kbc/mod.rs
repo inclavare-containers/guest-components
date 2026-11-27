@@ -104,7 +104,10 @@ mod tests {
             resources: Ok([].iter().cloned().collect()),
         };
 
-        assert_eq!(&kbc.get_key(KID).await.expect("get key failed")[..], KEY);
+        assert_eq!(
+            &kbc.get_key(KID).await.expect("get key failed")[..],
+            KEY.as_slice()
+        );
         assert!(kbc.get_key(WRONG_KEY).await.is_err());
     }
 

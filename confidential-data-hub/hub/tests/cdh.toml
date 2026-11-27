@@ -6,5 +6,4 @@ url = "null"
 
 [image]
 image_security_policy_uri = "kbs:///default/security-policy/test"
-authenticated_registry_credentials_uri = "kbs:///default/credential/test"
 max_concurrent_layer_downloads_per_image = 4

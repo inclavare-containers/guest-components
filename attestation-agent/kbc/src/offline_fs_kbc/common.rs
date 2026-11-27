@@ -46,10 +46,13 @@ pub fn load_resources(resources_file_name: &str) -> Result<Resources> {
         .collect()
 }
 
+#[cfg(test)]
 pub mod tests {
-    use crate::tests::ResourcePath;
+    use std::sync::LazyLock;
 
     use base64::Engine;
+
+    use crate::tests::{generate_test_key, ResourcePath};
 
     pub use super::*;
     pub use base64;
@@ -60,7 +63,7 @@ pub mod tests {
     #[allow(dead_code)]
     pub const KID: &str = "foo";
     #[allow(dead_code)]
-    pub const KEY: [u8; 32] = *b"passphrasewhichneedstobe32bytes!";
+    pub static KEY: LazyLock<[u8; 32]> = LazyLock::new(generate_test_key);
     pub const POLICYJSON: &str = "{\"a\":\"b\"}";
     pub const SIGSTORECONFIG: &str = "sigstore_config:docker";
     pub const PUBKEY: &str = "pubkey";
@@ -94,7 +97,7 @@ pub mod tests {
     \"{}\": \"{}\"
 }}",
                 KID,
-                base64::engine::general_purpose::STANDARD.encode(KEY),
+                base64::engine::general_purpose::STANDARD.encode(*KEY),
             ),
         )
         .unwrap();

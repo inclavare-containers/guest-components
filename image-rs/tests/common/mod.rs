@@ -44,12 +44,16 @@ pub async fn prepare_test(offline_fs_kbc_resources: &str) {
         .await
         .expect("Install GPG signature file failed.");
 
-    Command::new(OFFLINE_FS_KBC_RESOURCE_SCRIPT)
+    let status = Command::new(OFFLINE_FS_KBC_RESOURCE_SCRIPT)
         .arg("install")
         .arg(offline_fs_kbc_resources)
-        .output()
+        .status()
         .await
         .expect("Install offline-fs-kbcs's resources failed.");
+    assert!(
+        status.success(),
+        "Unable to install offline KBC test fixtures"
+    );
 }
 
 pub async fn clean() {

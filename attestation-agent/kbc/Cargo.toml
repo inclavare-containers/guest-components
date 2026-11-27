@@ -30,6 +30,7 @@ uuid = { workspace = true, features = ["serde", "v4"], optional = true }
 zeroize.workspace = true
 
 [dev-dependencies]
+tempfile.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 rstest.workspace = true
 
@@ -53,7 +54,7 @@ tpm-attester = ["kbs_protocol/tpm-attester"]
 
 sample_kbc = []
 offline_fs_kbc = []
-offline_sev_kbc = []
+offline_sev_kbc = ["sev"]
 online_sev_kbc = ["tonic", "sev", "prost", "uuid", "bincode", "tokio"]
 gen-proto = ["tonic-build"]
 
