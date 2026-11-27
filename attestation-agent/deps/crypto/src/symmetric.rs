@@ -5,7 +5,7 @@
 
 //! APIs for symmetric keys
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
@@ -19,7 +19,6 @@ pub const AES_GCM_256_KEY_BITS: u32 = 256;
 
 /// Supported WrapType, s.t. encryption algorithm using to encrypt the
 /// [PLBCO](https://github.com/confidential-containers/guest-components/blob/main/attestation-agent/docs/IMPLEMENTATION.md#encryption-and-decryption-of-container-image).
-/// TODO: Support more kinds of en/decryption schemes.
 #[derive(EnumString, AsRefStr, Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub enum WrapType {
     /// The serialized name follows 5.2.6 section
@@ -27,17 +26,9 @@ pub enum WrapType {
     #[strum(serialize = "A256GCM")]
     #[serde(rename = "A256GCM")]
     Aes256Gcm,
-
-    /// This type is not recommended as it is not AEAD.
-    #[strum(serialize = "A256CTR")]
-    #[serde(rename = "A256CTR")]
-    Aes256Ctr,
 }
 
-/// Decrypt the given `ciphertext`.
-/// Note:
-/// - IV length for A256GCM: 12 bytes
-/// - IV length for A256CTR: 16 bytes
+/// Decrypt the given `ciphertext` using AES-256-GCM and a 12-byte nonce.
 pub fn decrypt(
     key: Zeroizing<Vec<u8>>,
     ciphertext: Vec<u8>,
@@ -46,7 +37,6 @@ pub fn decrypt(
 ) -> Result<Vec<u8>> {
     match wrap_type {
         WrapType::Aes256Gcm => aes256gcm::decrypt(&key, &ciphertext, &iv),
-        WrapType::Aes256Ctr => aes256ctr::decrypt(&key, &ciphertext, &iv),
     }
 }
 
@@ -63,14 +53,10 @@ pub fn decrypt_aead(
         WrapType::Aes256Gcm => {
             aes256gcm::decrypt_with_aad_detached_tag(&key, &ciphertext, &iv, &aad, &tag)
         }
-        others => bail!("Algorithm {} is not an AEAD algorithm.", others.as_ref()),
     }
 }
 
-/// Encrypt the given `plaintext`.
-/// Note:
-/// - IV length for A256GCM: 12 bytes
-/// - IV length for A256CTR: 16 bytes
+/// Encrypt the given `plaintext` using AES-256-GCM and a 12-byte nonce.
 pub fn encrypt(
     key: Zeroizing<Vec<u8>>,
     plaintext: Vec<u8>,
@@ -79,7 +65,6 @@ pub fn encrypt(
 ) -> Result<Vec<u8>> {
     match wrap_type {
         WrapType::Aes256Gcm => aes256gcm::encrypt(&key, &plaintext, &iv),
-        WrapType::Aes256Ctr => aes256ctr::encrypt(&key, &plaintext, &iv),
     }
 }
 
@@ -88,10 +73,7 @@ pub struct AeadCipher {
     pub ciphertext: Vec<u8>,
 }
 
-/// Encrypt the given `plaintext`.
-/// Note:
-/// - IV length for A256GCM: 12 bytes
-/// - IV length for A256CTR: 16 bytes
+/// Encrypt the given `plaintext` using AES-256-GCM with a detached tag.
 pub fn encrypt_aead(
     key: Zeroizing<Vec<u8>>,
     plaintext: Vec<u8>,
@@ -103,7 +85,6 @@ pub fn encrypt_aead(
         WrapType::Aes256Gcm => {
             aes256gcm::encrypt_with_aad_detached_tag(&key, &plaintext, &iv, &aad)
         }
-        others => bail!("Algorithm {} is not an AEAD algorithm.", others.as_ref()),
     }
 }
 
@@ -119,5 +100,7 @@ mod tests {
         assert_eq!(wrap_type.as_ref(), "A256GCM");
 
         assert_eq!(WrapType::from_str("A256GCM").unwrap(), WrapType::Aes256Gcm);
+        assert!(WrapType::from_str("A256CTR").is_err());
+        assert!(serde_json::from_str::<WrapType>(r#""A256CTR""#).is_err());
     }
 }
