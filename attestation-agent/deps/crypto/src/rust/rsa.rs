@@ -10,7 +10,7 @@ use rsa::{
     pkcs1::{DecodeRsaPrivateKey, EncodeRsaPrivateKey},
     pkcs8::LineEnding,
     traits::PublicKeyParts,
-    Oaep, Pkcs1v15Encrypt, RsaPrivateKey, RsaPublicKey,
+    Oaep, RsaPrivateKey, RsaPublicKey,
 };
 use zeroize::Zeroizing;
 
@@ -41,11 +41,6 @@ impl RSAKeyPair {
                 .private_key
                 .decrypt(Oaep::new::<sha2::Sha256>(), &cipher_text)
                 .map_err(|e| anyhow!("RSA key decrypt OAEP failed: {e:?}")),
-            #[allow(deprecated)]
-            PaddingMode::PKCS1v15 => self
-                .private_key
-                .decrypt(Pkcs1v15Encrypt, &cipher_text)
-                .map_err(|e| anyhow!("RSA key pkcs1v15 decrypt failed: {e:?}")),
         }
     }
 
@@ -93,5 +88,24 @@ mod tests {
         let deserialized = RSAKeyPair::from_pkcs1_pem(&serialized).unwrap();
         assert_eq!(rsa_key_pair.n(), deserialized.n());
         assert_eq!(rsa_key_pair.e(), deserialized.e());
+    }
+
+    #[test]
+    fn rsa_oaep_256_round_trip() {
+        let keypair = RSAKeyPair::new().unwrap();
+        let content_key = [0xA5; 32];
+        let ciphertext = keypair
+            .public_key
+            .encrypt(
+                &mut rsa::rand_core::OsRng,
+                Oaep::new::<sha2::Sha256>(),
+                &content_key,
+            )
+            .unwrap();
+
+        assert_eq!(
+            keypair.decrypt(PaddingMode::OAEP, ciphertext).unwrap(),
+            content_key,
+        );
     }
 }

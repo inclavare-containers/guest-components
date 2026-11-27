@@ -3,9 +3,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
-// This lint checker is for [`rsa::PaddingMode::PKCS1v15`]
-// TODO: remove this when the deprecated attribute is removed
-#[allow(deprecated)]
 pub mod rsa {
     #[cfg(feature = "openssl")]
     pub use crate::native::rsa::*;
@@ -21,11 +18,6 @@ pub mod rsa {
         /// RSAES OAEP using SHA-256 and MGF1 with SHA-256
         #[strum(serialize = "RSA-OAEP-256")]
         OAEP,
-
-        /// RSA PKCS#1 v1.5
-        #[deprecated(note = "This algorithm is no longer recommended.")]
-        #[strum(serialize = "RSA1_5")]
-        PKCS1v15,
     }
 
     pub const RSA_PUBKEY_LENGTH: usize = 2048;
@@ -44,16 +36,12 @@ pub mod rsa {
                 PaddingMode::OAEP,
                 PaddingMode::from_str("RSA-OAEP-256").unwrap()
             );
-            assert_eq!(
-                PaddingMode::PKCS1v15,
-                PaddingMode::from_str("RSA1_5").unwrap()
-            );
+            assert!(PaddingMode::from_str("RSA1_5").is_err());
         }
 
         #[test]
         fn test_padding_mode_serialize() {
             assert_eq!("RSA-OAEP-256", PaddingMode::OAEP.as_ref());
-            assert_eq!("RSA1_5", PaddingMode::PKCS1v15.as_ref());
         }
     }
 }
