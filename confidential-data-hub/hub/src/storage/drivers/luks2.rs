@@ -420,8 +420,6 @@ mod tests {
     };
     use crate::storage::drivers::run_command;
 
-    const TEST_PASSPHRASE: &[u8] = b"correct horse battery staple";
-
     struct CloseDeviceOnDrop(String);
 
     impl Drop for CloseDeviceOnDrop {
@@ -482,7 +480,7 @@ mod tests {
         prepare_luks_header_file(&header_path).unwrap();
 
         let formatter = Luks2Formatter::default();
-        let key = Zeroizing::new(TEST_PASSPHRASE.to_vec());
+        let key = Zeroizing::new(rand::random::<[u8; 32]>().to_vec());
         formatter
             .encrypt_device(device_path, Some(&header_path), key.clone())
             .unwrap();
@@ -506,7 +504,7 @@ mod tests {
         device.as_file().set_len(64 * 1024 * 1024).unwrap();
         let device_path = device.path().to_str().unwrap();
         let formatter = Luks2Formatter::default();
-        let key = Zeroizing::new(TEST_PASSPHRASE.to_vec());
+        let key = Zeroizing::new(rand::random::<[u8; 32]>().to_vec());
         formatter
             .encrypt_device(device_path, None, key.clone())
             .unwrap();

@@ -216,12 +216,13 @@ impl Secret {
 
 #[cfg(test)]
 mod tests {
-    use std::{env, ffi::OsString};
+    use std::{env, ffi::OsString, sync::LazyLock};
 
     use assert_json_diff::assert_json_eq;
     use base64::{engine::general_purpose::STANDARD, Engine};
     use crypto::WrapType;
     use jose_jwk::Jwk;
+    use p256::elliptic_curve::{rand_core::OsRng, sec1::ToEncodedPoint};
     use rstest::rstest;
     use serial_test::serial;
 
@@ -230,10 +231,25 @@ mod tests {
         vault::{Annotations, ProviderSettings, VaultSecret},
     };
 
-    use super::{b64, Secret, SecretContent, SecretError};
+    use super::{b64, Secret, SecretContent, SecretError, VERSION};
 
-    const PRIVATE_JWK: &str = include_str!("./tests/test-key.json");
-    const OTHER_PRIVATE_JWK: &str = include_str!("./tests/test-key-2.json");
+    static PRIVATE_JWK: LazyLock<String> = LazyLock::new(generate_signing_jwk);
+    static OTHER_PRIVATE_JWK: LazyLock<String> = LazyLock::new(generate_signing_jwk);
+
+    fn generate_signing_jwk() -> String {
+        let private_key = p256::SecretKey::random(&mut OsRng);
+        let public_key = private_key.public_key().to_encoded_point(false);
+        serde_json::json!({
+            "kty": "EC",
+            "crv": "P-256",
+            "alg": "ES256",
+            "use": "sig",
+            "d": b64.encode(private_key.to_bytes()),
+            "x": b64.encode(public_key.x().unwrap()),
+            "y": b64.encode(public_key.y().unwrap()),
+        })
+        .to_string()
+    }
 
     struct EnvRestore {
         aa_kbc_params: Option<OsString>,
@@ -306,21 +322,41 @@ mod tests {
         }
     }
 
+    fn envelope_fixture() -> (String, Secret) {
+        let encrypted_key = STANDARD.encode(rand::random::<[u8; 32]>());
+        let encrypted_data = STANDARD.encode(rand::random::<[u8; 32]>());
+        let iv = STANDARD.encode(rand::random::<[u8; 12]>());
+        let encoded = serde_json::json!({
+            "version": VERSION,
+            "type": "envelope",
+            "provider": "aliyun",
+            "provider_settings": {},
+            "key_id": "test",
+            "encrypted_key": encrypted_key,
+            "encrypted_data": encrypted_data,
+            "wrap_type": "A256GCM",
+            "iv": iv,
+            "annotations": {},
+        });
+        let secret = Secret {
+            version: VERSION.into(),
+            r#type: SecretContent::Envelope(EnvelopeSecret {
+                provider: "aliyun".into(),
+                provider_settings: ProviderSettings::default(),
+                key_id: "test".into(),
+                encrypted_key,
+                encrypted_data,
+                wrap_type: WrapType::Aes256Gcm,
+                iv,
+                annotations: Annotations::default(),
+            }),
+        };
+        (encoded.to_string(), secret)
+    }
+
     #[rstest]
-    #[case(include_str!("./tests/envelope-1.json"), Secret {
-        version: "0.1.0".into(),
-        r#type: SecretContent::Envelope(EnvelopeSecret {
-            provider: "aliyun".into(),
-            provider_settings: ProviderSettings::default(),
-            key_id: "xxx".into(),
-            encrypted_key: "yyy".into(),
-            encrypted_data: "zzz".into(),
-            wrap_type: WrapType::Aes256Gcm,
-            iv: "www".into(),
-            annotations: Annotations::default(),
-        }),
-    })]
-    #[case(include_str!("./tests/vault-1.json"), Secret {
+    #[case(envelope_fixture())]
+    #[case((include_str!("./tests/vault-1.json").to_string(), Secret {
         version: "0.1.0".into(),
         r#type: SecretContent::Vault(VaultSecret {
             provider: "aliyun".into(),
@@ -328,8 +364,8 @@ mod tests {
             annotations: Annotations::default(),
             name: "xxx".into(),
         }),
-    })]
-    #[case(include_str!("./tests/vault-2.json"), Secret {
+    }))]
+    #[case((include_str!("./tests/vault-2.json").to_string(), Secret {
         version: "0.1.0".into(),
         r#type: SecretContent::Vault(VaultSecret {
             provider: "kbs".into(),
@@ -337,16 +373,19 @@ mod tests {
             annotations: Annotations::default(),
             name: "kbs:///one/2/trois".into(),
         }),
-    })]
+    }))]
     #[tokio::test]
-    async fn serialize_deserialize(#[case] secret_json: &str, #[case] secret_object: Secret) {
-        let serialized = serde_json::to_string_pretty(&secret_object).expect("serialize failed");
-        assert_json_eq!(secret_json, serialized);
+    async fn serialize_deserialize(#[case] fixture: (String, Secret)) {
+        let (secret_json, secret_object) = fixture;
+        let serialized = serde_json::to_value(&secret_object).expect("serialize failed");
+        let expected: serde_json::Value =
+            serde_json::from_str(&secret_json).expect("parse expected fixture");
+        assert_json_eq!(expected, serialized);
 
-        let parsed: Secret = serde_json::from_str(secret_json).expect("deserialize failed");
+        let parsed: Secret = serde_json::from_str(&secret_json).expect("deserialize failed");
         assert_eq!(parsed, secret_object);
 
-        let secret_string = signed(&secret_object, PRIVATE_JWK);
+        let secret_string = signed(&secret_object, &PRIVATE_JWK);
         let secret_from_string = Secret::from_signed_base64_string(secret_string, true)
             .await
             .expect("deserialization failed in explicit compatibility mode");
@@ -358,10 +397,10 @@ mod tests {
     #[serial]
     async fn verifies_es256_key_retrieved_through_openanolis_kbs_uri() {
         let _restore = EnvRestore::capture();
-        let _resources = provision_offline_verification_key(PRIVATE_JWK).await;
+        let _resources = provision_offline_verification_key(&PRIVATE_JWK).await;
         let secret = vault_secret("kbs:///default/secret/value");
 
-        let parsed = Secret::from_signed_base64_string(signed(&secret, PRIVATE_JWK), false)
+        let parsed = Secret::from_signed_base64_string(signed(&secret, &PRIVATE_JWK), false)
             .await
             .expect("verification with OfflineFS/OpenAnolis resource URI must pass");
         assert_eq!(parsed, secret);
@@ -371,9 +410,9 @@ mod tests {
     #[serial]
     async fn rejects_tampered_payload() {
         let _restore = EnvRestore::capture();
-        let _resources = provision_offline_verification_key(PRIVATE_JWK).await;
+        let _resources = provision_offline_verification_key(&PRIVATE_JWK).await;
         let mut sections: Vec<String> =
-            signed(&vault_secret("kbs:///default/secret/value"), PRIVATE_JWK)
+            signed(&vault_secret("kbs:///default/secret/value"), &PRIVATE_JWK)
                 .split('.')
                 .map(ToString::to_string)
                 .collect();
@@ -393,11 +432,11 @@ mod tests {
     #[serial]
     async fn rejects_signature_from_wrong_key() {
         let _restore = EnvRestore::capture();
-        let _resources = provision_offline_verification_key(PRIVATE_JWK).await;
+        let _resources = provision_offline_verification_key(&PRIVATE_JWK).await;
         let secret = vault_secret("kbs:///default/secret/value");
 
         assert!(
-            Secret::from_signed_base64_string(signed(&secret, OTHER_PRIVATE_JWK), false)
+            Secret::from_signed_base64_string(signed(&secret, &OTHER_PRIVATE_JWK), false)
                 .await
                 .is_err()
         );
@@ -405,7 +444,7 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_non_es256_algorithm_before_key_lookup() {
-        let mut sections: Vec<String> = signed(&vault_secret("ignored"), PRIVATE_JWK)
+        let mut sections: Vec<String> = signed(&vault_secret("ignored"), &PRIVATE_JWK)
             .split('.')
             .map(ToString::to_string)
             .collect();
@@ -439,7 +478,7 @@ mod tests {
 
     #[test]
     fn signing_requires_private_p256_key() {
-        let public_key = signing_key(&String::from_utf8(public_jwk(PRIVATE_JWK)).unwrap());
+        let public_key = signing_key(&String::from_utf8(public_jwk(&PRIVATE_JWK)).unwrap());
         let error = vault_secret("ignored")
             .to_signed_base64_string(public_key, "kid".into())
             .unwrap_err();

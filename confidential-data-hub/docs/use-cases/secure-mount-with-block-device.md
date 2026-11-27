@@ -192,11 +192,11 @@ Ephemeral storage is a storage that is not persistent.
 
 1. Mount a `luks2` encrypted block device file and return the plaintext device path, mounting the plaintext to `/mnt/dev-path` as a device file. The decryption key can either be obtained from KBS, or from local filesystem.
 
-We can prepare an encrypted block device file before mounting it. Using `"passphrase"` as passphrase to encrypt the block device file with luks2.
+Generate a new key file before formatting the example block device.
 
 ```bash
 storage_key_path="/tmp/encryption_key"
-echo "passphrase" > "$storage_key_path"
+(umask 077; openssl rand -out "$storage_key_path" 32)
 
 cryptsetup --batch-mode luksFormat --type luks2 "$device_file" --sector-size 4096 \
 	--cipher aes-xts-plain64 "$storage_key_path"
@@ -221,14 +221,14 @@ Then use the json payload
 
 2. Mount a `luks2` encrypted block device file, decrypt it and mount it as an `ext4` file system, mounting the plaintext to `/mnt/directory-path` as a directory. The `luks2` decryption key is obtained from KBS
 
-We can prepare an encrypted block device file before mounting it. Using `"passphrase"` as passphrase to encrypt the block device file with `luks2`.
+Generate a new key file before formatting the example block device.
 
 ```bash
 storage_key_path="/tmp/encryption_key"
 opened_device_name="test-name"
 mount_dir="/mnt/luks2ext4-cdh-test"
 
-echo "passphrase" > "$storage_key_path"
+(umask 077; openssl rand -out "$storage_key_path" 32)
 
 cryptsetup --batch-mode luksFormat --type luks2 "$device_file" --sector-size 4096 \
 	--cipher aes-xts-plain64 "$storage_key_path"
@@ -289,11 +289,11 @@ sudo modprobe zfs
 
 ### Step 1: Prepare encryption key file
 
-ZFS mode requires a key (e.g. passphrase file) for the encrypted dataset.
+Generate an encryption key file for the ZFS dataset before the first mount.
 
 ```bash
 zfs_key_path="/tmp/zfs_encryption_key"
-echo "your-passphrase" > "$zfs_key_path"
+(umask 077; openssl rand -hex 32 > "$zfs_key_path")
 ```
 
 Use this path in the request as `"key": "file:///tmp/zfs_encryption_key"`.

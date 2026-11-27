@@ -368,8 +368,6 @@ mod tests {
         volume_type::blockdevice::error::BlockDeviceError,
     };
 
-    const TEST_KEY: &[u8] = b"correct horse battery staple";
-
     struct CloseDeviceOnDrop(String);
 
     impl Drop for CloseDeviceOnDrop {
@@ -406,7 +404,8 @@ mod tests {
 
     fn new_key_file() -> tempfile::NamedTempFile {
         let mut key = tempfile::NamedTempFile::new().unwrap();
-        key.write_all(TEST_KEY).unwrap();
+        let bytes = Zeroizing::new(rand::random::<[u8; 32]>());
+        key.write_all(bytes.as_slice()).unwrap();
         key.flush().unwrap();
         key
     }
@@ -619,7 +618,7 @@ mod tests {
 
         let device = new_device(256 * 1024 * 1024);
         let key_file = new_key_file();
-        let key = Zeroizing::new(TEST_KEY.to_vec());
+        let key = Zeroizing::new(std::fs::read(key_file.path()).unwrap());
         let formatter = Luks2Formatter::default();
         formatter
             .encrypt_device(device.path().to_str().unwrap(), None, key.clone())
