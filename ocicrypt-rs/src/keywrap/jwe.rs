@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use anyhow::{anyhow, Result};
 use josekit::jwe::{
     deserialize_json, serialize_general_json, JweDecrypter, JweEncrypter, JweHeader, JweHeaderSet,
-    ECDH_ES_A256KW, RSA_OAEP,
+    ECDH_ES_A256KW, RSA_OAEP_256,
 };
 use josekit::jwk::{Jwk, KeyAlg, KeyFormat, KeyInfo};
 
@@ -37,9 +37,9 @@ fn encrypter(pubkey: &[u8]) -> Result<Box<dyn JweEncrypter>> {
         }
         _ => {
             let rsa_encrypter = match key_info.format() {
-                KeyFormat::Der { raw: _ } => RSA_OAEP.encrypter_from_der(pubkey)?,
-                KeyFormat::Pem { traditional: _ } => RSA_OAEP.encrypter_from_pem(pubkey)?,
-                KeyFormat::Jwk => RSA_OAEP.encrypter_from_jwk(&Jwk::from_bytes(pubkey)?)?,
+                KeyFormat::Der { raw: _ } => RSA_OAEP_256.encrypter_from_der(pubkey)?,
+                KeyFormat::Pem { traditional: _ } => RSA_OAEP_256.encrypter_from_pem(pubkey)?,
+                KeyFormat::Jwk => RSA_OAEP_256.encrypter_from_jwk(&Jwk::from_bytes(pubkey)?)?,
             };
 
             Ok(rsa_encrypter.box_clone())
@@ -47,7 +47,7 @@ fn encrypter(pubkey: &[u8]) -> Result<Box<dyn JweEncrypter>> {
     }
 }
 
-// Get the decrypter from private key
+// Get the decrypter from a private key.
 fn decrypter(priv_key: &[u8]) -> Result<Box<dyn JweDecrypter>> {
     let key_info = KeyInfo::detect(&priv_key)
         .ok_or_else(|| anyhow!("jwe: failed to detect private key info"))?;
@@ -67,11 +67,10 @@ fn decrypter(priv_key: &[u8]) -> Result<Box<dyn JweDecrypter>> {
         }
         _ => {
             let rsa_decrypter = match key_info.format() {
-                KeyFormat::Der { raw: _ } => RSA_OAEP.decrypter_from_der(priv_key)?,
-                KeyFormat::Pem { traditional: _ } => RSA_OAEP.decrypter_from_pem(priv_key)?,
-                KeyFormat::Jwk => RSA_OAEP.decrypter_from_jwk(&Jwk::from_bytes(priv_key)?)?,
+                KeyFormat::Der { raw: _ } => RSA_OAEP_256.decrypter_from_der(priv_key)?,
+                KeyFormat::Pem { traditional: _ } => RSA_OAEP_256.decrypter_from_pem(priv_key)?,
+                KeyFormat::Jwk => RSA_OAEP_256.decrypter_from_jwk(&Jwk::from_bytes(priv_key)?)?,
             };
-
             Ok(rsa_decrypter.box_clone())
         }
     }
@@ -170,6 +169,11 @@ mod tests {
         assert!(jwe_key_wrapper.wrap_keys(&ec, &payload).is_ok());
 
         let json = jwe_key_wrapper.wrap_keys(&ec, &payload).unwrap();
+        let envelope: serde_json::Value = serde_json::from_slice(&json).unwrap();
+        let recipients = envelope["recipients"].as_array().unwrap();
+        assert_eq!(recipients[0]["header"]["alg"], "RSA-OAEP-256");
+        assert_eq!(recipients[1]["header"]["alg"], "ECDH-ES+A256KW");
+        assert_eq!(recipients[2]["header"]["alg"], "RSA-OAEP-256");
 
         let privkeys = vec![
             rsa_pem,
@@ -198,5 +202,32 @@ mod tests {
         assert!(jwe_key_wrapper
             .recipients("recipients".to_string())
             .is_none());
+    }
+
+    #[test]
+    fn rejects_rsa_oaep_recipients() {
+        let rsa = Rsa::generate(2048).unwrap();
+        let wrapper = JweKeyWrapper {};
+        let mut ec = EncryptConfig::default();
+        ec.encrypt_with_jwe(vec![rsa.public_key_to_pem().unwrap()])
+            .unwrap();
+        let json = wrapper.wrap_keys(&ec, b"layer options").unwrap();
+        let mut envelope: serde_json::Value = serde_json::from_slice(&json).unwrap();
+        envelope["recipients"][0]["header"]["alg"] = "RSA-OAEP".into();
+        let mut dc = DecryptConfig::default();
+        dc.decrypt_with_priv_keys(vec![rsa.private_key_to_pem().unwrap()], vec![vec![]])
+            .unwrap();
+        assert!(wrapper
+            .unwrap_keys(&dc, &serde_json::to_vec(&envelope).unwrap())
+            .is_err());
+
+        let mut jwk = RsaKeyPair::from_pem(rsa.private_key_to_pem().unwrap())
+            .unwrap()
+            .to_jwk_public_key();
+        jwk.set_algorithm("RSA-OAEP");
+        let mut ec = EncryptConfig::default();
+        ec.encrypt_with_jwe(vec![jwk.to_string().into_bytes()])
+            .unwrap();
+        assert!(wrapper.wrap_keys(&ec, b"layer options").is_err());
     }
 }
