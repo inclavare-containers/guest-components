@@ -5,6 +5,7 @@
 
 use anyhow::{anyhow, bail, Result};
 use openpgp::parse::Parse;
+use openpgp::types::HashAlgorithm;
 use openpgp::PacketPile;
 use sequoia_openpgp as openpgp;
 
@@ -91,20 +92,29 @@ pub fn verify_sig_and_extract_payload(pubkey_ring: &[u8], sig: Vec<u8>) -> Resul
         validate_key_id.sig_info_key_id = sig_info.issuer().as_bytes().to_vec();
     }
 
+    let Some(openpgp::Packet::Signature(signature)) = sig_packet.path_ref_mut(&[0, 2]) else {
+        bail!("Signature format error: missing signature packet");
+    };
+    if !matches!(
+        signature.hash_algo(),
+        HashAlgorithm::SHA256 | HashAlgorithm::SHA384 | HashAlgorithm::SHA512
+    ) {
+        bail!(
+            "Unsupported OpenPGP signature digest: {}",
+            signature.hash_algo()
+        );
+    }
+
     // Try to use each pubkey in the pubkey ring to verify the signature.
     // If the signature is verified,
     // verify that the keyID of the pubkey is consistent with the keyID recorded in the signature.
     for packet in keyring_iter {
         if let openpgp::Packet::PublicKey(pubkey) = packet {
-            if let Some(openpgp::Packet::Signature(ref mut signature)) =
-                sig_packet.path_ref_mut(&[0, 2])
-            {
-                if signature.verify(pubkey).is_ok() {
-                    validate_key_id.trusted_key_id = pubkey.fingerprint().as_bytes().to_vec();
-                    // If the cryptography verification passes, but the key IDs are inconsistent,
-                    // the verification failure is returned directly.
-                    validate_key_id.validate()?;
-                }
+            if signature.verify(pubkey).is_ok() {
+                validate_key_id.trusted_key_id = pubkey.fingerprint().as_bytes().to_vec();
+                // If the cryptography verification passes, but the key IDs are inconsistent,
+                // the verification failure is returned directly.
+                validate_key_id.validate()?;
             }
         }
     }
@@ -126,11 +136,16 @@ pub fn verify_sig_and_extract_payload(pubkey_ring: &[u8], sig: Vec<u8>) -> Resul
 #[cfg(test)]
 mod tests {
     use std::convert::TryFrom;
+    use std::io::Write;
 
     use crate::signature::policy::ref_match::PolicyReqMatchType;
 
     use super::*;
     use oci_client::Reference;
+    use openpgp::cert::CertBuilder;
+    use openpgp::serialize::stream::{Compressor, LiteralWriter, Message, Signer};
+    use openpgp::serialize::SerializeInto;
+    use openpgp::types::{CompressionAlgorithm, KeyFlags};
     use serde_json::json;
 
     const SIG_PAYLOAD_JSON: &str = r#"{
@@ -248,15 +263,52 @@ mod tests {
             }
         });
 
-        let keyring_bytes_case_1 = ::std::fs::read("./test_data/signature/pubring.gpg").unwrap();
-        let sig_bytes_case_1 =
-            ::std::fs::read("./test_data/signature/signatures/signature-1").unwrap();
+        let (cert, _) = CertBuilder::new()
+            .add_userid("Image signing test")
+            .set_primary_key_flags(KeyFlags::empty().set_signing())
+            .generate()
+            .unwrap();
+        let keyring = cert.to_vec().unwrap();
+        for digest in [
+            HashAlgorithm::SHA256,
+            HashAlgorithm::SHA384,
+            HashAlgorithm::SHA512,
+        ] {
+            let signing_key = cert
+                .primary_key()
+                .key()
+                .clone()
+                .parts_into_secret()
+                .unwrap()
+                .into_keypair()
+                .unwrap();
+            let mut signature = Vec::new();
+            let message = Message::new(&mut signature);
+            let message = Compressor::new(message)
+                .algo(CompressionAlgorithm::Zlib)
+                .build()
+                .unwrap();
+            let message = Signer::new(message, signing_key)
+                .hash_algo(digest)
+                .unwrap()
+                .build()
+                .unwrap();
+            let mut literal = LiteralWriter::new(message).build().unwrap();
+            literal.write_all(SIG_PAYLOAD_JSON.as_bytes()).unwrap();
+            literal.finalize().unwrap();
 
-        let sig_payload_verified =
-            verify_sig_and_extract_payload(&keyring_bytes_case_1, sig_bytes_case_1).unwrap();
+            let verified = verify_sig_and_extract_payload(&keyring, signature).unwrap();
+            assert_eq!(sig_payload_parsed, serde_json::to_value(verified).unwrap());
+        }
+    }
 
-        let sig_payload_verified = serde_json::to_value(sig_payload_verified).unwrap();
-
-        assert_eq!(sig_payload_parsed, sig_payload_verified);
+    #[test]
+    fn reject_legacy_image_signature_digest() {
+        let keyring = std::fs::read("./test_data/signature/pubring.gpg").unwrap();
+        let signature = std::fs::read("./test_data/signature/signatures/signature-1").unwrap();
+        let error = verify_sig_and_extract_payload(&keyring, signature).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("Unsupported OpenPGP signature digest"));
     }
 }
