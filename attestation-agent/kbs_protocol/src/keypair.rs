@@ -11,12 +11,35 @@ use crypto::{
     rsa::{PaddingMode, RSAKeyPair},
 };
 use kbs_types::{ProtectedHeader, Response, TeePubKey};
-use log::warn;
 use zeroize::Zeroizing;
 
 #[derive(Clone, Debug)]
 pub struct TeeKeyPair {
     key: TeeKey,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rsa_key_advertises_oaep_256_and_rejects_legacy_response() {
+        let keypair = TeeKeyPair {
+            key: TeeKey::Rsa(Box::new(RSAKeyPair::new().unwrap())),
+        };
+        let TeePubKey::RSA { alg, .. } = keypair.export_pubkey().unwrap() else {
+            panic!("expected RSA public key");
+        };
+        assert_eq!(alg, "RSA-OAEP-256");
+
+        let legacy_header = ProtectedHeader {
+            alg: "RSA1_5".into(),
+            enc: "A256GCM".into(),
+            other_fields: Default::default(),
+        };
+        let error = keypair.unwrap_cek(&legacy_header, Vec::new()).unwrap_err();
+        assert_eq!(error.to_string(), "Unsupported algorithm: RSA1_5");
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -61,16 +84,7 @@ impl TeeKeyPair {
 
     #[inline]
     pub fn unwrap_cek(&self, header: &ProtectedHeader, wrapped_cek: Vec<u8>) -> Result<Vec<u8>> {
-        #[allow(deprecated)]
-        if &header.alg[..] == PaddingMode::PKCS1v15.as_ref() {
-            warn!("Use deprecated Rsa PKCSv1.5 algorithm!");
-            let TeeKey::Rsa(key) = &self.key else {
-                bail!("Unmatched key. Must be RSA key");
-            };
-
-            let cek = key.decrypt(PaddingMode::PKCS1v15, wrapped_cek)?;
-            Ok(cek)
-        } else if &header.alg[..] == PaddingMode::OAEP.as_ref() {
+        if header.alg == PaddingMode::OAEP.as_ref() {
             let TeeKey::Rsa(key) = &self.key else {
                 bail!("Unmatched key. Must be RSA key");
             };

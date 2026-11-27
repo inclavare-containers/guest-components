@@ -5,7 +5,9 @@
 
 use anyhow::*;
 use openssl::{
-    pkey::Private,
+    encrypt::Decrypter,
+    hash::MessageDigest,
+    pkey::{PKey, Private},
     rsa::{Padding, Rsa},
 };
 use zeroize::Zeroizing;
@@ -24,29 +26,20 @@ impl RSAKeyPair {
     }
 
     pub fn decrypt(&self, mode: PaddingMode, cipher_text: Vec<u8>) -> Result<Vec<u8>> {
-        let mut plaintext = [0; RSA_PUBKEY_LENGTH];
-        let decrypted_size = match mode {
-            // TODO: Update to OAEP + Sha256 API
-            // Now the OAEP decrypter provided by openssl API is an ffi binding for
-            // `RSA_public_encrypt` in openssl
-            // Due to <https://docs.openssl.org/master/man3/RSA_public_encrypt/#synopsis>
-            // this api assumes the digest algorithm is SHA-1.
-            // This is not compatible with the implementation of the KBS side who uses
-            // sha256.
-            //
-            // Let's mark this as a TODO because we are using EC now. Even if we want
-            // to use RSA OAEP, the rust version of this crate can work normally.
-            PaddingMode::OAEP => self
-                .private_key
-                .private_decrypt(&cipher_text, &mut plaintext, Padding::PKCS1_OAEP)
-                .map_err(|e| anyhow!("RSA key decrypt OAEP failed: {e:?}"))?,
-            #[allow(deprecated)]
-            PaddingMode::PKCS1v15 => self
-                .private_key
-                .private_decrypt(&cipher_text, &mut plaintext, Padding::PKCS1)
-                .map_err(|e| anyhow!("RSA key pkcs1v15 decrypt failed: {e:?}"))?,
-        };
+        let key = PKey::from_rsa(self.private_key.clone())?;
+        let mut decrypter = Decrypter::new(&key)?;
+        match mode {
+            PaddingMode::OAEP => {
+                decrypter.set_rsa_padding(Padding::PKCS1_OAEP)?;
+                decrypter.set_rsa_oaep_md(MessageDigest::sha256())?;
+                decrypter.set_rsa_mgf1_md(MessageDigest::sha256())?;
+            }
+        }
 
+        let mut plaintext = Zeroizing::new(vec![0; decrypter.decrypt_len(&cipher_text)?]);
+        let decrypted_size = decrypter
+            .decrypt(&cipher_text, &mut plaintext)
+            .context("RSA key decrypt OAEP failed")?;
         Ok(plaintext[..decrypted_size].to_vec())
     }
 
@@ -68,5 +61,50 @@ impl RSAKeyPair {
         let private_key = Rsa::<Private>::private_key_from_pem(pem.as_bytes())?;
 
         Ok(Self { private_key })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use openssl::encrypt::Encrypter;
+
+    use super::*;
+
+    #[test]
+    fn rsa_oaep_256_requires_sha256_for_both_digests() {
+        let rsa = Rsa::generate(RSA_PUBKEY_LENGTH as u32).unwrap();
+        let pem = Zeroizing::new(rsa.private_key_to_pem().unwrap());
+        let keypair = RSAKeyPair::from_pkcs1_pem(std::str::from_utf8(&pem).unwrap()).unwrap();
+        let public_key =
+            PKey::from_rsa(Rsa::public_key_from_pem(&rsa.public_key_to_pem().unwrap()).unwrap())
+                .unwrap();
+        let mut encrypter = Encrypter::new(&public_key).unwrap();
+        encrypter.set_rsa_padding(Padding::PKCS1_OAEP).unwrap();
+        encrypter.set_rsa_oaep_md(MessageDigest::sha256()).unwrap();
+        let content_key = [0xA5; 32];
+        let encrypt = |encrypter: &Encrypter<'_>| {
+            let mut wrapped = vec![0; encrypter.encrypt_len(&content_key).unwrap()];
+            let len = encrypter.encrypt(&content_key, &mut wrapped).unwrap();
+            wrapped.truncate(len);
+            wrapped
+        };
+
+        encrypter.set_rsa_mgf1_md(MessageDigest::sha256()).unwrap();
+        assert_eq!(
+            keypair
+                .decrypt(PaddingMode::OAEP, encrypt(&encrypter))
+                .unwrap(),
+            content_key,
+        );
+        encrypter.set_rsa_mgf1_md(MessageDigest::sha1()).unwrap();
+        assert!(keypair
+            .decrypt(PaddingMode::OAEP, encrypt(&encrypter))
+            .is_err());
+
+        encrypter.set_rsa_oaep_md(MessageDigest::sha1()).unwrap();
+        encrypter.set_rsa_mgf1_md(MessageDigest::sha256()).unwrap();
+        assert!(keypair
+            .decrypt(PaddingMode::OAEP, encrypt(&encrypter))
+            .is_err());
     }
 }
