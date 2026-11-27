@@ -5,7 +5,6 @@
 
 //! Crypto suites implemented by openssl
 
-pub mod aes256ctr;
 pub mod aes256gcm;
 
 pub mod ec;

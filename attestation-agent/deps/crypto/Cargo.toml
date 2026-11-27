@@ -13,7 +13,6 @@ aes-kw = { version = "0.2.1", optional = true }
 anyhow.workspace = true
 base64.workspace = true
 concat-kdf = { version = "0.1.0", optional = true }
-ctr = { workspace = true, optional = true }
 kbs-types.workspace = true
 openssl = { workspace = true, features = ["vendored"], optional = true }
 p256 = { version = "0.13.1", features = ["ecdh", "pem"], optional = true }
@@ -35,7 +34,6 @@ rstest.workspace = true
 default = ["rust-crypto"]
 rust-crypto = [
     "dep:aes-gcm",
-    "ctr",
     "rsa/sha2",
     "aes-kw",
     "concat-kdf",

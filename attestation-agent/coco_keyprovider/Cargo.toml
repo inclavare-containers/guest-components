@@ -11,7 +11,6 @@ aes-gcm.workspace = true
 anyhow.workspace = true
 base64.workspace = true
 clap = { workspace = true, features = ["derive"] }
-ctr.workspace = true
 daemonize = "0.5.0"
 env_logger.workspace = true
 futures = "0.3.31"
@@ -25,7 +24,6 @@ reqwest.workspace = true
 resource_uri.path = "../deps/resource_uri"
 serde.workspace = true
 serde_json.workspace = true
-strum.workspace = true
 tokio = { workspace = true, features = ["fs", "rt-multi-thread"] }
 tonic.workspace = true
 uuid = { workspace = true, features = ["fast-rng", "v4"] }
@@ -34,5 +32,6 @@ uuid = { workspace = true, features = ["fast-rng", "v4"] }
 
 [dev-dependencies]
 rstest.workspace = true
+tempfile.workspace = true
 
 [features]

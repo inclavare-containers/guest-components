@@ -56,7 +56,6 @@ impl KeyProviderService for KeyProvider {
             ))
         })?;
 
-        debug!("WrapKey API Request Input: {input_string}");
         let input: KeyProviderInput = serde_json::from_str::<KeyProviderInput>(&input_string)
             .map_err(|e| {
                 Status::invalid_argument(format!("parse key provider input failed: {e:?}"))
@@ -67,7 +66,7 @@ impl KeyProviderService for KeyProvider {
             .ok_or_else(|| Status::invalid_argument("illegal keywrapparams without optsdata"))?;
 
         let engine = base64::engine::general_purpose::STANDARD;
-        let params: Vec<String> = input
+        let params = input
             .keywrapparams
             .ec
             .ok_or_else(|| Status::invalid_argument("illegal keywrapparams without ec"))?
@@ -79,22 +78,21 @@ impl KeyProviderService for KeyProvider {
             .iter()
             // According to
             // https://github.com/containers/ocicrypt/blob/e4a936881fb7cf4b2b8fe49e81b8232fd4c48e97/config/constructors.go#L112,
-            // this Vec will only have one element anyways, but let's decode all elements of it
-            // just to be sure.
-            .filter_map(|p| {
+            // the vector normally has one element. Use the first usable parameters string.
+            .find_map(|p| {
                 engine
                     .decode(p)
                     .ok()
                     .and_then(|st| String::from_utf8(st).ok())
             })
-            .collect();
+            .ok_or_else(|| Status::invalid_argument("missing encryption parameters"))?;
 
         let annotation: String = enc_mods::enc_optsdata_gen_anno(
             (&self.kbs, &self.auth_private_key),
             &engine
                 .decode(optsdata)
                 .map_err(|_| Status::aborted("base64 decode"))?,
-            params,
+            &params,
         )
         .await
         .map_err(|e| Status::internal(format!("encrypt failed: {e:?}")))?;
@@ -157,4 +155,66 @@ pub async fn start_service(
         .serve(socket)
         .await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Write;
+
+    use aes_gcm::{aead::Aead, Aes256Gcm, KeyInit, Nonce};
+    use rand::TryRngCore;
+    use rstest::rstest;
+
+    use super::*;
+
+    #[rstest]
+    #[case("")]
+    #[case("::algorithm=A256GCM")]
+    #[tokio::test]
+    async fn wrap_key_emits_a256gcm(#[case] algorithm_param: &str) {
+        let provider = KeyProvider::new(None, None).unwrap();
+        let engine = base64::engine::general_purpose::STANDARD;
+        let mut key = [0; 32];
+        rand::rngs::OsRng.try_fill_bytes(&mut key).unwrap();
+        let mut key_file = tempfile::NamedTempFile::new().unwrap();
+        key_file.write_all(&key).unwrap();
+        let kid = "kbs:///default/key/test-wrap-key";
+        let params = format!(
+            "keypath={}::keyid={kid}{algorithm_param}",
+            key_file.path().display()
+        );
+        let optsdata = b"layer options";
+        let input = serde_json::json!({
+            "op": "keywrap",
+            "keywrapparams": {
+                "ec": {
+                    "Parameters": {"attestation-agent": [engine.encode(params)]},
+                    "DecryptConfig": {"Parameters": {}},
+                },
+                "optsdata": engine.encode(optsdata),
+            },
+            "keyunwrapparams": {},
+        });
+        let request = Request::new(KeyProviderKeyWrapProtocolInput {
+            key_provider_key_wrap_protocol_input: serde_json::to_vec(&input).unwrap(),
+        });
+
+        let body = provider.wrap_key(request).await.unwrap().into_inner();
+        let output: KeyWrapOutput =
+            serde_json::from_slice(&body.key_provider_key_wrap_protocol_output).unwrap();
+        let annotation: enc_mods::AnnotationPacket =
+            serde_json::from_slice(&output.keywrapresults.annotation).unwrap();
+        assert_eq!(annotation.kid, kid);
+        assert_eq!(annotation.wrap_type, "A256GCM");
+        let iv = engine.decode(annotation.iv).unwrap();
+        assert_eq!(iv.len(), 12);
+        let wrapped_data = engine.decode(annotation.wrapped_data).unwrap();
+        let cipher = Aes256Gcm::new_from_slice(&key).unwrap();
+        assert_eq!(
+            cipher
+                .decrypt(Nonce::from_slice(&iv), wrapped_data.as_slice())
+                .unwrap(),
+            &optsdata[..],
+        );
+    }
 }

@@ -87,11 +87,9 @@ We can overload some of the parameters in specific scheme (like we use `iv` as `
 ### Wrap Type
 
 Wrap Type is a field in [`Annotation Packet`](#annotation-packet), it tells what encryption/decryption scheme is used.
-Fow now, we support the following schemes:
-* `A256GCM`: AES with 256-bit key length in Galois Counter Mode. To reuse of the `decrypt` api, we agree that
-    * `wrapped_data := ciphertext | Tag`. `Tag` is authentication tag and is 16 bytes in `aes-256-gcm`.
-    * The `iv` field actually works as `nonce`.
-* `A256CTR`: AES with 256-bit key length in CTR mode.
+Key wrapping uses `A256GCM`, AES with a 256-bit key in Galois Counter Mode.
+`wrapped_data` holds the ciphertext followed by the 16-byte authentication tag.
+The `iv` field holds the 12-byte nonce.
 
 ### OpenSSL Support
 
