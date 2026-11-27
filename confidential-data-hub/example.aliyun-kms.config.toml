@@ -12,3 +12,5 @@ instance_id = "kst-example"
 ecs_ram_role_name = "your-bound-kms-role"
 # Optional for a different KMS region; defaults to the instance's IMDS region.
 # region_id = "cn-hangzhou"
+# Linux only: optionally bind KMS instance HTTPS connections to this interface.
+# data_plane_interface = "eth1"

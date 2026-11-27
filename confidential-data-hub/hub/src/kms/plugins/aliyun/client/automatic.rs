@@ -97,7 +97,7 @@ impl AutomaticKmsClient {
         let loaded = self
             .fetch_instance_ca(instance_id, region, credential)
             .await
-            .and_then(|pem| tls_client(&pem));
+            .and_then(|pem| tls_client(&pem, self.config.data_plane_interface.as_deref()));
         match loaded {
             Ok(client) => {
                 info!("aliyun KMS GetResource: TLS CA source=GetKmsInstance, region={region}");
@@ -260,11 +260,19 @@ fn http_builder() -> ClientBuilder {
         .timeout(Duration::from_secs(10))
 }
 
-fn tls_client(pem: &str) -> Result<Client> {
+fn tls_client(pem: &str, interface: Option<&str>) -> Result<Client> {
     let certificates =
         Certificate::from_pem_bundle(pem.as_bytes()).context("parse KMS CA chain")?;
     ensure!(!certificates.is_empty(), "KMS CA chain is empty");
     let mut builder = http_builder();
+    if let Some(interface) = interface {
+        #[cfg(target_os = "linux")]
+        {
+            builder = builder.interface(interface);
+        }
+        #[cfg(not(target_os = "linux"))]
+        bail!("KMS data-plane interface {interface} is only supported on Linux");
+    }
     for certificate in certificates {
         builder = builder.add_root_certificate(certificate);
     }
@@ -341,6 +349,7 @@ mod tests {
                 instance_id: None,
                 ecs_ram_role_name: None,
                 region_id: Some("cn-beijing".into()),
+                data_plane_interface: None,
             },
             "unix:///unused-aa".into(),
         )
@@ -368,6 +377,7 @@ mod tests {
                 instance_id: Some("kst-test".into()),
                 ecs_ram_role_name: Some("product-role".into()),
                 region_id: Some("cn-beijing".into()),
+                data_plane_interface: None,
             },
             "unix:///unused-aa".into(),
         )
@@ -397,6 +407,7 @@ mod tests {
                 instance_id: None,
                 ecs_ram_role_name: None,
                 region_id: None,
+                data_plane_interface: None,
             },
             "unix:///unused-aa".into(),
         )
@@ -429,8 +440,30 @@ mod tests {
             "kst-test"
         )
         .is_err());
-        assert!(tls_client("").is_err());
-        assert!(tls_client("not a certificate").is_err());
+        assert!(tls_client("", None).is_err());
+        assert!(tls_client("not a certificate", None).is_err());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn data_plane_does_not_connect_without_the_configured_interface() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let endpoint = format!("http://{}", listener.local_addr().unwrap());
+        let pem = include_str!(
+            "client_key_client/example_credential/PrivateKmsCA_kst-shh64702cf2jvc_____.pem"
+        );
+        let error = tls_client(pem, Some("cdh-test-absent"))
+            .unwrap()
+            .get(endpoint)
+            .send()
+            .await
+            .unwrap_err();
+        assert!(error.is_connect(), "{error:?}");
+        assert!(anyhow::Error::new(error).chain().any(|cause| {
+            cause
+                .downcast_ref::<std::io::Error>()
+                .is_some_and(|err| err.raw_os_error() == Some(nix::errno::Errno::ENODEV as i32))
+        }));
     }
 
     #[test]
@@ -468,6 +501,7 @@ mod tests {
                 instance_id: Some(required("KMS_TEST_INSTANCE_ID")),
                 ecs_ram_role_name: Some(required("KMS_TEST_RAM_ROLE")),
                 region_id: std::env::var("KMS_TEST_REGION").ok(),
+                data_plane_interface: std::env::var("KMS_TEST_DATA_PLANE_INTERFACE").ok(),
             },
             "unix:///run/confidential-containers/attestation-agent/attestation-agent.sock".into(),
         )

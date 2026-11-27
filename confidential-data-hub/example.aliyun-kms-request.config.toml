@@ -5,4 +5,5 @@ socket = "unix:///run/confidential-containers/cdh.sock"
 name = "aliyun_kms_kbc"
 # Optional region default; without IMDS, provide it here or in each request.
 # region_id = "cn-beijing"
+# data_plane_interface = "eth1"
 # instance_id and ecs_ram_role_name may be omitted for request-only operation.

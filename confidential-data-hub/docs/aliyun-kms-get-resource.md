@@ -14,6 +14,7 @@ name = "aliyun_kms_kbc"
 instance_id = "kst-example"          # Optional default
 ecs_ram_role_name = "my-kms-role"    # Optional IMDS fallback
 # region_id = "cn-beijing"
+# data_plane_interface = "eth1"
 ```
 
 Use a RAM role **name**, not an ARN or numeric ID. There is no built-in default
@@ -140,6 +141,12 @@ Both credential modes obtain the instance CA through authenticated HTTPS
 ID and strictly verifies data-plane TLS. No CA file or bundled regional CA is
 required. The cached transport is scoped to its KMS instance and management region;
 a request override cannot reuse another target or region's cache.
+
+On Linux, set `kbc.data_plane_interface` to bind KMS instance HTTPS connections
+(`GetChallenge` and `GetSecretValue`) to a specific interface. The interface must
+exist and have a working route to the KMS instance in CDH's network namespace.
+If binding fails, the request fails. Omitting the setting uses the system's
+normal routing. `GetKmsInstance`, IMDS, and the AA socket are unaffected.
 
 The selected identity needs `kms:GetKmsInstance`, `kms:GetChallenge`, and
 resource-scoped `kms:GetSecretValue` / `kms:Decrypt` permissions. Require
