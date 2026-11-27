@@ -27,10 +27,8 @@ The `annotations` should be set empty.
 
 ### Credential files
 
-To connect to a KMS instance, a credential file is needed. A credential file is actually
-[an json file with app_id and api_key](../../hub/src/kms/plugins/ehsm/example_credential/credential.4eb1____.json). 
-The name of the credential file is always derived from the app id. Suppose the
-App ID is `xxx`, then the credential file has name `credential.xxx.json`.
+Provide a `credential.<app-id>.json` file at deployment time, with the
+`AppId` and `ApiKey` issued by eHSM.
 
 For more details please see the [`Enroll` operation of ehsm](https://github.com/intel/ehsm/blob/main/docs/API_Reference.md#Enroll).
 
