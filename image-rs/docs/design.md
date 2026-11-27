@@ -97,6 +97,12 @@ like Intel storage acceleration library:
 [isa-l_crypto](https://github.com/intel/isa-l_crypto).
 
 
+## Image block integrity
+
+dm-verity requires SHA-256 hash trees and root hashes. In JSON verification
+options, use `"hashtype": "sha256"`. The tarfs form is
+`blocknum,offset,sha256:root_hash`.
+
 ## Reference
  * [Nydus Image Service](https://github.com/dragonflyoss/image-service) for data on demand loading, data deduplication and encryption.
  * [stargz](https://github.com/containerd/stargz-snapshotter) for data on demand loading.

@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 use serde_json;
 use std::path::Path;
 
+const VERITY_HASH_ALGORITHM: &str = "sha256";
+
 /// Configuration information for DmVerity device.
 #[derive(Debug, Deserialize, Serialize)]
 pub struct DmVerityOption {
@@ -29,31 +31,11 @@ pub struct DmVerityOption {
 impl DmVerityOption {
     /// Validate configuration information for DmVerity device.
     pub fn validate(&self) -> Result<()> {
-        match self.hashtype.to_lowercase().as_str() {
-            "sha256" => {
-                if self.hash.len() != 64 || hex::decode(&self.hash).is_err() {
-                    bail!(
-                        "Invalid hash value sha256:{} for DmVerity device with sha256",
-                        self.hash,
-                    );
-                }
-            }
-            "sha1" => {
-                if self.hash.len() != 40 || hex::decode(&self.hash).is_err() {
-                    bail!(
-                        "Invalid hash value sha1:{} for DmVerity device with sha1",
-                        self.hash,
-                    );
-                }
-            }
-            // TODO: support ["sha224", "sha384", "sha512", "ripemd160"];
-            _ => {
-                bail!(
-                    "Unsupported hash algorithm {} for DmVerity device {}",
-                    self.hashtype,
-                    self.hash,
-                );
-            }
+        if !self.hashtype.eq_ignore_ascii_case(VERITY_HASH_ALGORITHM) {
+            bail!("Unsupported dm-verity hash algorithm: {}", self.hashtype);
+        }
+        if self.hash.len() != 64 || hex::decode(&self.hash).is_err() {
+            bail!("Invalid SHA-256 dm-verity root hash");
         }
 
         if self.blocknum == 0 || self.blocknum > u32::MAX as u64 {
@@ -87,17 +69,22 @@ impl DmVerityOption {
     }
 
     fn parse_tarfs_options(source_option: &str) -> std::result::Result<DmVerityOption, Error> {
-        let mut parts: Vec<&str> = source_option.split(',').collect();
-        if parts.len() == 3 {
-            parts[2] = parts[2].trim_start_matches("sha256:");
-        }
+        let mut parts = source_option.split(',');
+        let (Some(blocknum), Some(offset), Some(hash), None) =
+            (parts.next(), parts.next(), parts.next(), parts.next())
+        else {
+            bail!("Expected dm-verity tarfs options in blocknum,offset,sha256:hash format");
+        };
+        let hash = hash
+            .strip_prefix("sha256:")
+            .context("dm-verity tarfs options require a SHA-256 root hash")?;
         Ok(DmVerityOption {
-            hashtype: "sha256".to_string(),
+            hashtype: VERITY_HASH_ALGORITHM.to_string(),
             blocksize: 512, //default block size
             hashsize: 4096, //default hash size
-            blocknum: parts[0].parse()?,
-            offset: parts[1].parse()?,
-            hash: parts[2].to_string(),
+            blocknum: blocknum.parse()?,
+            offset: offset.parse()?,
+            hash: hash.to_string(),
         })
     }
 }
@@ -107,10 +94,10 @@ impl TryFrom<&str> for DmVerityOption {
     type Error = Error;
 
     fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
-        let option = if value.contains("sha256:") {
-            Self::parse_tarfs_options(value)?
-        } else if let Ok(v) = serde_json::from_str::<DmVerityOption>(value) {
+        let option = if let Ok(v) = serde_json::from_str::<DmVerityOption>(value) {
             v
+        } else if value.contains(',') {
+            Self::parse_tarfs_options(value)?
         } else {
             let decoded = base64::engine::general_purpose::STANDARD.decode(value)?;
             serde_json::from_slice::<DmVerityOption>(&decoded)?
@@ -137,12 +124,12 @@ pub fn create_verity_device(
     verity_option: &DmVerityOption,
     source_device_path: &Path,
 ) -> Result<String> {
+    verity_option.validate()?;
     let dm = DM::new()?;
     let verity_name = DmName::new(&verity_option.hash)?;
     let id = DevId::Name(verity_name);
     let opts = DmOptions::default().set_flags(DmFlags::DM_READONLY);
-    let hash_start_block: u64 =
-        (verity_option.offset + verity_option.hashsize - 1) / verity_option.hashsize;
+    let hash_start_block = verity_option.offset / verity_option.hashsize;
 
     // verity parameters: <version> <data_device> <hash_device> <data_blk_size> <hash_blk_size>
     // <blocks> <hash_start> <algorithm> <root_hash> <salt>
@@ -169,7 +156,7 @@ pub fn create_verity_device(
         verity_option.hashsize,
         verity_option.blocknum,
         hash_start_block,
-        verity_option.hashtype,
+        VERITY_HASH_ALGORITHM,
         verity_option.hash,
         "-",
     );
@@ -258,6 +245,38 @@ mod tests {
             decoded.hash,
             "9de18652fe74edfb9b805aaed72ae2aa48f94333f1ba5c452ac33b1c39325174"
         );
+    }
+
+    #[test]
+    fn rejects_sha1_in_verity_configuration() {
+        let option = DmVerityOption {
+            hashtype: "sha1".to_string(),
+            blocksize: 512,
+            hashsize: 4096,
+            blocknum: 1024,
+            offset: 524288,
+            hash: "e889164102360c7b0f56cbef6880c4ae75f552cf".to_string(),
+        };
+        let json_option = serde_json::to_string(&option).unwrap();
+        let encoded = base64::engine::general_purpose::STANDARD.encode(&json_option);
+        let tarfs_option = format!("1024,524288,sha1:{}", option.hash);
+        for options in [&json_option, &encoded, &tarfs_option] {
+            assert!(DmVerityOption::try_from(options).is_err());
+        }
+
+        let error = create_verity_device(&option, Path::new("/dev/unused")).unwrap_err();
+        assert!(error.to_string().contains("Unsupported dm-verity hash"));
+    }
+
+    #[test]
+    fn rejects_malformed_tarfs_fields() {
+        let hash = "9de18652fe74edfb9b805aaed72ae2aa48f94333f1ba5c452ac33b1c39325174";
+        for options in [
+            format!("1,sha256:{hash}"),
+            format!("1,4096,sha256:{hash},1"),
+        ] {
+            assert!(DmVerityOption::try_from(&options).is_err());
+        }
     }
 
     #[tokio::test]
@@ -398,30 +417,16 @@ mod tests {
             .path()
             .unwrap_or_else(|| panic!("failed to get loop device path"));
 
-        let tests = &[
-            DmVerityOption {
-                hashtype: "sha256".to_string(),
-                blocksize: 512,
-                hashsize: 4096,
-                blocknum: 1024,
-                offset: 524288,
-                hash: "fc65e84aa2eb12941aeaa29b000bcf1d9d4a91190bd9b10b5f51de54892952c6"
-                    .to_string(),
-            },
-            DmVerityOption {
-                hashtype: "sha1".to_string(),
-                blocksize: 512,
-                hashsize: 1024,
-                blocknum: 1024,
-                offset: 524288,
-                hash: "e889164102360c7b0f56cbef6880c4ae75f552cf".to_string(),
-            },
-        ];
-        for d in tests.iter() {
-            let verity_device_path =
-                create_verity_device(d, &loop_device_path).unwrap_or_else(|err| panic!("{}", err));
-            assert_eq!(verity_device_path, format!("/dev/mapper/{}", d.hash));
-            destroy_verity_device(&d.hash).unwrap();
-        }
+        let option = DmVerityOption {
+            hashtype: "sha256".to_string(),
+            blocksize: 512,
+            hashsize: 4096,
+            blocknum: 1024,
+            offset: 524288,
+            hash: "fc65e84aa2eb12941aeaa29b000bcf1d9d4a91190bd9b10b5f51de54892952c6".to_string(),
+        };
+        let device_path = create_verity_device(&option, &loop_device_path).unwrap();
+        assert_eq!(device_path, format!("/dev/mapper/{}", option.hash));
+        destroy_verity_device(&option.hash).unwrap();
     }
 }
