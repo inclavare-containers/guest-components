@@ -125,7 +125,7 @@ Congratulations! eHSM-KMS service should be ready by now.
 
 # eHSM-KMS Client
 
-The eHSM-KMS client reads `credential.<app-id>.json` from
+The eHSM-KMS client reads `credential_<app-id>.json` from
 `/run/confidential-containers/cdh/kms-credential/ehsm/`. Supply the `AppId` and
 `ApiKey` issued by eHSM.
 
