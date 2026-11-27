@@ -520,6 +520,105 @@ mod tests {
         }
     }
 
+    #[cfg(all(feature = "encryption", feature = "keywrap-jwe"))]
+    #[tokio::test]
+    async fn decrypts_and_unpacks_oaep_256_layer() {
+        use ocicrypt_rs::config::EncryptConfig;
+        use ocicrypt_rs::encryption::encrypt_layer;
+        use ocicrypt_rs::spec::MEDIA_TYPE_LAYER_ENC;
+        use rsa::pkcs1::EncodeRsaPrivateKey;
+        use rsa::pkcs8::{EncodePublicKey, LineEnding};
+        use rsa::rand_core::OsRng;
+        use rsa::{RsaPrivateKey, RsaPublicKey};
+        use sha2::{Digest, Sha256};
+        use std::io::Read;
+
+        // The OCI key provider registry is initialized once per process.
+        const CHILD_TEST: &str = "IMAGE_RS_OAEP_256_CHILD_TEST";
+        if std::env::var_os(CHILD_TEST).is_none() {
+            let status = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "pull::tests::decrypts_and_unpacks_oaep_256_layer",
+                ])
+                .env(CHILD_TEST, "1")
+                .env_remove(ocicrypt_rs::config::OCICRYPT_ENVVARNAME)
+                .status()
+                .unwrap();
+            assert!(status.success());
+            return;
+        }
+
+        let private_key = RsaPrivateKey::new(&mut OsRng, 2048).unwrap();
+        let public_key = RsaPublicKey::from(&private_key)
+            .to_public_key_pem(LineEnding::LF)
+            .unwrap();
+        let mut private_key_file = tempfile::NamedTempFile::new().unwrap();
+        let private_pem = private_key.to_pkcs1_pem(LineEnding::LF).unwrap();
+        private_key_file.write_all(private_pem.as_bytes()).unwrap();
+        private_key_file.flush().unwrap();
+
+        let contents = b"encrypted OCI layer";
+        let mut header = tokio_tar::Header::new_gnu();
+        header.set_size(contents.len() as u64);
+        header.set_mode(0o644);
+        header.set_uid(nix::unistd::Uid::effective().as_raw() as u64);
+        header.set_gid(nix::unistd::Gid::effective().as_raw() as u64);
+        let mut layer = tokio_tar::Builder::new(Vec::new());
+        layer
+            .append_data(&mut header, "payload", contents.as_slice())
+            .await
+            .unwrap();
+        let layer = layer.into_inner().await.unwrap();
+        let diff_id = format!("sha256:{:x}", Sha256::digest(&layer));
+
+        let mut encrypt_config = EncryptConfig::default();
+        encrypt_config
+            .encrypt_with_jwe(vec![public_key.into_bytes()])
+            .unwrap();
+        let (encryptor, mut finalizer) =
+            encrypt_layer(&encrypt_config, layer.as_slice(), None, &diff_id).unwrap();
+        let mut encryptor = encryptor.unwrap();
+        let mut ciphertext = Vec::new();
+        encryptor.read_to_end(&mut ciphertext).unwrap();
+        let annotations = finalizer
+            .finalize_annotations(&encrypt_config, None, Some(&mut encryptor))
+            .unwrap();
+        let descriptor = OciDescriptor {
+            media_type: MEDIA_TYPE_LAYER_ENC.to_string(),
+            digest: format!("sha256:{:x}", Sha256::digest(&ciphertext)),
+            size: ciphertext.len() as i64,
+            annotations: Some(annotations),
+            ..Default::default()
+        };
+
+        let layer_directory = tempfile::tempdir().unwrap();
+        let client = PullClient::new(
+            Reference::try_from("example.com/test/image:latest").unwrap(),
+            LayerStore::new(layer_directory.path().to_path_buf()).unwrap(),
+            &RegistryAuth::Anonymous,
+            DEFAULT_MAX_CONCURRENT_DOWNLOAD,
+            ClientConfig::default(),
+        )
+        .unwrap();
+        let meta = client
+            .async_handle_layer(
+                descriptor,
+                diff_id.clone(),
+                &private_key_file.path().to_str(),
+                ciphertext.as_slice(),
+                Arc::new(RwLock::new(MetaStore::default())),
+            )
+            .await
+            .unwrap();
+        assert!(meta.encrypted);
+        assert_eq!(meta.uncompressed_digest, diff_id);
+        assert_eq!(
+            std::fs::read(Path::new(&meta.store_path).join("payload")).unwrap(),
+            contents,
+        );
+    }
+
     #[cfg(feature = "nydus")]
     #[tokio::test]
     async fn test_pull_nydus_bootstrap() {

@@ -6,6 +6,7 @@ pull test, set `IMAGE_RS_TEST_JWE_DECRYPT_CONFIG` to the private key file and
 
 ### Create PEM private key
 ```shell
+$ umask 077
 $ openssl genrsa -out private_key_for_tests.pem
 ```
 
@@ -25,8 +26,35 @@ $ buildctl build --frontend dockerfile.v0 --output type=image,name=ghcr.io/confi
 ```
 
 ### Create JWE encrypted container image
+
+For an RSA recipient, generate a public JWK that explicitly selects
+`RSA-OAEP-256`. Go ocicrypt also uses the `alg` value in a public JWK when
+creating recipients. [Go ocicrypt JWE key wrapper](https://github.com/containers/ocicrypt/blob/main/keywrap/jwe/keywrapper_jwe.go)
+
 ```shell
-$ skopeo copy --encryption-key jwe:public_key_for_tests.pem docker://busybox:latest docker://user/busybox_encrypted
+python3 - <<'PY' > public_key_for_tests.jwk
+import base64
+import json
+from pathlib import Path
+
+from cryptography.hazmat.primitives.serialization import load_pem_public_key
+
+key = load_pem_public_key(Path("public_key_for_tests.pem").read_bytes())
+numbers = key.public_numbers()
+
+def encode_integer(value):
+    data = value.to_bytes((value.bit_length() + 7) // 8, "big")
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
+
+print(json.dumps({
+    "kty": "RSA",
+    "alg": "RSA-OAEP-256",
+    "n": encode_integer(numbers.n),
+    "e": encode_integer(numbers.e),
+}))
+PY
+skopeo copy --encryption-key jwe:public_key_for_tests.jwk \
+  docker://busybox:latest docker://user/busybox_encrypted
 ```
 
 ### Create CoCo-Keyprovider encrypted container image
