@@ -62,6 +62,7 @@ mod tests {
     use crate::verity::dmverity::get_verity_device_name;
     use base64::Engine;
     use std::fs;
+    use std::io::{Read, Seek, SeekFrom, Write};
     use std::process::Command;
 
     #[tokio::test]
@@ -129,6 +130,7 @@ mod tests {
             .copied()
             .unwrap_or_else(|| panic!("Veritysetup path not found"));
         let output = Command::new(veritysetup_bin)
+            .env("LC_ALL", "C")
             .args([
                 "format",
                 "--no-superblock",
@@ -149,9 +151,12 @@ mod tests {
             .unwrap_or_else(|err| panic!("{}", err));
         if output.status.success() {
             let stdout = String::from_utf8_lossy(&output.stdout);
-            let lines: Vec<&str> = stdout.lines().collect();
-            let hash_strings: Vec<&str> = lines[lines.len() - 1].split_whitespace().collect();
-            verity_option.hash = hash_strings[2].to_string()
+            verity_option.hash = stdout
+                .lines()
+                .find_map(|line| line.strip_prefix("Root hash:"))
+                .expect("veritysetup output is missing the root hash")
+                .trim()
+                .to_string();
         } else {
             let error_message = String::from_utf8_lossy(&output.stderr);
             panic!("Failed to create hash device: {}", error_message);
@@ -174,7 +179,25 @@ mod tests {
                 panic!("Error getting verity device name: {}", err);
             }
         };
-        assert!(umount_image_block_with_integrity(mount_dir.path(), verity_device_name).is_ok());
+        umount_image_block_with_integrity(mount_dir.path(), verity_device_name.clone()).unwrap();
+
+        let mut raw_device = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&loop_device_path)
+            .unwrap();
+        let mut first_block = [0; 512];
+        raw_device.read_exact(&mut first_block).unwrap();
+        first_block[0] ^= 1;
+        raw_device.seek(SeekFrom::Start(0)).unwrap();
+        raw_device.write_all(&first_block).unwrap();
+        raw_device.sync_all().unwrap();
+        drop(raw_device);
+
+        let path = create_dmverity_device(&encoded_option, &loop_device_path).unwrap();
+        let result = fs::File::open(path).and_then(|mut fd| fd.read_exact(&mut first_block));
+        destroy_dmverity_device(&verity_device_name).unwrap();
+        assert_eq!(result.unwrap_err().raw_os_error(), Some(nix::libc::EIO));
     }
 
     #[tokio::test]
