@@ -299,28 +299,39 @@ pub fn async_decrypt_layer<R: tokio::io::AsyncRead + Send>(
     Ok((lbch, opts.private.digest))
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "keywrap-jwe"))]
 mod tests {
     use super::*;
+    use openssl::rsa::Rsa;
     use sha2::{Digest, Sha256};
-    use std::env;
-    use std::fs;
-    use std::path::PathBuf;
+
+    // Other tests register mock providers in the process-wide registry.
+    fn run_jwe_test_in_child(test_name: &str) -> bool {
+        const JWE_TEST_CHILD: &str = "OCICRYPT_JWE_TEST_CHILD";
+        if std::env::var_os(JWE_TEST_CHILD).is_some() {
+            return false;
+        }
+        let status = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", test_name])
+            .env(JWE_TEST_CHILD, "1")
+            .env_remove(crate::config::OCICRYPT_ENVVARNAME)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        true
+    }
 
     #[test]
     fn test_encrypt_decrypt_layer() {
-        let path = load_data_path();
-        let test_conf_path = format!("{}/{}", path, "ocicrypt_config.json");
-        env::set_var("OCICRYPT_KEYPROVIDER_CONFIG", test_conf_path);
+        if run_jwe_test_in_child("encryption::tests::test_encrypt_decrypt_layer") {
+            return;
+        }
 
-        let pub_key_file = format!("{}/{}", path, "public_key.pem");
-        let pub_key = fs::read(pub_key_file).unwrap();
-
-        let priv_key_file = format!("{}/{}", path, "private_key.pem");
-        let priv_key = fs::read(priv_key_file).unwrap();
+        let key = Rsa::generate(2048).unwrap();
+        let pub_key = key.public_key_to_pem().unwrap();
+        let priv_key = key.private_key_to_pem().unwrap();
 
         let mut ec = EncryptConfig::default();
-        assert!(ec.encrypt_with_jwe(vec![pub_key.clone()]).is_ok());
         assert!(ec.encrypt_with_jwe(vec![pub_key]).is_ok());
 
         let mut dc = DecryptConfig::default();
@@ -337,37 +348,35 @@ mod tests {
         let mut encrypted_data: Vec<u8> = Vec::new();
         let mut encryptor = layer_encryptor.unwrap();
         assert!(encryptor.read_to_end(&mut encrypted_data).is_ok());
-        assert!(encryptor.finalized_lbco(&mut elf.lbco).is_ok());
-
-        if let Ok(new_annotations) = elf.finalize_annotations(&ec, None, Some(&mut encryptor)) {
-            let (layer_decryptor, dec_digest) = decrypt_layer(
-                &dc,
-                encrypted_data.as_slice(),
-                Some(&new_annotations),
-                false,
-            )
+        let new_annotations = elf
+            .finalize_annotations(&ec, None, Some(&mut encryptor))
             .unwrap();
-            let mut plaintxt_data: Vec<u8> = Vec::new();
-            let mut decryptor = layer_decryptor.unwrap();
-
-            assert!(decryptor.read_to_end(&mut plaintxt_data).is_ok());
-            assert_eq!(layer_data, plaintxt_data);
-            assert_eq!(digest, dec_digest);
-        }
+        let (layer_decryptor, dec_digest) = decrypt_layer(
+            &dc,
+            encrypted_data.as_slice(),
+            Some(&new_annotations),
+            false,
+        )
+        .unwrap();
+        let mut plaintext_data = Vec::new();
+        layer_decryptor
+            .unwrap()
+            .read_to_end(&mut plaintext_data)
+            .unwrap();
+        assert_eq!(layer_data, plaintext_data);
+        assert_eq!(digest, dec_digest);
     }
 
     #[cfg(feature = "async-io")]
     #[tokio::test]
     async fn test_async_decrypt_layer() {
-        let path = load_data_path();
-        let test_conf_path = format!("{}/{}", path, "ocicrypt_config.json");
-        env::set_var("OCICRYPT_KEYPROVIDER_CONFIG", &test_conf_path);
+        if run_jwe_test_in_child("encryption::tests::test_async_decrypt_layer") {
+            return;
+        }
 
-        let pub_key_file = format!("{}/{}", path, "public_key.pem");
-        let pub_key = fs::read(&pub_key_file).unwrap();
-
-        let priv_key_file = format!("{}/{}", path, "private_key.pem");
-        let priv_key = fs::read(&priv_key_file).unwrap();
+        let key = Rsa::generate(2048).unwrap();
+        let pub_key = key.public_key_to_pem().unwrap();
+        let priv_key = key.private_key_to_pem().unwrap();
 
         let mut ec = EncryptConfig::default();
         assert!(ec.encrypt_with_jwe(vec![pub_key]).is_ok());
@@ -386,29 +395,21 @@ mod tests {
         let mut encrypted_data: Vec<u8> = Vec::new();
         let mut encryptor = layer_encryptor.unwrap();
         assert!(encryptor.read_to_end(&mut encrypted_data).is_ok());
-        assert!(encryptor.finalized_lbco(&mut elf.lbco).is_ok());
+        let new_annotations = elf
+            .finalize_annotations(&ec, None, Some(&mut encryptor))
+            .unwrap();
+        let key_opts = decrypt_layer_key_opts_data(&dc, Some(&new_annotations)).unwrap();
 
-        if let Ok(new_annotations) = elf.finalize_annotations(&ec, None, Some(&mut encryptor)) {
-            let key_opts = decrypt_layer_key_opts_data(&dc, Some(&new_annotations)).unwrap();
-
-            let (mut async_reader, dec_digest) =
-                async_decrypt_layer(encrypted_data.as_slice(), Some(&new_annotations), &key_opts)
-                    .unwrap();
-
-            let mut plaintxt_data: Vec<u8> = Vec::new();
-            tokio::io::AsyncReadExt::read_to_end(&mut async_reader, &mut plaintxt_data)
-                .await
+        let (mut async_reader, dec_digest) =
+            async_decrypt_layer(encrypted_data.as_slice(), Some(&new_annotations), &key_opts)
                 .unwrap();
 
-            assert_eq!(layer_data, plaintxt_data);
-            assert_eq!(digest, dec_digest);
-        }
-    }
+        let mut plaintext_data = Vec::new();
+        tokio::io::AsyncReadExt::read_to_end(&mut async_reader, &mut plaintext_data)
+            .await
+            .unwrap();
 
-    fn load_data_path() -> String {
-        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push("data");
-
-        path.to_str().unwrap().to_string()
+        assert_eq!(layer_data, plaintext_data);
+        assert_eq!(digest, dec_digest);
     }
 }

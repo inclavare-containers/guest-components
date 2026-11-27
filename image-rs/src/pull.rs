@@ -377,8 +377,14 @@ mod tests {
             return;
         }
 
-        let oci_images =
-            ["ghcr.io/confidential-containers/test-container-image-rs:busybox-encrypted-jwe"];
+        let decrypt_config = std::env::var("IMAGE_RS_TEST_JWE_DECRYPT_CONFIG")
+            .expect("set IMAGE_RS_TEST_JWE_DECRYPT_CONFIG to the key file for the test image");
+        let oci_images = [
+            std::env::var("IMAGE_RS_TEST_JWE_IMAGE").unwrap_or_else(|_| {
+                "ghcr.io/confidential-containers/test-container-image-rs:busybox-encrypted-jwe"
+                    .into()
+            }),
+        ];
 
         for image_url in oci_images.iter() {
             let tempdir = tempfile::tempdir().unwrap();
@@ -399,11 +405,6 @@ mod tests {
             let image_config = ImageConfiguration::from_reader(image_config.as_bytes()).unwrap();
             let diff_ids = image_config.rootfs().diff_ids();
 
-            let config_dir = std::env!("CARGO_MANIFEST_DIR");
-            let decrypt_config = Path::new(config_dir)
-                .join("test_data")
-                .join("private_key_for_tests.pem:test");
-
             assert_retry!(
                 5,
                 1,
@@ -411,7 +412,7 @@ mod tests {
                 async_pull_layers,
                 image_manifest.layers.clone(),
                 diff_ids,
-                &Some(decrypt_config.to_str().unwrap()),
+                &Some(decrypt_config.as_str()),
                 Arc::new(RwLock::new(MetaStore::default()))
             );
         }

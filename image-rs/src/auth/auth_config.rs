@@ -120,19 +120,18 @@ fn auth_keys_for_key(key: &str) -> Vec<String> {
 mod tests {
     use std::collections::HashMap;
 
+    use base64::{engine::general_purpose::STANDARD, Engine};
     use oci_client::{secrets::RegistryAuth, Reference};
+    use rsa::rand_core::{OsRng, RngCore};
     use rstest::rstest;
 
     use crate::auth::DockerAuthConfig;
 
-    const DOCKER_AUTH_CONFIGS: &str = r#"{
-        "https://index.docker.io/v1/": {
-            "auth": "bGl1ZGFsaWJqOlBhc3N3MHJkIXFhego="
-        },
-        "quay.io": {
-            "auth": "bGl1ZGFsaWJqOlBhc3N3MHJkIXFhego="
-        }
-    }"#;
+    fn test_credentials() -> (String, String) {
+        let mut bytes = [0; 16];
+        OsRng.fill_bytes(&mut bytes);
+        ("测试用户".to_owned(), STANDARD.encode(bytes))
+    }
 
     #[rstest]
     #[case("quay.io/confidential-containers/image", vec!["quay.io/confidential-containers/image", "quay.io/confidential-containers", "quay.io"])]
@@ -144,24 +143,42 @@ mod tests {
         assert_eq!(res, expected);
     }
 
-    #[rstest]
-    #[case("bGl1ZGFsaWJqOlBhc3N3MHJkIXFhego=", ("liudalibj","Passw0rd!qaz"))]
-    fn test_decode_auth(#[case] auth: &str, #[case] expected: (&str, &str)) {
-        let (user, pswd) = super::decode_auth(auth).expect("decode auth failed");
-        assert_eq!((&user[..], &pswd[..]), expected);
+    #[test]
+    fn test_decode_auth() {
+        let (username, password) = test_credentials();
+        let encoded = STANDARD.encode(format!("{username}:{password}\n"));
+        assert_eq!(super::decode_auth(&encoded).unwrap(), (username, password));
     }
 
     #[rstest]
-    #[case("mysql:latest", RegistryAuth::Basic("liudalibj".to_string(),"Passw0rd!qaz".to_string()))]
-    #[case("quay.io/confidential-containers/image:latest", RegistryAuth::Basic("liudalibj".to_string(),"Passw0rd!qaz".to_string()))]
-    #[case("gcr.io/google-containers/busybox:1.27.2", RegistryAuth::Anonymous)]
-    fn test_credential_from_auth_config(#[case] reference: &str, #[case] auth: RegistryAuth) {
-        let reference = Reference::try_from(reference).expect("reference creation failed");
-        let auths: HashMap<String, DockerAuthConfig> = serde_json::from_str(DOCKER_AUTH_CONFIGS)
-            .expect("deserialize DOCKER_AUTH_CONFIGS failed");
-        let got_auth =
-            super::credential_from_auth_config(&reference, &auths).expect("get auth failed");
-        assert_eq!(got_auth, auth);
+    #[case("nginx:latest", Some("https://index.docker.io/v1/"))]
+    #[case("quay.io/confidential-containers/image:latest", Some("quay.io"))]
+    #[case("gcr.io/google-containers/busybox:1.27.2", None)]
+    fn test_credential_from_auth_config(#[case] reference: &str, #[case] registry: Option<&str>) {
+        let reference = Reference::try_from(reference).unwrap();
+        let (docker_user, docker_password) = test_credentials();
+        let (quay_user, quay_password) = test_credentials();
+        let config = serde_json::json!({
+            "https://index.docker.io/v1/": {
+                "auth": STANDARD.encode(format!("{docker_user}:{docker_password}")),
+            },
+            "quay.io": {
+                "auth": STANDARD.encode(format!("{quay_user}:{quay_password}")),
+            }
+        });
+        let auths: HashMap<String, DockerAuthConfig> = serde_json::from_value(config).unwrap();
+        let expected = match registry {
+            Some("https://index.docker.io/v1/") => {
+                RegistryAuth::Basic(docker_user, docker_password)
+            }
+            Some("quay.io") => RegistryAuth::Basic(quay_user, quay_password),
+            None => RegistryAuth::Anonymous,
+            Some(other) => panic!("unexpected test registry: {other}"),
+        };
+        assert_eq!(
+            super::credential_from_auth_config(&reference, &auths).unwrap(),
+            expected
+        );
     }
 
     #[rstest]

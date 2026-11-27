@@ -296,6 +296,8 @@ pub fn create_encrypt_config(recipients: Vec<String>, keys: Vec<String>) -> Resu
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::{random_bytes, TestDir};
+    use openssl::rsa::Rsa;
     use std::path::PathBuf;
 
     #[test]
@@ -332,32 +334,36 @@ mod tests {
     #[test]
     fn test_process_x509_certs() {
         let path = load_data_path();
-        let cert_keys = format!("{}/{}", path, "private_key.pem");
+        let cert_keys = format!("{}/{}", path, "public_certificate.pem");
 
         assert!(process_x509_certs(&[cert_keys]).is_ok());
     }
 
     #[test]
     fn test_process_pwd_string() {
-        let password: Vec<u8> = b"123456".to_vec();
-        let path = load_data_path();
+        let dir = TestDir::new();
+        let password = format!("{:032x}", u128::from_ne_bytes(random_bytes()));
+        let pwd_file = dir.write("password", &password);
 
-        let pwd_file = format!("file={}/{}", path, "passwordfile");
-        assert_eq!(process_pwd_string(&pwd_file).unwrap(), password);
-
-        let mut pwd_string = "pass=123456".to_string();
-        assert_eq!(process_pwd_string(&pwd_string).unwrap(), password);
-
-        pwd_string = "123456".to_string();
-        assert_eq!(process_pwd_string(&pwd_string).unwrap(), password);
+        assert_eq!(
+            process_pwd_string(&format!("file={}", pwd_file.display())).unwrap(),
+            password.as_bytes()
+        );
+        assert_eq!(
+            process_pwd_string(&format!("pass={password}")).unwrap(),
+            password.as_bytes()
+        );
+        assert_eq!(process_pwd_string(&password).unwrap(), password.as_bytes());
     }
 
     #[test]
     fn test_process_private_keyfiles() {
-        let path = load_data_path();
-
-        let private_keys = format!("{}/{}", path, "private_key.pem");
-        let pwd_file = format!("file={}/{}", path, "passwordfile");
+        let dir = TestDir::new();
+        let private_keys = private_key_file(&dir);
+        let pwd_file = format!(
+            "file={}",
+            dir.write("password", random_bytes::<32>()).display()
+        );
         let keyfiles_and_pwds = format!("{private_keys}:{pwd_file}");
 
         let [_, _, priv_keys, priv_keys_passwords, _, key_providers] =
@@ -381,9 +387,10 @@ mod tests {
 
     #[test]
     fn test_create_decrypt_config() {
+        let dir = TestDir::new();
         let path = load_data_path();
-        let private_keys = format!("{}/{}", path, "private_key.pem");
-        let jwe_dec_recipient = format!("jwe:{}/{}", path, "private_key.pem");
+        let private_keys = private_key_file(&dir);
+        let jwe_dec_recipient = format!("jwe:{private_keys}");
         let pkcs7_dec_recipient = format!("pkcs7:{}/{}", path, "public_certificate.pem");
 
         let cc = create_decrypt_config(vec![private_keys.clone()], vec![]).unwrap();
@@ -410,9 +417,10 @@ mod tests {
 
     #[test]
     fn test_create_encrypt_config() {
+        let dir = TestDir::new();
         let path = load_data_path();
 
-        let private_keys = format!("{}/{}", path, "private_key.pem");
+        let private_keys = private_key_file(&dir);
         let jwe_recipient = format!("jwe:{}/{}", path, "public_key.pem");
         let pgp_recipient = "pgp:testkey@key.org".to_string();
         let pkcs7_recipient = format!("pkcs7:{}/{}", path, "public_certificate.pem");
@@ -431,6 +439,14 @@ mod tests {
 
         assert!(create_encrypt_config(vec![pgp_recipient], vec![]).is_ok());
         assert!(create_encrypt_config(vec![pkcs7_recipient], vec![]).is_ok());
+    }
+
+    fn private_key_file(dir: &TestDir) -> String {
+        let key = Rsa::generate(2048).unwrap();
+        dir.write("key.pem", key.private_key_to_pem().unwrap())
+            .into_os_string()
+            .into_string()
+            .unwrap()
     }
 
     fn load_data_path() -> String {

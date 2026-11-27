@@ -15,6 +15,9 @@ pub mod keywrap;
 pub mod spec;
 pub mod utils;
 
+#[cfg(test)]
+mod test_support;
+
 #[cfg(feature = "block-cipher")]
 pub mod blockcipher;
 #[cfg(feature = "block-cipher")]
