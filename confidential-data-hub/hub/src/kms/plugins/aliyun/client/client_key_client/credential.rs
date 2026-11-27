@@ -113,14 +113,26 @@ impl CredentialClientKey {
 
 #[cfg(test)]
 mod tests {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+    use rsa::{pkcs8::EncodePrivateKey, rand_core::OsRng, RsaPrivateKey};
+
     use super::CredentialClientKey;
 
     #[test]
     fn parse_and_sign_password() {
-        let password = "c383f5528f54394676ca89b8e47096e7";
-        let key = "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";
-        let der =
-            CredentialClientKey::parse_private_key(key.to_owned(), password.to_owned()).unwrap();
+        let password = format!("{:032x}", rand::random::<u128>());
+        let private_key = RsaPrivateKey::new(&mut OsRng, 2048).unwrap();
+        let pkcs8 = private_key.to_pkcs8_der().unwrap();
+        let pfx = p12::PFX::new(
+            b"test certificate payload",
+            pkcs8.as_bytes(),
+            None,
+            &password,
+            "test",
+        )
+        .unwrap();
+        let der = CredentialClientKey::parse_private_key(STANDARD.encode(pfx.to_der()), password)
+            .unwrap();
         let key = CredentialClientKey {
             client_key_id: "test-id".into(),
             private_key: der,
