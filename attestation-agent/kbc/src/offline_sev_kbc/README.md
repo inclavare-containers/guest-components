@@ -28,8 +28,7 @@ The secret table should include an entry with the GUID `e6f5a162-d67f-4750-a67c-
 
 ```
 {
-    "key_id1": "cGFzc3BocmFzZXdoaWNobmVlZHN0b2JlMzJieXRlcyE=",
-    ...
+    "key_id1": "<BASE64_ENCODED_32_BYTE_KEY>"
 }
 ```
 

@@ -15,11 +15,6 @@ use zeroize::Zeroizing;
 
 use super::AnnotationPacket;
 
-const HARDCODED_KEY: &[u8] = &[
-    217, 155, 119, 5, 176, 186, 122, 22, 130, 149, 179, 163, 54, 114, 112, 176, 221, 155, 55, 27,
-    245, 20, 202, 139, 155, 167, 240, 163, 55, 17, 218, 234,
-];
-
 #[derive(AsRefStr, EnumString, Display, Debug, PartialEq, Eq)]
 pub enum ResourceType {
     #[strum(serialize = "security-policy")]
@@ -63,7 +58,14 @@ impl KbcInterface for SampleKbc {
     }
 
     async fn decrypt_payload(&mut self, annotation_packet: AnnotationPacket) -> Result<Vec<u8>> {
-        let key = Zeroizing::new(HARDCODED_KEY.to_vec());
+        ensure!(
+            annotation_packet.wrap_type == WrapType::Aes256Gcm.as_ref(),
+            "unsupported sample KBC wrap type"
+        );
+        let key_file = std::env::var_os("COCO_SAMPLE_KEY_FILE")
+            .context("COCO_SAMPLE_KEY_FILE must point to a raw 32-byte key")?;
+        let key = Zeroizing::new(std::fs::read(key_file).context("read sample KBC key")?);
+        ensure!(key.len() == 32, "sample KBC key must be exactly 32 bytes");
         let engine = base64::engine::general_purpose::STANDARD;
         let plain_text = decrypt(
             key,
@@ -89,7 +91,10 @@ impl KbcInterface for SampleKbc {
             ResourceType::CosignVerificationKey => {
                 Ok(std::include_str!("cosign.pub").as_bytes().to_vec())
             }
-            ResourceType::Credential => Ok(std::include_str!("auth.json").as_bytes().to_vec()),
+            ResourceType::Credential => match std::env::var_os("COCO_SAMPLE_REGISTRY_AUTH_FILE") {
+                Some(path) => std::fs::read(path).context("read sample KBC registry auth"),
+                None => Ok(br#"{"auths":{}}"#.to_vec()),
+            },
         }
     }
 }
@@ -99,5 +104,82 @@ impl SampleKbc {
         let mut kbs_info: HashMap<String, String> = HashMap::new();
         kbs_info.insert("kbs_uri".to_string(), kbs_uri);
         SampleKbc { kbs_info }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use base64::engine::general_purpose::STANDARD;
+
+    struct EnvRestore(&'static str, Option<std::ffi::OsString>);
+
+    impl EnvRestore {
+        fn capture(name: &'static str) -> Self {
+            Self(name, std::env::var_os(name))
+        }
+    }
+
+    impl Drop for EnvRestore {
+        fn drop(&mut self) {
+            match &self.1 {
+                Some(value) => std::env::set_var(self.0, value),
+                None => std::env::remove_var(self.0),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn externally_provisioned_sample_key_and_registry_auth() {
+        const KEY_FILE: &str = "COCO_SAMPLE_KEY_FILE";
+        const AUTH_FILE: &str = "COCO_SAMPLE_REGISTRY_AUTH_FILE";
+
+        let _key_env = EnvRestore::capture(KEY_FILE);
+        let _auth_env = EnvRestore::capture(AUTH_FILE);
+        std::env::remove_var(KEY_FILE);
+        std::env::remove_var(AUTH_FILE);
+
+        let dir = tempfile::tempdir().unwrap();
+        let key_file = dir.path().join("key");
+        let auth_file = dir.path().join("auth.json");
+        let key = crate::tests::generate_test_key();
+        let nonce = crate::tests::generate_test_key()[..12].to_vec();
+        let plaintext = b"image layer options";
+        let ciphertext = crypto::encrypt(
+            Zeroizing::new(key.to_vec()),
+            plaintext.to_vec(),
+            nonce.clone(),
+            WrapType::Aes256Gcm,
+        )
+        .unwrap();
+        let annotation = || AnnotationPacket {
+            kid: "kbs:///default/test-key/1".try_into().unwrap(),
+            wrapped_data: STANDARD.encode(&ciphertext),
+            iv: STANDARD.encode(&nonce),
+            wrap_type: WrapType::Aes256Gcm.as_ref().to_owned(),
+        };
+        let credential = || "kbs:///default/credential/test".try_into().unwrap();
+        let mut kbc = SampleKbc::new(String::new());
+
+        assert!(kbc.decrypt_payload(annotation()).await.is_err());
+        assert_eq!(
+            kbc.get_resource(credential()).await.unwrap(),
+            br#"{"auths":{}}"#
+        );
+
+        std::fs::write(&key_file, b"wrong length").unwrap();
+        std::env::set_var(KEY_FILE, &key_file);
+        assert!(kbc.decrypt_payload(annotation()).await.is_err());
+        std::fs::write(&key_file, key).unwrap();
+        assert_eq!(kbc.decrypt_payload(annotation()).await.unwrap(), plaintext);
+
+        let registry = serde_json::json!({
+            "auths": {"registry.invalid": {"auth": STANDARD.encode(crate::tests::generate_test_key())}}
+        });
+        let registry = serde_json::to_vec(&registry).unwrap();
+        std::env::set_var(AUTH_FILE, &auth_file);
+        assert!(kbc.get_resource(credential()).await.is_err());
+        std::fs::write(&auth_file, &registry).unwrap();
+        assert_eq!(kbc.get_resource(credential()).await.unwrap(), registry);
     }
 }

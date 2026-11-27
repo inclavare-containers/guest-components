@@ -4008,6 +4008,7 @@ dependencies = [
  "serde_json",
  "sev 0.1.0",
  "strum 0.26.3",
+ "tempfile",
  "tokio",
  "tonic",
  "tonic-build",

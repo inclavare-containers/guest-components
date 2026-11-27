@@ -146,6 +146,24 @@ pub struct ResourceDescription {
 }
 
 pub mod tests {
+    #[cfg(all(
+        test,
+        any(
+            feature = "sample_kbc",
+            feature = "offline_fs_kbc",
+            feature = "offline_sev_kbc"
+        )
+    ))]
+    pub(crate) fn generate_test_key() -> [u8; 32] {
+        use std::{fs::File, io::Read};
+
+        let mut key = [0; 32];
+        File::open("/dev/urandom")
+            .and_then(|mut random| random.read_exact(&mut key))
+            .expect("read random test key");
+        key
+    }
+
     /// Type of resources supported by the attestation agent.
     /// The related serialize string is the resource uri for tests.
     #[derive(AsRefStr, EnumString, Display, Debug, PartialEq, Eq)]

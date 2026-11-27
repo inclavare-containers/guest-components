@@ -23,6 +23,13 @@ async fn test_use_credential(#[case] image_ref: &str, #[case] auth_file_uri: &st
         return;
     }
 
+    if auth_file_uri.starts_with("kbs://") {
+        assert!(
+            std::env::var_os("IMAGE_RS_TEST_KBC_RESOURCES_FILE").is_some(),
+            "set IMAGE_RS_TEST_KBC_RESOURCES_FILE to the resources for the private test registry"
+        );
+    }
+
     common::prepare_test(common::OFFLINE_FS_KBC_RESOURCES_FILE).await;
 
     // // Init CDH

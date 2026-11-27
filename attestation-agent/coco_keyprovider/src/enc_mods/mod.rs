@@ -90,14 +90,20 @@ fn parse_input_params(input: &str) -> Result<InputParams> {
 async fn generate_key_parameters(input_params: &InputParams) -> Result<(Vec<u8>, Vec<u8>, String)> {
     let sample_flag = input_params.sample;
     match sample_flag {
-        // sample keyprovider will use hard coded key and iv
         true => {
-            info!("Use sample keyprovider (HARDCODED KEY and IV)");
-            Ok((
-                crypto::HARDCODED_KEY.to_vec(),
-                [0; 12].to_vec(),
-                HARD_CODED_KEYID.into(),
-            ))
+            info!("Use the sample keyprovider");
+            let key_path = std::env::var_os("COCO_SAMPLE_KEY_FILE")
+                .context("COCO_SAMPLE_KEY_FILE must point to a raw 32-byte key")?;
+            let key = fs::read(key_path)
+                .await
+                .context("read sample keyprovider key")?;
+            anyhow::ensure!(
+                key.len() == 32,
+                "sample keyprovider key must be exactly 32 bytes"
+            );
+            let mut iv = [0; 12];
+            rand::rngs::OsRng.try_fill_bytes(&mut iv)?;
+            Ok((key, iv.to_vec(), HARD_CODED_KEYID.into()))
         }
         // use input key and randomly generated iv
         false => match &input_params.keypath {
